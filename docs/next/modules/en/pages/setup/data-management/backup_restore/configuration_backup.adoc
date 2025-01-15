@@ -1,0 +1,160 @@
+= Configuration backup
+:description: SUSE Observability Self-hosted
+
+== Overview
+
+SUSE Observability configuration can be exported and imported. The import/export functionality can be used to automate the installation process or for backup purposes. An export and import can be made in the settings page of SUSE Observability's user interface by using the buttons 'Export Model' and 'Import Model'.
+
+== Export configuration
+
+An export of the SUSE Observability configuration can be obtained from the SUSE Observability UI, the xref:../../cli/cli-sts.adoc[SUSE Observability CLI] or using curl commands.
+
+=== SUSE Observability CLI
+
+[NOTE]
+====
+Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack configuration won't be included in the export.
+====
+
+
+To export configuration using the `sts` CLI, run the command:
+
+[,text]
+----
+# Output in terminal window
+sts settings describe
+
+# Export to file
+sts settings describe --file <PATH_TO_FILE.sty>
+----
+
+=== curl
+
+[NOTE]
+====
+Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack configuration won't be included in the export.
+====
+
+
+To export configuration using curl, follow the steps below. The `<api-token>` used for authorization is available on the *CLI* page in the SUSE Observability UI main menu:
+
+[,text]
+----
+# Do actual request
+curl -X POST \
+  -H "Authorization: ApiToken <api-token>" \
+  -H 'Content-Type: application/json;charset=UTF-8' \
+  -d '{}' \
+  "http://<HOST>/api/export?timeoutSeconds=300" > export.sty
+----
+
+=== SUSE Observability UI
+
+[NOTE]
+====
+Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack configuration won't be included in the export.
+====
+
+
+To export configuration from the SUSE Observability UI:
+
+. Go to *Settings* > *Import/Export* > *Export Settings*
+. Click the button *STS-EXPORT-ALL*.
+
+image::v51_export_configuration.png[Export configuration from the SUSE Observability UI]
+
+== Import configuration
+
+=== SUSE Observability CLI
+
+[NOTE]
+====
+
+* Import is intended to be a one-off action - importing multiple times might result in duplicate configuration entries. This behavior applies to importing nodes without any identifier.
+* Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack won't be included in configuration export files - *all configuration items will be unlocked after import*.
+====
+
+
+To import SUSE Observability configuration using the `sts` CLI, follow the steps below.
+
+Before import, clear the SUSE Observability configuration by following the instructions at xref:/setup/data-management/clear_stored_data.adoc[clear stored data].
+
+[,text]
+----
+sts settings apply --file <PATH_TO_FILE.sty>
+----
+
+=== curl
+
+[NOTE]
+====
+
+* Import is intended to be a one-off action - importing multiple times might result in duplicate configuration entries. This behavior applies to importing nodes without any identifier.
+* Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack won't be included in configuration export files - *all configuration items will be unlocked after import*.
+====
+
+
+To import SUSE Observability configuration using curl with authentication, follow the steps below.
+
+Before import, clear the SUSE Observability configuration by following the instructions at xref:/setup/data-management/clear_stored_data.adoc[clear stored data].
+
+The `<api-token>` can be found on the *CLI* page in the SUSE Observability UI main menu.
+
+[,text]
+----
+curl -X POST -d @export.sty \
+  -H "Authorization: ApiToken <api-token>" \
+  -H 'Content-Type: application/json;charset=UTF-8' \
+  "http://<HOST>/api/import?timeoutSeconds=15"
+----
+
+=== SUSE Observability UI
+
+[NOTE]
+====
+
+* Import is intended to be a one-off action - importing multiple times might result in duplicate configuration entries. This behavior applies to importing nodes without any identifier.
+* Note that the link:../../../stackpacks/about-stackpacks.adoc#locked-configuration-items[lock status] of configuration items installed by a StackPack won't be included in configuration export files - *all configuration items will be unlocked after import*.
+====
+
+
+Before import, clear the SUSE Observability configuration by following the instructions at xref:/setup/data-management/clear_stored_data.adoc[clear stored data].
+
+To import SUSE Observability configuration in the SUSE Observability UI:
+
+. Go to *Settings* > *Import/Export* > *Import Settings*.
+. Choose the `*.sty` file that you want to import configuration from.
+. Click the button *START IMPORT*.
+
+image::v51_import_configuration.png[Import configuration from the SUSE Observability UI]
+
+== Advanced import/export
+
+=== Individual configuration items
+
+It's possible to export and import individual configuration items through the SUSE Observability user interface. For example, to export or export a component type:
+
+. Go to the *Settings* page and click *Component Types*.
+. To export an individual component type, click *Export as config*.
+. To import a configuration item, click *Import Model*.
+
+=== Idempotent import/export
+
+There is a way to use identifiers and namespaces that come with them to perform a configuration update of the specific sets of nodes idempotently. This approach doesn't lead to duplicates, but checks for the changes within a specified namespace and applies them to existing nodes, including removing nodes, as well as allow for creating the new ones.
+
+Node identifiers are specified in a following pattern: `+urn:stackpack:{stackpack_name}:{type_name}:{object_name}+`. The namespace effectively used by this process is `+urn:stackpack:{stackpack_name}:+`. If every configuration node has an identifier and they're all in the same namespace, then you can perform an idempotent update using following STS CLI commands:
+
+==== export
+
+[,sh]
+----
+sts settings describe --namespace urn:stackpack:{stackpack_name}:
+----
+
+==== import
+
+----
+curl -XPOST http://yourInstance/api/import?namespace=urn:stackpack:{stackpack_name} \
+    --data @./filename \
+    -H 'Content-Type: application/json'
+----
