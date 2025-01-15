@@ -1,0 +1,56 @@
+= .NET Applications
+:description: SUSE Observability
+
+== Automatic instrumentation
+
+Automatic instrumentation for .NET can automatically capture traces and metrics for a variety of https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docs/internal/instrumentation-libraries.md[libraries and frameworks].
+
+Automatic instrumentation does not require any modifications of the application. To set it up follow these steps:
+
+. Download the https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest/download/opentelemetry-dotnet-instrumentation-linux-glibc.zip[glibc] or https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest/download/opentelemetry-dotnet-instrumentation-linux-musl.zip[musl] version of the instrumentation libraries (musl for Alpine, glibc for most other docker images) from the https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases[Releases] of the opentelemetry-dotnet-instrumentation repository. Unzip the files and include them in your application docker image in a directory, here we use `/autoinstrumentation`.
+. Set the following env vars, here we do it via the `env` of the container in the Kubernetes pod spec:
++
+[,yaml]
+----
+env:
+- name: CORECLR_ENABLE_PROFILING
+  value: "1"
+- name: CORECLR_PROFILER
+  value: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
+- name: CORECLR_PROFILER_PATH
+  # for glibc:
+  value: "/autoinstrumentation/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
+  # For musl use instead:
+  # value: "/autoinstrumentation/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so"
+- name: DOTNET_ADDITIONAL_DEPS
+  value: "/autoinstrumentation/AdditionalDeps"
+- name: DOTNET_SHARED_STORE
+  value: "/autoinstrumentation/store"
+- name: DOTNET_STARTUP_HOOKS
+  value: "/autoinstrumentation/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
+- name: OTEL_DOTNET_AUTO_HOME
+  value: "/autoinstrumentation"
+----
+
+. Also add the extra environment variables xref:./sdk-exporter-config.adoc[to configure the service name and exporter endpoint] on the pod.
+. Deploy your application with the changes
+. xref:./verify.adoc[Verify] SUSE Observability is receiving traces and/or metrics
+
+For more details please refer to the https://opentelemetry.io/docs/languages/java/automatic/[Open Telemetry documentation].
+
+== Manual instrumentation
+
+Manual instrumentation can be used when you need metrics, traces or logs from parts of the code that are not supported by the auto instrumentation. For example unsupported libraries, in-house code or business-level metrics.
+
+To capture that data you need to modify your application.
+
+. Include the Open Telemetry SDK as a dependency
+. Add code to your application to capture metrics, spans or logs where needed
+
+There is detailed documentation for this on the https://opentelemetry.io/docs/languages/net/instrumentation/[Open Telemetry .NET SDK doc pages].
+
+Make sure you use the OTLP exporter (this is the default) and https://opentelemetry.io/docs/languages/java/instrumentation/#autoconfiguration[auto-configuration]. When deploying the application the service name and exporter are xref:./sdk-exporter-config.adoc[configured via environment variables].
+
+== Metrics in SUSE Observability
+
+For some .NET  metrics, for example, garbage collector metrics, SUSE Observability has defined charts on the related components. For Kubernetes,the charts are available on the pods. It is possible to xref:/use/metrics/k8s-add-charts.adoc[add charts for more metrics], this works for metrics from automatic instrumentation but also for application-specific metrics from manual instrumentation.
