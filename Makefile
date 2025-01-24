@@ -15,9 +15,15 @@ remote:
 		ss-remote-playbook.yml \
 		2>&1 | tee tmp/remote-build.log
 
+rancher-dsc:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --stacktrace --log-format=pretty --log-level=info \
+		pb-rancher-dsc.yml \
+		2>&1 | tee tmp/rancher-dsc-build.log
+
 clean:
 	rm -rf build
 
 environment:
-	npm ci
-	#npm install && npm update
+	npm ci || npm install
