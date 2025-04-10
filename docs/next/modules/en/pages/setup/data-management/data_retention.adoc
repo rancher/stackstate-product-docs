@@ -7,41 +7,22 @@ SUSE Observability imposes data retention limits to save storage space and impro
 
 == Retention of topology graph data
 
-By default, topology graph data will be retained for 30 days. This works in a way that the latest state of topology graph will always be retained; only history older than 30 days will be removed. You can check and alter the configured retention period this using the SUSE Observability CLI.
+By default, topology graph data will be retained for 30 days. This works in a way that the latest state of topology graph will always be retained; only history older than 30 days will be removed.
+In some cases, it may be useful to keep historical data for more than 30 days or to reduce it to less than 30 days to save on disk space. Topology retention can be configured through the helm chart:
 
-[,shell]
+[,yaml]
 ----
-$ sts graph retention
-----
-
-In some cases, it may be useful to keep historical data for more than 30 days or to reduce it to less than 30 days to save on disk space.
-
-[,shell]
-----
-$ sts graph retention --set 10d
+stackstate:
+  topology:
+    # Retention set to 1 week
+    retentionHours: 144
 ----
 
-(note that the duration can be specified as a duration string)
+Note that by adding more time to the data retention period, the amount of data stored is also going to grow and requires more storage space. This may also affect the performance of the Views.
 
-Note that by adding more time to the data retention period, the amount of data stored is also going to grow and need more storage space. This may also affect the performance of the Views.
+When lowering the retention period, it can take some time until disk space is freed up (at least 15 minutes).
 
-After changing the retention period to a smaller window, you may end up with some data that's already expired and will wait there until the next scheduled cleanup. To schedule a cleanup soon after the new retention window is applied use this command:
-
-[,shell]
-----
-$ sts graph retention --set 10d --schedule-removal
-----
-
-In some cases, for example a disk running full, it can be needed to force removal of data immediately. This will have an impact on performance and current activity on SUSE Observability so is better avoided.
-
-Note that this may take some time to have an effect.
-
-[,shell]
-----
-$ sts graph delete-expired-data --immediately
-----
-
-== Retention of events, traces and logs
+== Retention of events and logs
 
 === SUSE Observability data store
 
@@ -49,7 +30,7 @@ If you are using the event/logs store provided with SUSE Observability, your dat
 
 ==== Configure disk space for Elasticsearch
 
-In some circumstances it may be necessary to adjust the disk space available to Elasticsearch and how it's allocated to logs, events and traces, for example if you anticipate a lot of data to arrive for a specific data type.
+In some circumstances it may be necessary to adjust the disk space available to Elasticsearch and how it's allocated to logs and events, for example if you anticipate a lot of data to arrive for a specific data type.
 
 Here is a snippet with the complete disk space and retention config for Elasticsearch, including the default values.
 
@@ -70,11 +51,6 @@ stackstate:
       esDiskSpaceShare: 30
       # Number of days to keep the events data on Es
       retention: 30
-    trace2es:
-      esDiskSpaceShare: 0
-      # Number of days to keep the traces data on Es
-      retention: 7
-      enabled: false
 ----
 
 The disk space available for Elasticsearch is configured via the `elasticsearch.volumeClaimTemplate.resources.requests.storage` key. To change this value after the initial installation some link:data_retention.adoc#resizing-storage[extra steps are required].
@@ -122,7 +98,7 @@ In most clusters it's possible to resize a persistent volume after it has been c
 . Resize the volumes
 . Update values.yaml and apply change (optional but recommended)
 
-The examples below use the VictoriaMetrics storage as an example. SUSE Observability is installed in the `stackstate` namespace. The volume is going to be resized to 500Gi.
+The examples below use the VictoriaMetrics storage as an example. SUSE Observability is installed in the `suse-observability` namespace. The volume is going to be resized to 500Gi.
 
 === Verify the storage class supports resizing
 
@@ -131,7 +107,7 @@ Use the following `kubectl` commands to get the storage class used and check tha
 [,bash]
 ----
 # Get the PVC's for SUSE Observability
-kubectl get pvc --namespace stackstate
+kubectl get pvc --namespace suse-observability
 
 # There is a storage class column in the output, copy it and use it to describe the storage class
 kubectl describe storageclass <storage-class-name>
@@ -154,13 +130,13 @@ To change the PVC size use the following commands.
 [,bash]
 ----
 # Get the PVC's for SUSE Observability, allows us to check the current size and copy the name of the PVC to modify it with the next command
-kubectl get pvc --namespace stackstate
+kubectl get pvc --namespace suse-observability
 
 # Patch the PVC's specified size, change it to 500Gi
 kubectl patch pvc server-volume-stackstate-victoria-metrics-0-0 -p '{"spec":{"resources": { "requests": { "storage": "500Gi" }}}}'
 
 # Get the PVC's again to verify if it was resized, depending on the provider this can take a while
-kubectl get pvc --namespace stackstate
+kubectl get pvc --namespace suse-observability
 ----
 
 === Update values.yaml and apply the change
@@ -180,10 +156,10 @@ Now remove the stateful set for the application(s) for which the storage has bee
 [,bash]
 ----
 # List all stateful sets, check that all are ready, if not please troubleshoot that first
-kubectl get statefulset --namespace stackstate
+kubectl get statefulset --namespace suse-observability
 
 # Delete the
-kubectl delete statefulset --namespace stackstate stackstate-victoria-metrics-0 --cascade=orphan
+kubectl delete statefulset --namespace suse-observability stackstate-victoria-metrics-0 --cascade=orphan
 ----
 
-Finally link:./data_retention.adoc#update-stackstate[update SUSE Observability] with the new settings.
+Finally link:./data_retention.adoc#update-[update SUSE Observability] with the new settings.

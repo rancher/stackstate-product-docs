@@ -16,22 +16,31 @@ SUSE Observability needs to be configured with credentials to connect to the SMT
 [,yaml]
 ----
 stackstate:
-  components:
-    all:
-      extraEnv:
-        open:
-          CONFIG_FORCE_stackstate_email_sender: "<stackstate@example.com>"
-          CONFIG_FORCE_stackstate_email_server_host: "<smtp.example.com>"
-          CONFIG_FORCE_stackstate_email_server_username: "<user name>"
-        secret:
-          CONFIG_FORCE_stackstate_email_server_password: "<user password>"
+  email:
+    enabled: true
+    sender: "<stackstate@example.com>"
+    server:
+      host: "<smtp.example.com>"
+      auth:
+        username: "<user name>"
+        password: "<user password>"
 ----
 
-This will use port `587` on the SMTP server and uses the `STARTTLS` command to establish a secure connection.
-To use a different port, it can be specified explicitly:
+This will use port `587` on the SMTP server and uses the `STARTTLS` command to establish a secure connection. These are all the other options that can be customized:
 
 [,yaml]
 ----
-stackstate.components.all.extraEnv.open:
-  CONFIG_FORCE_stackstate_email_server_port: 465
+stackstate:
+  email:
+    additionalProperties:
+      # Add needed Java email properties for your mail server (use string values), defaults are:
+      "mail.smtp.auth": "true"
+      "mail.smtp.starttls.enable": "true"
+    server:
+      protocol: smtp
+      port: 587
 ----
+
+=== Using an external secret
+
+When the username and password cannot be provided in the values but should come from an external secret, follow link:/setup/security/external-secrets.adoc#getting-username-and-password-for-email-sending-from-an-external-secret[these steps]

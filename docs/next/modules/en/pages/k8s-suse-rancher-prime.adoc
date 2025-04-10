@@ -15,7 +15,7 @@ For support please file a support case in https://scc.suse.com/[SUSE Customer Ce
 
 === License key
 
-A license key for SUSE Observability server can be obtained via the SUSE Customer Center and will be shown as "SUSE Rancher Prime - Observability Tech Preview" Registration Code. This license is valid until Oct, 31 2024. Before the end a license will be made available which is valid until the end of your Rancher Prime subscription.
+A license key for SUSE Observability server can be obtained via the SUSE Customer Center in the Subscription tab and will be shown as "SUSE Observability" Registration Code. This license is valid until the end of your Rancher Prime subscription.
 
 === Requirements
 
@@ -23,52 +23,69 @@ To install SUSE Observability, ensure that the nodes have enough CPU and memory 
 
 There are different installation options available for SUSE Observability. It is possible to install SUSE Observability either in a High-Availability (HA) or single instance (non-HA) setup. The non-HA setup is recommended for testing purposes or small environments. For production environments, it is recommended to install SUSE Observability in a HA setup.
 
-The HA production setup can support from 150 up to 500 Nodes (a Node is counted as\<= 4 vCPU and \<= 16GB Memory) under observation.
+The HA production setup can support from 150 up to 4000 observed nodes. An observed node in this sizing table is taken to be 4 vCPUs and 16GB of memory, our `default node size`.
+If nodes in your observed cluster are bigger, they can count for multiple `default nodes`, so a node of 12vCPU and 48GB counts as 3 `default nodes` under observation when picking
+a profile.
 The Non-HA setup can support up to 100 Nodes under observation.
 
 |===
-|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA
+|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA | 4000 HA
 
 | *CPU Requests*
-| 7,5
-| 7,5
-| 10,5
+| 7.5
+| 7.5
+| 10.5
 | 15
 | 25
 | 49
 | 62
 | 86.5
+| 210
 
 | *CPU Limits*
 | 16
 | 16
-| 21,5
-| 30,5
+| 21.5
+| 30.5
 | 50
 | 103
 | 128
 | 176
+| 278
 
 | *Memory Requests*
-| 22Gi
-| 22Gi
-| 28Gi
-| 32.5Gi
-| 51Gi
-| 67Gi
-| 143Gi
-| 161.5Gi
+| 25.5Gi
+| 25.5Gi
+| 31Gi
+| 35Gi
+| 54Gi
+| 129Gi
+| 146Gi
+| 164.5Gi
+| 259Gi
 
 | *Memory Limits*
-| 23Gi
-| 23Gi
-| 29Gi
-| 33Gi
-| 51,5Gi
-| 131Gi
-| 147.5Gi
-| 166Gi
+| 26Gi
+| 26Gi
+| 31.5Gi
+| 36Gi
+| 54Gi
+| 133.5Gi
+| 150Gi
+| 168.5Gi
+| 320Gi
 |===
+
+[NOTE]
+====
+The requirement shown for profile represent the total amount of resources needed to run the Suse Observability server.
+To ensure that all different services of Suse Observability server can be allocated:
+
+* For non-HA installations the recommended node size is 4VCPU, 8GB
+* For HA installations up to 500 nodes the min recommended node size is 8VCPU, 16GB
+* For 4000 nodes HA installations the min recommended node size is 16VCPU, 32GB
+====
+
 
 [NOTE]
 ====
@@ -88,13 +105,20 @@ The minimum requirements do not include spare CPU/Memory capacity to ensure smoo
 
 SUSE Observability uses persistent volume claims for the services that need to store data. The default storage class for the cluster will be used for all services unless this is overridden by values specified on the command line or in a `values.yaml` file. All services come with a pre-configured volume size that should be good to get you started, but can be customized later using variables as required.
 
+[NOTE]
+====
+For production environments, NFS is not recommended and supported for storage provisioning in SUSE Observability due to the potential risk of data corruption.
+====
+
+
 For our different installation profiles, the following are the defaulted storage requirements:
 
 |===
-|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA
+|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA | 4000 HA
 
 | *Retention (days)*
 | 3
+| 30
 | 30
 | 30
 | 30
@@ -112,6 +136,7 @@ For our different installation profiles, the following are the defaulted storage
 | 2TB
 | 2TB
 | 2.5TB
+| 5.5TB
 |===
 
 For more details on the defaults used, see the page xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Configure storage].
@@ -147,10 +172,10 @@ This is an UI extension to Rancher Manager that integrates the health signals ob
 
 SUSE Observability server should be installed in its own downstream cluster intended for Observability. See the below picture for reference.
 
-For StackState to be able to work properly it needs:
+For SUSE Observability to be able to work properly it needs:
 
 * https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/manage-clusters/create-kubernetes-persistent-storage[Kubernetes Persistent Storage] to be available in the observability cluster to store metrics, events, etc.
-* the observability cluster to support a way to expose StackState on an HTTPS URL to Rancher, StackState users and the StackState agent. This can be done via an Ingress configuration using an ingress controller, alternatively a (cloud) loadbalancer for the StackState services could do this too, for more information see the https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/kubernetes-resources-setup/load-balancer-and-ingress-controller[Rancher docs].
+* the observability cluster to support a way to expose SUSE Observability on an HTTPS URL to Rancher, SUSE Observability users and the SUSE Observability agent. This can be done via an Ingress configuration using an ingress controller, alternatively a (cloud) loadbalancer for the SUSE Observability services could do this too, for more information see the https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/kubernetes-resources-setup/load-balancer-and-ingress-controller[Rancher docs].
 
 image::k8s/prime/SUSEObservabilityDeployment.png[Architecture]
 
@@ -180,25 +205,28 @@ You can now follow the instruction below for a HA or NON-HA setup.
 
 [NOTE]
 ====
-Be aware upgrading or downgrading from HA to NON-HA and visa-versa is not yet supported.
+Be aware upgrading or downgrading from HA to NON-HA and vice-versa is not yet supported.
 ====
 
 
 === Installation
 
 . Get the helm chart
+{% code title="helm_repo.sh" lineNumbers="true" %}
 +
-[%linenums,console]
-.helm_repo.sh
+[,text]
 ----
 helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
 helm repo update
 ----
 +
+{% endcode %}
+
 . Command to generate helm chart values files:
-+
-[%linenums,console]
-.helm_template.sh
+
+{% code title="helm_template.sh" lineNumbers="true" %}
+
+[,text]
 ----
 export VALUES_DIR=.
 helm template \
@@ -208,28 +236,40 @@ helm template \
   suse-observability-values \
   suse-observability/suse-observability-values --output-dir $VALUES_DIR
 ----
-+
+
+{% endcode %}
+
 The `baseUrl` must be the URL via which SUSE Observability will be accessible to Rancher, users, and the SUSE Observability agent. The URL must include the scheme, for example `+https://observability.internal.mycompany.com+`. See also <<accessing-suse-observability,accessing SUSE Observability>>.
-+
+
 The `sizing.profile` should be one of trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha, 150-ha, 250-ha, 500-ha. Based on this profiles the `sizing_values.yaml` file is generated containing default sizes for the SUSE Observability resources and configuration to be deployed on an Ha or NonHa mode. E.g. 10-nonha will produce a `sizing_values.yaml` meant to deploy a NonHa SUSE Observability instance to observe a 10 node cluster in a Non High Available mode. Currently moving from a nonha to an ha environment is not possible, so if you expect that your environment willrequire to observe around 150 nodes then better to go with ha immediately.
-+
+
 This command will generate a `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml` and a `$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml` file which contains the necessary configuration for installing the SUSE Observability Helm Chart.
-+
+
 [NOTE]
 ====
-The SUSE Observability administrator passwords will be autogenerated by the above command and are output as comments in the generated `basicConfig.yaml` file. The actual values contain the `bcrypt` hashes of those passwords so that they're securely stored in the Helm release in the cluster.
+The SUSE Observability administrator password will be autogenerated by the above command and are output as comments in the generated `basicConfig.yaml` file. For more info, see xref:/setup/security/authentication/single_password.adoc[single password].
+The actual values contain the `bcrypt` hashes of those passwords so that they're securely stored in the Helm release in the cluster.
 ====
-+
+
+
+[warn]
+====
+Using a single default password is great to get started with SUSE Observability, but for a production setup xref:/setup/security/authentication/authentication_options.adoc[more secure authentication options] are available.
+====
+
+
 [NOTE]
 ====
 Store the generated `basicConfig.yaml` and `sizing_values.yaml` files somewhere safe. You can reuse this files for upgrades, which will save time and (more importantly) will ensure that SUSE Observability continues to use the same API key. This is desirable as it means Agents and other data providers for SUSE Observability won't need to be updated.
 The files can be regenerated independently using the switches `basicConfig.generate=false` and `sizing.generate=false` to disable any of them while still keeping the previosuly generated version of the file in the `output-dir`.
 ====
-+
+
+
 . Deploy the SUSE Observability helm chart with the generated values:
-+
-[%linenums,console]
-.help_deploy.sh
+
+{% code title="helm_deploy.sh" lineNumbers="true" %}
+
+[,text]
 ----
 helm upgrade --install \
     --namespace suse-observability \
@@ -239,6 +279,8 @@ helm upgrade --install \
     suse-observability \
     suse-observability/suse-observability
 ----
+
+{% endcode %}
 
 == Accessing SUSE Observability
 
@@ -275,6 +317,22 @@ sts service-token create --name suse-observability-extension --roles stackstate-
 
 {% endcode %}
 
+=== SUSE Observability Rancher UI extension compatibility matrix
+
+|===
+| UI Extension Version | Supported Rancher Version
+
+| 0.x.x
+| 2.8
+
+| 1.x.x
+| 2.9
+
+| 2.x.x
+| 2.10 +
+2.11
+|===
+
 == Installing the SUSE Observability Agent
 
 . In the SUSE Observability UI open the main menu and select StackPacks.
@@ -305,6 +363,4 @@ To enable Single sign-on with your own authentication provider please xref:setup
  ** This information should be deleted when the UI extensions are uninstalled.
 . After the extensions are installed, the SUSE Observability UI opens in the same tab as the Rancher UI.
  ** You can use shift-click to open in a new tab, this will become the default behaviour
-. The SUSE Observability Extension is only supported on 2.8.x versions and not yet on the 2.9.x version.
- ** Support for 2.9.x will be available soon.
-. Be aware upgrading or downgrading from HA to NON-HA and visa-versa is not yet supported.
+. Be aware upgrading or downgrading from HA to NON-HA and vice-versa is not yet supported.

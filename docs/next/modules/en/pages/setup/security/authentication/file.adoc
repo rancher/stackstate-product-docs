@@ -13,8 +13,11 @@ SUSE Observability includes a number of default roles, see the example configura
 
 To configure file based authentication on Kubernetes, SUSE Observability users need to be added to the `authentication.yaml` file. For example:
 
-{% tabs %}
-{% tab title="authentication.yaml" %}
+[tabs]
+====
+authentication.yaml::
++
+--
 
 [,yaml]
 ----
@@ -26,13 +29,10 @@ stackstate:
         - username: admin
           passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
           roles: [ stackstate-admin ]
-        - username: platformadmin
-          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
-          roles: [ stackstate-platform-admin ]
         - username: guest
           passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
           roles: [ stackstate-guest ]
-        - username: power-user
+        - username: poweruser
           passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
           roles: [ stackstate-power-user ]
         - username: troubleshooter
@@ -40,15 +40,15 @@ stackstate:
           roles: [ stackstate-k8s-troubleshooter ]
 ----
 
-{% endtab %}
-{% endtabs %}
+--
+====
 
 Follow the steps below to configure users and apply changes:
 
 . In `authentication.yaml` - add users. The following configuration should be added for each user (see the example above):
- ** *username* - the username used to log into SUSE Observability.
+ ** *username* - the username used to log into SUSE Observability. Only alphanumeric and _ characters are allowed.
  ** *passwordHash* - the password used to log into SUSE Observability. Passwords are stored as a bcrypt hash.
- ** *roles* - the list of roles that the user is a member of. The link:../rbac/rbac_permissions.adoc#predefined-roles[default SUSE Observability roles] are `stackstate-admin`,`stackstate-platform-admin`, `stackstate-power-user` and `stackstate-guest`, for details on how to create other roles, see xref:../rbac/rbac_roles.adoc[RBAC roles].
+ ** *roles* - the list of roles that the user is a member of. The link:../rbac/rbac_permissions.adoc#predefined-roles[default SUSE Observability roles] are `stackstate-admin`, `stackstate-power-user` and `stackstate-guest`, for details on how to create other roles, see xref:../rbac/rbac_roles.adoc[RBAC roles].
 . Store the file `authentication.yaml` together with the file `values.yaml` from the SUSE Observability installation instructions.
 . Run a Helm upgrade to apply the changes:
 +
@@ -77,9 +77,9 @@ Follow the steps below to configure users and apply changes:
 Follow the steps below to configure users and apply changes:
 
 . In `authentication.yaml` - add users. The following configuration should be added for each user (see the example above):
- ** *username* - the username used to log into SUSE Observability.
+ ** *username* - the username used to log into SUSE Observability. Only alphanumeric and _ characters are allowed.
  ** *password* - the password used to log into SUSE Observability. Passwords are stored as either an MD5 hash or a bcrypt hash.
- ** *roles* - the list of roles that the user is a member of. The link:../rbac/rbac_permissions.adoc#predefined-roles[default SUSE Observability roles] are `stackstate-admin`, `stackstate-platform-admin`, `stackstate-power-user`, `stackstate-k8s-troubleshooter` and `stackstate-guest`, for details on how to create other roles, see xref:../rbac/rbac_roles.adoc[RBAC roles].
+ ** *roles* - the list of roles that the user is a member of. The link:../rbac/rbac_permissions.adoc#predefined-roles[default SUSE Observability roles] are `stackstate-admin`, `stackstate-power-user`, `stackstate-k8s-troubleshooter` and `stackstate-guest`, for details on how to create other roles, see xref:../rbac/rbac_roles.adoc[RBAC roles].
 . Restart SUSE Observability to apply the changes.
 
 [NOTE]
@@ -91,8 +91,45 @@ Follow the steps below to configure users and apply changes:
 ====
 
 
+=== Using an external secret
+
+When the user passwords should come from an external secret, follow link:/setup/security/external-secrets.adoc#getting-authentication-data-from-an-external-secret[these steps] but fill in the following data:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  file_<username1>_password: <base64 of bcrypt of password>
+  file_<username2>_password: <base64 of bcrypt of password>
+----
+
+For every user in the logins section, a record should be added to the secret, filling in the template. For example:
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin_user
+          roles: [ stackstate-admin ]
+
+
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+   file_admin_user_password: "base64EncryptedPass"
+----
+
 == See also
 
 * xref:authentication_options.adoc[Authentication options]
 * link:../rbac/rbac_permissions.adoc#predefined-roles[Permissions for predefined SUSE Observability roles]
 * xref:../rbac/rbac_roles.adoc[Create RBAC roles]
+* link:/setup/security/external-secrets.adoc#getting-authentication-data-from-an-external-secret[External Secrets]
