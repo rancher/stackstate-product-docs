@@ -15,7 +15,7 @@ The SUSE Observability Receiver API will automatically receive and process all i
 
 Details on how to ingest health data can be found on the following pages:
 
-* xref:/configure/health/send-health-data/send-health-data.adoc[Ingest health data through the SUSE Observability Receiver API]
+* xref:send-health-data/send-health-data.adoc[Ingest health data through the SUSE Observability Receiver API]
 
 == Health synchronization pipeline
 
@@ -31,33 +31,30 @@ image::health-sync-pipeline.svg[Health synchronization pipeline]
 
 === Consistency models
 
-SUSE Observability health synchronization relies on different consistency models to guarantee that the data sent from an external monitoring system matches with what SUSE Observability ingests and shows. The consistency model is specified in the `"health"` property of the link:/configure/health/send-health-data/send-health-data.adoc#common-json-object[common JSON object] or as an argument in the SUSE Observability CLI when health data is sent to SUSE Observability. The supported models are: `REPEAT_SNAPSHOTS`, `REPEAT_STATES` and `TRANSACTIONAL_INCREMENTS`.
-{% tabs %}
-{% tab title="Repeat snapshots model" %}
+SUSE Observability health synchronization relies on different consistency models to guarantee that the data sent from an external monitoring system matches with what SUSE Observability ingests and shows. The consistency model is specified in the `"health"` property of the link:/configure/health/send-health-data/send-health-data.adoc#common-json-object[common JSON object] or as an argument in the SUSE Observability CLI when health data is sent to SUSE Observability. The supported models are: `REPEAT_SNAPSHOTS` and `TRANSACTIONAL_INCREMENTS`.
+[tabs]
+====
+Repeat snapshots model::
++
+--
 The `REPEAT_SNAPSHOTS` consistency model works with periodic, full snapshots of all checks in an external monitoring system. SUSE Observability keeps track of the checks in each received snapshot and decides if associated external check states need to be created, updated or deleted in SUSE Observability. For example, if a check state is no longer present in a snapshot. This model offers full control over which external checks will be deleted as all decisions are inferred from the received snapshots. There is no ambiguity over the external checks that will be present in SUSE Observability.
 
 *Use this model when:* The external monitoring system is capable of keeping the state of which elements are present in a determined time window and therefore can communicate how the full snapshot looks like.
 
 *JSON payload:* The xref:/configure/health/send-health-data/repeat_snapshots.adoc[Repeat Snapshots health payload] accepts specific properties to specify when a snapshot starts or stops.
-{% endtab %}
+--
 
-{% tab title="Repeat States model" %}
-The `REPEAT_STATES` consistency model works with periodic checks received from an external monitoring system. SUSE Observability keeps track of the checks and decides if associated external checks need to be created or updated in SUSE Observability. A configurable expiry mechanism is used to delete external checks that aren't observed anymore. This model offers less control over data than the `REPEAT_SNAPSHOTS` model. As an expiry configuration is used to delete external checks, it might happen that elements are deleted due to barely missing the expiry timeout. This would reflect as external checks disappearing and reappearing in SUSE Observability.
-
-*Use this model when:* The external monitoring system isn't capable of collecting all checks in a determined time window. The best effort is just to send the external checks as they're obtained.
-
-*JSON payload:* The xref:/configure/health/send-health-data/repeat_states.adoc[Repeat States health payload] accepts specific properties to specify the expiry configuration.
-{% endtab %}
-
-{% tab title="Transactional Increments model" %}
+Transactional Increments model::
++
+--
 The `TRANSACTIONAL_INCREMENTS` consistency model is designed to be used on streaming systems where only incremental changes are communicated to SUSE Observability. As there is no repetition of data, data consistency is upheld by ensuring that at-least-once delivery is guaranteed across the entire pipeline. To detect whether any data is missing, SUSE Observability requires that both a checkpoint and the previous checkpoint are communicated together with the `check_states`. This model requires strict control across the whole pipeline to guarantee no data loss.
 
 *Use this model when:* The external monitoring system doesn't have access to the total external checks state, but only works on an event based approach.
 
 *JSON payload:* The metadata `repeat_interval` and `expire_interval` aren't relevant for the xref:/configure/health/send-health-data/transactional_increments.adoc[Transactional Increments health payload] as there is no predefined periodicity on the data.
 
-{% endtab %}
-{% endtabs %}
+--
+====
 
 === Health stream and substream
 
