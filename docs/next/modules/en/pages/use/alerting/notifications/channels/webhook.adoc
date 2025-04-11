@@ -3,7 +3,7 @@
 
 Webhooks are custom HTTP callbacks that you define and run. They can take any action needed whenever a notification is opened or closed. For example by creating a ticket in a ticketing system that's not supported natively by SUSE Observability. Or by simply writing the notification messages to an S3 bucket for future reference.
 
-The webhook channel sends the notifications data as <<webhook-requests-and-payload,JSON over HTTP>>.
+The webhook channel sends the notifications data as <<_webhook_requests_and_payload,JSON over HTTP>>.
 
 == Configure a webhook
 
@@ -12,7 +12,7 @@ image::k8s/notifications-webhook-channel-configuration.png[Configure a webhook]
 To configure a webhook complete the fields:
 
 . URL - enter the URL of the webhook endpoint. The URL must be percent-encoded if it has special characters.
-. Secret token - a secret token that SUSE Observability will include in every request to <<validate-the-requests,validate it>>
+. Secret token - a secret token that SUSE Observability will include in every request to <<_validate_the_requests,validate it>>
 . Metadata - add extra key/value pairs that are included in the payload. This can be used when the same endpoint handles multiple SUSE Observability webhooks and needs some extra information
 . Enable SSL verification - (default on) enable SSL certificate validation. Only disable when using self-signed certificates or certificate authorities not supported by SUSE Observability
 
@@ -79,7 +79,7 @@ The sections in the `open` payload are:
 . Event: the event that triggered this notification. It can either be of type `open` or `close` (see next section). An `open` state means that the monitor is still in a critical (or deviating) state for the specified component. A `close` state means that the monitor was open before but that the issue has been resolved. The state and triggered time are included. Also included is a `title` which is a short description of the problem as provided by the monitor, it is the same title shown in the highlights page of the component, this can be different and more detailed than the monitor name.
 . Monitor: the monitor that triggered the notification. Next to the monitor name, tags and identifier also a link is included. The link will open the monitor in the SUSE Observability UI.
 . Notification configuration: The notification configuration for this notification. Includes a name, identifier and link. The link will open the notification configuration in the SUSE Observability UI.
-. Notification id: A unique identifier for this notification. See also the <<notification-life-cycle,Notification life cycle>>
+. Notification id: A unique identifier for this notification. See also the <<_notification_life_cycle,Notification life cycle>>
 . Metadata: It's possible to specify metadata on a webhook channel. The metadata is one-to-one reproduced here as a set of key/value pairs.
 
 === Example payload for a notification close request
@@ -137,7 +137,7 @@ The sections in the `close` payload are the same as in the `open` payload except
 
 As can be seen from the payload each notification is uniquely identified by its `notificationId`. It's possible, even common, to receive more than one message for the same notification, but they will always be sent according to this life cycle.
 
-A notification is first created when a monitor state changes to deviating or critical (whether deviating is applicable depends on the link:../configure.adoc#configure-when-to-notify[notification settings]). A message with event type `open` is sent to the webhook.
+A notification is first created when a monitor state changes to deviating or critical (whether deviating is applicable depends on the xref:/use/alerting/notifications/configure.adoc#_configure_when_to_notify[notification settings]). A message with event type `open` is sent to the webhook.
 
 A notification can be updated when the `state` or the `title` in the event change. Changes to the component and other parts of the message will be included but on their own they won't trigger an update. A notification update also sends a message with event type `open` to the webhook. The message will have the same `notificationId` which can be used to update the data in the external system (instead of creating a new notification).
 
@@ -192,10 +192,10 @@ The URL for your webhook must be accessible by SUSE Observability, so a localhos
 ====
 
 
-The example doesn't authenticate the request, which can be added by verifying the value of the <<validate-the-requests,token header>>.
+The example doesn't authenticate the request, which can be added by verifying the value of the <<_validate_the_requests,token header>>.
 
 Instead of implenting this by hand it's also possible to use the https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI specification] to generate a server implementation in any of the languages supported by the https://openapi-generator.tech/[OpenAPI generators project].
 
 == Related
 
-* xref:../troubleshooting.adoc[Troubleshooting]
+* xref:/use/alerting/notifications/troubleshooting.adoc[Troubleshooting]

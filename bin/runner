@@ -3,15 +3,24 @@
 docs_dir=$1
 
 function runner {
-  echo Processing $1
-  echo Admonitions
-  python ./fix-admon.py $1
-  echo Image paths
-  ./img_path.sh $1
-  echo Tabbed content
-  ./tabs.sh $1
+  if [ $(basename "$1") == "nav.adoc" ]; then
+    echo Not processing nav.adoc
+  else
+    bdir="/home/jhk/projects/suse/product-docs/stackstate-product-docs/bin"
+    echo Processing "$1"
+    echo Admonitions
+    python $bdir/fix-admon.py "$1"
+    echo Image paths
+    $bdir/img_path.sh "$1"
+    echo Tabbed content
+    $bdir/tabs.sh "$1"
+    echo Internal links
+    $bdir/fix_int_links "$1"
+    echo Other links
+    python $bdir/fix-links.py "$1" "/home/jhk/projects/suse/product-docs/stackstate-product-docs/docs/next/modules/en/pages"
+  fi
 }
 
 export -f runner
 
-find $docs_dir -type f -name '*.adoc' -exec bash -c 'runner $0' {} \;
+find "$docs_dir" -type f -name '*.adoc' -exec bash -c 'runner $0' {} \;

@@ -1,7 +1,7 @@
 import sys
 import re
 
-debug = True
+debug = False
 
 
 def dprint(*args, **kwargs):

@@ -11,7 +11,7 @@ For SUSE Observability integration, it's simple: SUSE Observability offers an OT
 
 == Pre-requisites
 
-. A Kubernetes cluster with an application that is xref:./languages/README.adoc[instrumented with Open Telemetry]
+. A Kubernetes cluster with an application that is xref:/setup/otel/languages/README.adoc[instrumented with Open Telemetry]
 . An API key for SUSE Observability
 . Permissions to deploy the open telemetry collector in a namespace on the cluster (i.e. create resources like deployments and configmaps in a namespace). To be able to enrich the data with Kubernetes attributes permission is needed to create a https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/templates/clusterrole.yaml[cluster role] and role binding.
 
@@ -19,14 +19,14 @@ For SUSE Observability integration, it's simple: SUSE Observability offers an OT
 
 To install and configure the collector for usage with SUSE Observability we'll use the https://opentelemetry.io/docs/kubernetes/helm/collector/[Open Telemetry Collector helm chart] and add the configuration needed for SUSE Observability:
 
-. <<configure-the-collector,Configure the collector>>
+. <<_configure_the_collector,Configure the collector>>
  .. helm chart configuration
  .. generating metrics from traces
  .. sending the data to SUSE Observability
  .. combine it all together in pipelines
-. <<create-secret-for-the-api-key,Create a Kubernetes secret for the SUSE Observability API key>>
-. <<deploy-the-collector,Deploy the collector>>
-. <<configure-applications,Configure your instrumented applicatins to send telemetry to the collector>>
+. <<_create_secret_for_the_api_key,Create a Kubernetes secret for the SUSE Observability API key>>
+. <<_deploy_the_collector,Deploy the collector>>
+. <<_configure_applications,Configure your instrumented applicatins to send telemetry to the collector>>
 
 === Configure the collector
 
@@ -43,7 +43,7 @@ The Kubernetes attributes and the span metrics namespace are required for SUSE O
 
 [NOTE]
 ====
-The suggested configuration includes tail sampling for traces. Sampling can be fully customized and, depending on your applications and the volume of traces, it may be needed to <<trace-sampling,change this configuration>>. For example an increase (or decrease) in `max_total_spans_per_second`. It is highly recommended to keep sampling enabled to keep resource usage and cost under control.
+The suggested configuration includes tail sampling for traces. Sampling can be fully customized and, depending on your applications and the volume of traces, it may be needed to <<_trace_sampling,change this configuration>>. For example an increase (or decrease) in `max_total_spans_per_second`. It is highly recommended to keep sampling enabled to keep resource usage and cost under control.
 ====
 
 
@@ -160,7 +160,7 @@ config:
 
 The `config` section customizes the collector config itself and is discussed in the next section. The other parts are:
 
-* `extraEnvsFrom`: Sets environment variables from the specified secret, in the next step this secret is created for storing the SUSE Observability API key (Receiver / xref:../../use/security/k8s-ingestion-api-keys.adoc[Ingestion API Key])
+* `extraEnvsFrom`: Sets environment variables from the specified secret, in the next step this secret is created for storing the SUSE Observability API key (Receiver / xref:/use/security/k8s-ingestion-api-keys.adoc[Ingestion API Key])
 * `mode`: Run the collector as a Kubernetes deployment, when to use the other modes is discussed https://opentelemetry.io/docs/kubernetes/helm/collector/[here].
 * `ports`: Used to enable the metrics port such that the collector can scrape its own metrics
 * `presets`: Used to enable the default configuration for adding Kubernetes metadata as attributes, this includes Kubernetes labels and metadata like namespace, pod, deployment etc. Enabling the metadata also introduces the cluster role and role binding mentioned in the pre-requisites.
@@ -182,7 +182,7 @@ For traces, there are 3 pipelines that are connected:
 
 * `traces`: The pipeline that receives traces from SDKs (via the `otlp` receiver) and does the initial processing using the same processors as for metrics. It exports into a router which routes all spans to both other traces pipelines. This setup makes it possible to calculate span metrics for all spans while applying sampling to the traces that are exported.
 * `traces/spanmetrics`: Use the `spanmetrics` connector as an exporter to generate metrics from the spans  (`otel_span_duration` and `otel_span_calls`). It is configured to not report time series anymore when no spans have been observed for 5 minutes. SUSE Observability expects the span metrics to be prefixed with `otel_span_`, which is taken care of by the `namespace` configuration.
-* `traces/sampling`: The pipeline that exports traces to SUSE Observability using the OTLP protocol, but uses the tail sampling processor to make the trace volume that is sent to SUSE Observability predictable to keep the cost predictable as well. Sampling is discussed in a <<trace-sampling,separate section>>.
+* `traces/sampling`: The pipeline that exports traces to SUSE Observability using the OTLP protocol, but uses the tail sampling processor to make the trace volume that is sent to SUSE Observability predictable to keep the cost predictable as well. Sampling is discussed in a <<_trace_sampling,separate section>>.
 
 The `resource` processor is configured for both metrics and traces. It adds extra resource attributes:
 
@@ -244,7 +244,7 @@ You can find the API key for SUSE Observability on the Kubernetes Stackpack inst
 ==== Ingestion API Key
 
 SUSE Observability supports creating multiple Ingestion Keys. This allows you to assign a unique key to each OpenTelemetry Collector for better security and access control.
-For instructions on generating an Ingestion API Key, refer to the xref:../../use/security/k8s-ingestion-api-keys.adoc[documentation page].
+For instructions on generating an Ingestion API Key, refer to the xref:/use/security/k8s-ingestion-api-keys.adoc[documentation page].
 
 === Deploy the collector
 
@@ -268,7 +268,7 @@ helm upgrade --install opentelemetry-collector open-telemetry/opentelemetry-coll
 
 The collector as it is configured now is ready to receive and send telemetry data. The only thing left to do is to update the SDK configuration for your applications to send their telemetry via the collector to the agent.
 
-Use the xref:./languages/sdk-exporter-config.adoc[generic configuration for the SDKs] to export data to the collector. Follow the xref:./languages/README.adoc[language-specific instrumentation instructions] to enable the SDK for your applications.
+Use the xref:/setup/otel/languages/sdk-exporter-config.adoc[generic configuration for the SDKs] to export data to the collector. Follow the xref:/setup/otel/languages/README.adoc[language-specific instrumentation instructions] to enable the SDK for your applications.
 
 == Related resources
 
