@@ -9,12 +9,12 @@ SUSE Observability provides xref:/use/alerting/k8s-monitors.adoc[monitors out of
 
 Steps to create a monitor:
 
-. <<write-the-outline-of-the-monitor,Write the outline of the monitor>>
-. <<bind-the-results-of-the-monitor-to-the-correct-components,Bind the results of the monitor to the correct component>>
-. <<write-the-remediation-hint,Write the remediation hint>>
-. <<create-or-update-the-monitor-in-stackstate,Create or update the metric binding in SUSE Observability>>
-. <<verifying-the-results-of-a-monitor,Verify the monitor produces the expected result>>
-. <<common-issues,Common issues>>
+. <<_write_the_outline_of_the_monitor,Write the outline of the monitor>>
+. <<_bind_the_results_of_the_monitor_to_the_correct_components,Bind the results of the monitor to the correct component>>
+. <<_write_the_remediation_hint,Write the remediation hint>>
+. <<_create_or_update_the_monitor_in_stackstate,Create or update the metric binding in SUSE Observability>>
+. <<_verifying_the_results_of_a_monitor,Verify the monitor produces the expected result>>
+. <<_common_issues,Common issues>>
 
 As an example the steps will add a monitor for the `Replica counts` of Kubernetes deployments.
 
@@ -54,14 +54,14 @@ The fields in this template are:
 * `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
 * `threshold`: A numeric threshold to compare against.
 * `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in SUSE Observability and "DEVIATING" as orange, to denote different severity.
-* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be <<bind-the-results-of-the-monitor-to-the-correct-components,bound to>>.
+* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be <<_bind_the_results_of_the_monitor_to_the_correct_components,bound to>>.
 * `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
 * `description`: A description of the monitor.
 * `function`: A reference to the monitor function that will execute the monitor. Currently only `{{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}` is supported.
 * `identifier`: An identifier of the form `+urn:custom:monitor:....+` which uniquely identifies the monitor when updating its configuration.
 * `intervalSeconds`: The interval at which the monitor executes. For regular real-time metric 30 seconds is advised. For longer-running analytical metric queries a bigger interval is recommended.
 * `name`: The name of the monitor
-* `remediationHint`: A description of what the user can do when the monitor fails. The format is markdown, with optionally use of handlebars variables to customize the hint based on time series or other data (<<write-the-remediation-hint,more explanation below>>).
+* `remediationHint`: A description of what the user can do when the monitor fails. The format is markdown, with optionally use of handlebars variables to customize the hint based on time series or other data (<<_write_the_remediation_hint,more explanation below>>).
 * `status`: Either `"DISABLED"` or `"ENABLED"`. Determines whether the monitor will run or not.
 * `tags`: Add tags to the monitor to help organize them in the monitors overview of your SUSE Observability instance, http://your-SUSE Observability-instance/#/monitors
 
@@ -118,7 +118,7 @@ The identifier is shown as `urn:kubernetes:/preprod-dev.preprod.stackstate.io:ca
   ...
 ----
 
-<<verifying-the-results-of-a-monitor,To verify>> whether the `urnTemplate` is correct, is explained further below.
+<<_verifying_the_results_of_a_monitor,To verify>> whether the `urnTemplate` is correct, is explained further below.
 
 == Write the remediation hint
 
@@ -142,7 +142,7 @@ After completing the `monitor.yaml`, use the xref:/setup/cli/cli-sts.adoc[SUSE O
 sts monitor apply -f monitor.yaml
 ----
 
-Verify whether the monitor produces the expected results, using the steps <<verifying-the-results-of-a-monitor,below>>.
+Verify whether the monitor produces the expected results, using the steps <<_verifying_the_results_of_a_monitor,below>>.
 
 [CAUTION]
 ====
@@ -190,25 +190,25 @@ It's good practice to, after a monitor is made, validate whether it produces the
 
 Go to the monitor overview page (http://your-SUSE Observability-instance/#/monitors) and find your monitor.
 
-. Verify the `Status` column is in `Enabled` state. If the monitor is in `Disabled` state, <<enable-or-disable-the-monitor,enable it>>. If the status is in `Error` state, follow the steps below <<the-monitor-is-showing-an-error-in-the-monitor-status-overview,to debug>>.
+. Verify the `Status` column is in `Enabled` state. If the monitor is in `Disabled` state, <<_enable_or_disable_the_monitor,enable it>>. If the status is in `Error` state, follow the steps below <<_the_monitor_is_showing_an_error_in_the_monitor_status_overview,to debug>>.
 . Verify you see the expected amount of states in the `Clear`/`Deviating`/`Critical` column. If the number of states is significantly lower or higher than the amount of components you meant to monitor, the PromQL query might be giving too many results.
 
 === Verify the binding of the monitor
 
-Observe whether the monitor is producing a result on one of the components that it's meant to monitor for. If the monitor doesn't show up, follow <<the-result-of-the-monitor-isnt-showing-on-a-component,these steps>> to remedy.
+Observe whether the monitor is producing a result on one of the components that it's meant to monitor for. If the monitor doesn't show up, follow <<_the_result_of_the_monitor_isnt_showing_on_a_component,these steps>> to remedy.
 
 == Common issues
 
 === The result of the monitor isn't showing on a component
 
-First check if the monitor is actually <<verify-the-execution-of-the-monitor,producing results>>. If this is the case but the monitor results do not show up on the components, there might be a problem with the binding. First use the following command to verify:
+First check if the monitor is actually <<_verify_the_execution_of_the_monitor,producing results>>. If this is the case but the monitor results do not show up on the components, there might be a problem with the binding. First use the following command to verify:
 
 [,bash]
 ----
 sts monitor status --id <id>
 ----
 
-If the output has `+Monitor health states with identifier which has no matching topology element (<nr>): ....+`, this shows that the `urnTemplate` may not generate an identifier matching the topology. To remedy this <<bind-the-results-of-the-monitor-to-the-correct-components,revisit your urnTemplate>>.
+If the output has `+Monitor health states with identifier which has no matching topology element (<nr>): ....+`, this shows that the `urnTemplate` may not generate an identifier matching the topology. To remedy this <<_bind_the_results_of_the_monitor_to_the_correct_components,revisit your urnTemplate>>.
 
 === The monitor is showing an error in the monitor status overview
 

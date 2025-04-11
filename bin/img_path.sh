@@ -7,11 +7,11 @@ if [ -z "$f" ]; then
     exit 1
 fi
 
-sed -i 's|image::/\.gitbook/assets/|image::|g' $f
-sed -i 's|image:/\.gitbook/assets/|image::|g' $f
-sed -i 's|image::\.gitbook/assets/|image::|g' $f
-sed -i 's|image::\.\./\.\./.gitbook/assets/|image::|g' $f
-sed -i 's|image::\.\.\/\.gitbook/assets/|image::|g' $f
-sed -i 's|image::\.\.\/\.\.\/\.gitbook/assets/|image::|g' $f
-sed -i 's|image::\.\.\/\.\.\/\.\.\/\.gitbook/assets/|image::|g' $f
-sed -i 's|image:\.\.\/\.\.\/\.gitbook/assets/|image::|g' $f
+sed -i 's|image::/\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image:/\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image::\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image::\.\./\.\./.gitbook/assets/|image::|g' "$f"
+sed -i 's|image::\.\.\/\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image::\.\.\/\.\.\/\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image::\.\.\/\.\.\/\.\.\/\.gitbook/assets/|image::|g' "$f"
+sed -i 's|image:\.\.\/\.\.\/\.gitbook/assets/|image::|g' "$f"
