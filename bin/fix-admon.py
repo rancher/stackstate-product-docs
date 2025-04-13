@@ -10,7 +10,7 @@ def dprint(*args, **kwargs):
 
 
 def fix_admon(adt):
-    p = r'{% hint style=\"(?P<type>.*?)\" %}(?P<content>(.|\s)*?){% endhint %}'
+    p = r'{% hint s(t*)yle=\"(?P<type>.*?)(\"*) %}(?P<content>(.|\s)*?){% endhint %}'
     matches = re.finditer(p, adt)
     for match in matches:
         dprint(f"Match starts and ends at {
