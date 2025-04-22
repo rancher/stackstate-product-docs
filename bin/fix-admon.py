@@ -32,6 +32,29 @@ def fix_admon(adt):
 
         adt = adt.replace(match.group(0), f'[{type}]\n===={content}====\n')
 
+    p = r'{% hint type=\"(?P<type>.*?)(\"*) %}(?P<content>(.|\s)*?){% endhint %}'
+    matches = re.finditer(p, adt)
+    for match in matches:
+        dprint(f"Match starts and ends at {
+            match.start()} and {match.end() - 1}")
+        type = match.group('type')
+        content = match.group('content')
+
+        match type:
+            case 'danger':
+                type = 'WARNING'
+            case 'info':
+                type = 'NOTE'
+            case 'success':
+                type = 'TIP'
+            case 'success" "self-hosted info':
+                type = 'TIP'
+            case 'warning':
+                type = 'CAUTION'
+
+        adt = adt.replace(match.group(0), f'[{type}]\n===={content}====\n')
+
+
     return adt
 
 
