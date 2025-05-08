@@ -31,3 +31,7 @@ checkmake:
 	else \
 		echo "checkmake not available"; \
 	fi
+
+.PHONY: preview
+preview:
+	npx http-server build/site -c-1
