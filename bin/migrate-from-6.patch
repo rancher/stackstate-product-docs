@@ -1,0 +1,104 @@
+--- /home/jhk/projects/suse/product-docs/stackstate-product-docs/docs/next/modules/en/pages/setup/upgrade-stackstate/migrate-from-6.adoc	2025-06-11 14:04:32.766865985 +0200
++++ /home/jhk/projects/suse/product-docs/stackstate-product-docs/docs/next/modules/en/pages/setup/upgrade-stackstate/migrate-from-6-new.adoc	2025-06-11 14:04:19.876984612 +0200
+@@ -1,5 +1,6 @@
+ = Migrating from StackState 6.x to SUSE Observability
+ :description: SUSE Observability Self-hosted
++:page-toclevels: 3
+ 
+ Due to the rename of the product and also due to breaking changes in the topology data format it is not possible to upgrade from StackState to SUSE Observability via a standard Helm upgrade command. This migration guide will help you set up SUSE Observability exactly the same as StackState.
+ 
+@@ -65,20 +66,20 @@
+ == Install and configure SUSE Observability
+ 
+ This is where the 2 options are different. Follow the instructions for your preferred scenario.
++Choose one of:
+ 
+-[tabs]
+-====
+-Replace StackState::
+-+
+---
++* xref:#_replace_stackstate[]
++* xref:#_run_side_by_side[].
++
++=== Replace StackState
+ 
+-=== Uninstall StackState
++==== Uninstall StackState
+ 
+ Uninstalling StackState before installing SUSE Observability has 2 advantages, first of all it frees up resources in the cluster, so no temporary extra nodes are needed. Second, it removes the ingress configuration for StackState freeing up the StackState URL to be re-used by SUSE Observability. The only disadvantage is there will be a period from this point until setting up the configuration of SUSE Observability where you won't have monitoring available with StackState nor SUSE Observability.
+ 
+ Uninstalling StackState will also remove your historical data (topology and all other telemetry data too). To uninstall StackState follow the https://docs.stackstate.com/6.0/self-hosted-setup/uninstall[uninstallation docs].
+ 
+-=== Install SUSE Observability
++==== Install SUSE Observability
+ 
+ Install SUSE Observability in a different namespace from StackState to avoid any conflicts. Recommended is to use the same namespace as in the documentation, `suse-observability`.
+ 
+@@ -124,7 +125,7 @@
+ ====
+ 
+ 
+-=== Restore the configuration backup
++==== Restore the configuration backup
+ 
+ Now that SUSE Observability is installed the configuration backup can be restored. The SUSE Observability Helm chart comes with a similar set of backup tools xref:/setup/data-management/backup_restore/configuration_backup.adoc[documented here]. *These are not the same as for StackState 6.x*, so make sure to get the scripts from the `restore` directory of the *SUSE Observability Helm chart* for restoring the backup.
+ 
+@@ -163,10 +164,8 @@
+ 
+ Now SUSE Observability has the exact same setup as StackState and we're ready to start using it. Note that, because the same URL is used, a browser refresh may be required the first time.
+ 
+---
+-Run side-by-side::
+-+
+---
++=== Run side-by-side
++
+ In this scenario SUSE Observability will ingest new data and it is responsible to run monitors and send out notifications. StackState will only offer access to the historical data.
+ 
+ At some point traffic will need to be switched over from StackState to SUSE Observability. The solution that limits the impact on your users and the installed agents is to configure SUSE Observability with the URL originally used by StackState. This guide will re-use the StackState URL (`stackstate.demo.stackstate.io`) while the "old" StackState will be accessible under a new `stackstate-old.demo.stackstate.io` URL. When using an OIDC provider for authentication the `stackstate-old` URL will need to be add/updated in the OIDC provider configuration and in the StackState configuration.
+@@ -178,7 +177,7 @@
+ * SUSE Observability in namespace `suse-observability` with URL `stackstate.demo.stackstate.io`, this will be the new active instance
+ * StackState in namespace `stackstate` with URL `+https://stackstate-old.demo.stackstate.io+`, this will only have historic data
+ 
+-=== Install SUSE Observability
++==== Install SUSE Observability
+ 
+ Install SUSE Observability in a different namespace from StackState to avoid any conflicts. Recommended is to use the same namespace as in the documentation, `suse-observability`.
+ 
+@@ -212,7 +211,7 @@
+ ====
+ 
+ 
+-=== Restore the configuration backup
++==== Restore the configuration backup
+ 
+ Now that SUSE Observability is installed the configuration backup can be restored. The SUSE Observability Helm chart comes with a similar set of backup tools xref:/setup/data-management/backup_restore/configuration_backup.adoc[documented here]. *These are not the same as for StackState 6.x*, so make sure to get the scripts from the `restore` directory of the *SUSE Observability Helm chart* for restoring the backup.
+ 
+@@ -251,7 +250,7 @@
+ 
+ Now SUSE Observability has the exact same setup as StackState and we're ready to start using it.
+ 
+-=== Prepare to scale down StackState
++==== Prepare to scale down StackState
+ 
+ To make sure nothing changes anymore in the old "StackState" setup and also to reduce its resource usage a number of StackState deployments must be scaled down to 0 replicas. The best way to do this is via the Helm values, in that way any other configuration change will not accidentally scale up some of the deployments again.
+ 
+@@ -299,7 +298,7 @@
+ 
+ This file will be used when changing the ingress for StackState. When no agent or open telemetry data is received anymore these StackState services are not needed.
+ 
+-=== Re-route traffic
++==== Re-route traffic
+ 
+ Re-routing the traffic will switch both agent traffic and users of StackState to SUSE Observability. To do this 2 steps are needed, first switch StackState to a new URL, then configure the SUSE Observability ingress to use the original StackState URL. In between these steps SUSE Observability/StackState will temporarily be inaccessible, but the agents will cache the data and send it when they can connect again.
+ 
+@@ -369,7 +368,7 @@
+ 
+ They can go to `+https://stackstate-old.demo.stackstate.io+` to review historical data.
+ 
+-=== Uninstall StackState
++==== Uninstall StackState
+ 
+ When the StackState installation is not needed anymore it can be uninstalled using the https://docs.stackstate.com/6.0/self-hosted-setup/uninstall[uninstall procedure].
+ 

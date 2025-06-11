@@ -1,6 +1,5 @@
 = Open Telemetry Collector
 :description: SUSE Observability
-:doctype: book
 
 The OpenTelemetry Collector offers a vendor-agnostic implementation to receive, process and export telemetry data. Applications instrumented with Open Telemetry SDKs can use the collector to send telemetry data to SUSE Observability (traces and metrics).
 
@@ -8,7 +7,7 @@ Your applications, when set up with OpenTelemetry SDKs, can use the collector to
 
 The collector is running close to your application, in the same Kubernetes cluster, on the same virtual machine, etc. This allows SDKs to quickly offload data to the collector, which can then do transformations, batching and filtering. It can be used by multiple applications and allows for easy changes to your data processing pipeline.
 
-For installation guides use the different xref:/setup/otel/getting-started[getting started guides]. The getting started guides provide a basic collector configuration to get started, but over time you'll want to customize it to your needs and add additional receivers, processors, and exporters to customize your ingestion pipeline to your needs.
+For installation guides use the different xref:/setup/otel/getting-started/README.adoc[getting started guides]. The getting started guides provide a basic collector configuration to get started, but over time you'll want to customize it to your needs and add additional receivers, processors, and exporters to customize your ingestion pipeline to your needs.
 
 == Configuration
 
@@ -218,7 +217,7 @@ docker run \
   -p 127.0.0.1:4317:4317 \
   -p 127.0.0.1:4318:4318 \
   -v $(pwd)/config.yaml:/etc/otelcol-contrib/config.yaml \
-  otel/opentelemetry-collector-contrib:latest
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
 ----
 
 This uses the collector contrib image which includes all contributed components (receivers, processors, etc.). A smaller, more limited version of the image is also available, but it has only a very limited set of components available:
@@ -229,22 +228,22 @@ docker run \
   -p 127.0.0.1:4317:4317 \
   -p 127.0.0.1:4318:4318 \
   -v $(pwd)/config.yaml:/etc/otelcol/config.yaml \
-  otel/opentelemetry-collector:latest
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:latest
 ----
 
-Note that the Kubernetes installation defaults to the Kubernetes distribution of the collector image, `otel/opentelemetry-collector-k8s`, which has more components than the basic image, but less than the contrib image. If you run into missing components with that image you can simply switch it to use the contrib image , `otel/opentelemetry-collector-contrib`, instead.
+Note that the Kubernetes installation defaults to the Kubernetes distribution of the collector image, `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s`, which has more components than the basic image, but less than the contrib image. If you run into missing components with that image you can simply switch it to use the contrib image , `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib`, instead.
 
-= Troubleshooting
+== Troubleshooting
 
-== HTTP Requests from the exporter are too big
+=== HTTP Requests from the exporter are too big
 
 In some cases HTTP requests for telemetry data can become very large and may be refused by SUSE Observability. SUSE Observability has a limit of 4MB for the gRPC protocol. If you run into HTTP requests limits you can lower the requests size by changing the compression algorithm and limiting the maximum batch size.
 
-=== HTTP request compression
+==== HTTP request compression
 
 The getting started guides enable `snappy` compression on the collector, this is not the best compression but uses less CPU resources than `gzip`. If you removed the compression you can enable it again, or you can switch to a compression algorithm that offers a better https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configgrpc/README.md#_compression_comparison[compression ratio]. The same compression types are available for gRPC and HTTP protocols.
 
-=== Max batch size
+==== Max batch size
 
 To reduce the HTTP request size can be reduced by adding configuration to the `batch` processor limiting the batch size:
 
@@ -258,7 +257,7 @@ processor:
 
 The batch size is defined in number of spans, metric data points, or log records (not in bytes), so you might need some experimentation to find the correct setting for your situation. For more details please refer to the https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md[batch processor documentation].
 
-= Related resources
+== Related resources
 
 The Open Telemetry documentation provides much more details on the configuration and alternative installation options:
 
