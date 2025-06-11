@@ -35,8 +35,8 @@ Also make sure to follow the air-gapped installation instructions whenever those
 
 
 . xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[Create the project where SUSE Observability will be installed]
-. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]
-. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_openshift_values.yaml[Create the `openshift-values.yaml` file]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_generate_baseconfig_values_yaml_and_sizing_values_yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_openshift_values_yaml[Create the `openshift-values.yaml` file]
 . xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[Deploy SUSE Observability with Helm]
 . xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_access_the_suse_observability_ui[Access the SUSE Observability UI]
 . xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_manually_create_securitycontextconfiguration_objects[Manually create `SecurityContextConfiguration` objects]
@@ -160,6 +160,11 @@ elasticsearch:
     enabled: false
 scc:
   enabled: true
+clickhouse:
+   podSecurityContext:
+      enabled: false
+   containerSecurityContext:
+      enabled: false
 ----
 
 === Deploy SUSE Observability with Helm
@@ -178,8 +183,8 @@ To deploy SUSE Observability in a high availability setup on OpenShift:
 
 . Before you deploy:
  ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[Create the project where SUSE Observability will be installed]
- ** <<_generate_baseconfig_values.yaml_and_sizing_values.yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
- ** <<_create_openshift_values.yaml,Create `openshift_values.yaml`>>
+ ** <<_generate_baseconfig_values_yaml_and_sizing_values_yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
+ ** <<_create_openshift_values_yaml,Create `openshift_values.yaml`>>
 . Deploy the latest SUSE Observability version to the `suse-observability` namespace with the following command:
 
 [,text]
@@ -190,6 +195,7 @@ helm upgrade \
   --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
   --values openshift-values.yaml \
+  --set "clickhouse.sidecars[0].securityContext.runAsUser=null" \
 suse-observability \
 suse-observability/suse-observability
 ----
@@ -203,8 +209,8 @@ To deploy SUSE Observability in an air-gapped setup on OpenShift:
 
 . Before you deploy:
  ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[Create the project where SUSE Observability will be installed]
- ** <<_generate_baseconfig_values.yaml_and_sizing_values.yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
- ** <<_create_openshift_values.yaml,Create `openshift_values.yaml`>>
+ ** <<_generate_baseconfig_values_yaml_and_sizing_values_yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
+ ** <<_create_openshift_values_yaml,Create `openshift_values.yaml`>>
 . Deploy the latest SUSE Observability version to the `suse-observability` namespace with the following command:
 
 [,bash]
@@ -216,6 +222,7 @@ helm upgrade \
   --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
   --values openshift-values.yaml \
+  --set "clickhouse.sidecars[0].securityContext.runAsUser=null" \
 suse-observability \
 suse-observability/suse-observability
 ----
