@@ -114,3 +114,60 @@ To use a service token to talk directly to the SUSE Observability API, add it to
 ----
   > curl -X GET -H "X-API-Key: <TOKEN>" http://<tenant>.app.stackstate.io/api/server/status
 ----
+
+
+== Authenticate using Service Tokens for Data Ingestion
+
+In order to create a Service Token for data ingestion you need first to create a dedicated role for this purpose:
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+This will create a new role in SUSE Observability called `my-agent` and grant it the `update-metrics` permission. You can then create a ServiceToken for this role:
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+The newly created service token can be used to authenticate:
+
+* suse-observability-agent
+* OTel Collector
+
+=== suse-observability-agent
+
+The SUSE Observability agent requires an API key for communication, historically known as the Receiver API Key. SUSE Observability now offers two options for authentication:
+
+* Receiver API Key: This key is typically generated during the initial installation of your SUSE Observability instance,
+* Service Token: You can create a Service Token using the SUSE Observability CLI (STS). These keys offer expiration dates, requiring periodic rotation for continued functionality.
+
+=== OTel Collector
+
+When using the SUSE Observability collector, you'll need to include an `Authorization` header in your configuration. The collector accepts either a Receiver API Key or a Service Token for authentication.
+The following code snippet provides an example configuration:
+
+[,yaml]
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSE Observability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    endpoint: <otlp-suse-observability-endpoint>:443
+  # or
+  otlphttp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    endpoint: https://<otlp-http-suse-observability-endpoint>
+----
