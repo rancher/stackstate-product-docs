@@ -31,14 +31,16 @@ helm repo update
 ====
 For environments without internet access, also known as air-gapped environments, first follow xref:/k8s-suse-rancher-prime-air-gapped.adoc[these extra instructions].
 
-Also make sure to follow the air-gapped installation instructions whenever those are present for a step.
+Also, make sure to follow the air-gapped installation instructions whenever those are present for a step.
 ====
 
 
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where SUSE Observability will be installed]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values_yaml_and_sizing_values_yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_set_up_a_storage_class[Set up a storage class]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Deploy SUSE Observability with Helm]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_access_the_suse_observability_ui[Access the SUSE Observability UI]
+
 
 === Create namespace
 
@@ -147,6 +149,18 @@ You can regenerate the files independently using the switches `basicConfig.gener
 The SUSE Observability Values chart generates affinity configurations that you can use with the main SUSE Observability chart to control pod scheduling behavior. Refer to xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes Affinities] documentation for more information.
 ====
 
+=== Set up a storage class
+
+You need to set up a storage class. Rancher's `local-path` is recommended if available, but SUSE Storage is also supported. Edit the file `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml` to add the "storageClass" configuration:
+
+[,text]
+----
+# Source suse-observability-values/templates/baseConfig_values.yaml
+global:
+  imageRegistry: "registry.rancher.com"
+  storageClass: "local-path" # New configuration line, the rest remains the same
+----
+
 
 === Deploy SUSE Observability with Helm
 
@@ -235,6 +249,46 @@ When all pods are up, you can enable a port-forward:
 ----
 kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
 ----
+
+For the ingress configuration, generate the file `$VALUES_DIR/suse-observability-values/templates/ingress_values.yaml` and add the below code. 
+
+[NOTE]
+====
+Remember to set a secret for the TLS configuration. For details on how to do that, consult the kubectl documentation.
+====
+
+[,text]
+----
+ingress:
+  enabled: true
+  class: ""
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    #if external dns (cloudflare and similars) configure:
+    #external-dns.alpha.kubernetes.io/target: <INGRESS_FQDN>
+    #external-dns.alpha.kubernetes.io/ttl: "60"
+    #end if
+  host:  <SUSE_OBSERVABILITY_HOST>
+  tls:
+  - hosts:
+    - <SUSE_OBSERVABILITY_HOST>
+    secretName: suse-private-ai-tls
+  existingSecret: suse-private-ai-tls
+  # Set up your secrets in whichever way feels fit. Check k8s docs for details: https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/
+----
+
+Proceed to run an upgrade to apply ingress configuration:
+
+[,text]
+----
+helm upgrade --namespace suse-observability --reuse-values --values suse-observability-values/templates/ingress_values.yaml suse-observability suse-observability/suse-observability
+----
+
+[NOTE]
+====
+If you are not using an external DNS, add to your local machine /etc/hosts: <CLUSTER_IP> <SUSE_OBSERVABILITY_HOST>.
+====
 
 SUSE Observability will now be available in your browser at `+https://localhost:8080+`. Log in with the username `admin` and the default password provided in the `values.yaml` file.
 
