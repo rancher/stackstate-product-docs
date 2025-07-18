@@ -340,6 +340,15 @@ sts service-token create --name suse-observability-extension --roles stackstate-
 . Execute the instructions provided to install the agent, these can be run in the `kubectl shell` that you can open for your cluster via the Rancher UI. But it can also be run from a local machine if it has Helm installed and is authorized to connect to the cluster.
 . After you install the agent, the cluster can be seen within the SUSE Observability UI as well as the _SUSE Rancher - Observability UI extension_.
 
+== Required privileges
+
+The deployment of the SUSE Observability agent requires the following system privileges:
+
+. `hostPID: true`: This privilege is required to associate process identifiers (PIDs) with their corresponding control groups (cgroups). This association is essential for accurately mapping processes to their respective containers.
+. `securityContext.privileged: true`: This elevated privilege is required for several critical functions. Primarily, it permits the agent to inject eBPF (extended Berkeley Packet Filter) programs into each network namespace for monitoring purposes. It is also necessary for reading the connection tracking (conntrack) tables across all network namespaces. While this list is not exhaustive, future development aims to replace this broad privilege with more granular Linux capabilities where feasible.
+
+Furthermore, the agent requires container runtime sockets to be mounted within its pod. This configuration is essential as it facilitates direct communication with the container runtime daemons, which is a prerequisite for scraping metrics and metadata from all containers on the host system.
+
 == Single Sign On
 
 To enable Single sign-on with your own authentication provider please xref:/setup/security/authentication/authentication_options.adoc[see here].
