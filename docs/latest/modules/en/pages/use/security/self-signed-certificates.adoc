@@ -3,7 +3,122 @@
 
 == SUSE Observability Server
 
-=== Overview
+=== Exposing SUSE Observability Server with self-signed certificates
+
+xref:k8s-suse-rancher-prime.adoc#_installation[SUSE Observability Server] components cannot terminate SSL themselves and must use an SSL-protected Ingress Controller or LoadBalancer to expose the service with HTTPS. This section explains how to configure an Ingress Controller with self-signed certificates.
+
+==== Using Ingress Controller with TLS
+
+To expose SUSE Observability Server using https://kubernetes.github.io/ingress-nginx/[Nginx Ingress Controller] with self-signed certificates, you need to:
+
+1. Create Kubernetes TLS secrets from your server certificate and key
+2. Configure the Ingress resource with TLS settings
+3. Deploy SUSE Observability Server with Ingress enabled
+
+===== Creating TLS secrets
+
+Create Kubernetes TLS secrets from your certificate and private key files:
+
+[,bash]
+----
+# Create TLS secret for main SUSE Observability Server
+kubectl create secret tls tls-secret \
+  --cert=server.crt \
+  --key=server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP GRPC endpoint
+kubectl create secret tls otlp-tls-secret \
+  --cert=otlp-server.crt \
+  --key=otlp-server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP HTTP endpoint
+kubectl create secret tls otlp-http-tls-secret \
+  --cert=otlp-http-server.crt \
+  --key=otlp-http-server.key \
+  --namespace suse-observability
+----
+
+===== Helm values configuration
+
+Create a values file (e.g., `ingress-with-tls-values.yaml`) with Ingress configuration:
+
+[NOTE]
+====
+*Note:*
+This configuration is specific to the https://kubernetes.github.io/ingress-nginx/[Nginx Ingress Controller]. If you're using a different Ingress Controller, adjust the annotations and configuration accordingly.
+====
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+
+===== Installing with Ingress
+
+Deploy SUSE Observability Server using the Ingress configuration:
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values ingress-with-tls-values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+For complete installation instructions, see xref:k8s-suse-rancher-prime.adoc#_installation[Installation].
+
+=== SUSE Observability Server connecting to external systems with self-signed certificates
+
+[NOTE]
+====
+This section is for configuring SUSE Observability Server to trust external systems that use self-signed certificates. This applies when the server needs to make outgoing connections to external services (like webhooks) that are secured with self-signed certificates.
+====
 
 SUSE Observability Server has several points of interaction with external systems. For example, event handlers can call out to webhooks in other systems. With the default configuration, SUSE Observability Server won't be able to communicate with these systems if they're secured with TLS using a self-signed certificate, or a certificate that isn't by default trusted by the JVM.
 
@@ -164,7 +279,7 @@ The certificate can be directly downloaded from the Chrome browser. The steps in
 
 == SUSE Observability Agent
 
-The SUSE Observability Agent connects to the SUSE Observability Server via HTTPS. If your server uses a self-signed certificate, you must configure the Agent to trust this certificate to establish secure connections.
+xref:k8s-suse-rancher-prime.adoce#_installing_the_suse_observability_agent[The SUSE Observability Agent] connects to the SUSE Observability Server via HTTPS. If your server uses a self-signed certificate, you must configure the Agent to trust this certificate to establish secure connections.
 
 [NOTE]
 ====
@@ -295,7 +410,7 @@ helm upgrade --install \
 
 == SUSE Observability CLI
 
-The SUSE Observability CLI connects to the SUSE Observability Server via HTTPS. When your server uses self-signed certificates or certificates from a private Certificate Authority (CA), configure the CLI to trust these certificates.
+xref:setup/cli/cli-sts[The SUSE Observability CLI] connects to the SUSE Observability Server via HTTPS. When your server uses self-signed certificates or certificates from a private Certificate Authority (CA), configure the CLI to trust these certificates.
 
 === Configure custom CA certificates
 
