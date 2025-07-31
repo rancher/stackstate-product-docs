@@ -350,6 +350,27 @@ The deployment of the SUSE Observability agent requires the following system pri
 
 Furthermore, the agent requires container runtime sockets to be mounted within its pod. This configuration is essential as it facilitates direct communication with the container runtime daemons, which is a prerequisite for scraping metrics and metadata from all containers on the host system.
 
+== Rancher-Restricted PSA Template
+
+The `Rancher-restricted` configuration (link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates[Pod Security Admission (PSA) Configuration Templates]) is a highly restrictive setup that aligns with current best practices for securing pods.
+
+When running Rancher on a Kubernetes cluster that enforces a restrictive security policy by default, there are two ways to install the SUSE Observability Helm chart:
+
+* *Exempt the entire chart namespace*, along with other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces].
+* *Disable the privileged Elasticsearch init container* by setting `elasticsearch.sysctlInitContainer.enabled` to `false`. This requires you to manually increase the link:https://www.elastic.co/docs/deploy-manage/deploy/self-managed/vm-max-map-count[virtual memory settings] (`vm.max_map_count`) on the nodes. See also xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_elasticsearch[Elasticsearch Required Permissions]. 
+
+Since the SUSE Observability Agent must run in privileged mode, the recommended approach is to install it into a namespace that you plan to exempt from the restrictive policy.
+
+[NOTE]
+====
+All SUSE Observability Helm chart containers are configured with the following `securityContext` settings starting from version `v2.3.8` and onwards:
+
+. `securityContext.capabilities.drop` is `["ALL"]`
+. `securityContext.seccompProfile.type` is `"RuntimeDefault"`
+. `securityContext.runAsNonRoot` is `true`
+. `securityContext.allowPrivilegeEscalation` is `false`
+====
+
 == Single Sign On
 
 To enable Single sign-on with your own authentication provider please xref:/setup/security/authentication/authentication_options.adoc[see here].
