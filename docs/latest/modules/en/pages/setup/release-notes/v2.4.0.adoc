@@ -1,0 +1,45 @@
+= v2.4.0 - 21/Aug/2025
+:revdate: 2025-08-21
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+
+== Release Notes: SUSE Observability Helm Chart v2.4.0
+
+== New Features & Enhancements
+
+* *Agent: Dynatrace API Migration:* The Dynatrace Topology and Health checks have been migrated from the v1 to the v2 Dynatrace API.
+* *Enhanced Security for Helm Chart:* Starting with version `v2.4.0`, all containers in the SUSE Observability Helm chart (with the exception of the Elasticsearch privileged init container) now have stricter `securityContext` defaults. This improves out-of-the-box security and ensures compatibility with clusters using highly restrictive Pod Security Admission (PSA) policies, such as the Rancher-restricted configuration.
+** *Deployment on Restrictive PSA Clusters:* When deploying on clusters with a restrictive PSA policy, two installation options are now supported:
+** *Namespace Exemption:* Exempt the chart's namespace along with other required Rancher namespaces.
+** *Disable Privileged Init Container:* Set `elasticsearch.sysctlInitContainer.enabled=false`. Note that this requires manual adjustment of the `vm.max_map_count` setting on all relevant nodes.
+**  The new defaults are:
+....
+`capabilities.drop: ["ALL"]`
+`seccompProfile.type: "RuntimeDefault"`
+`runAsNonRoot: true`
+`allowPrivilegeEscalation: false`
+....
+* *Java Runtime Upgrade to Java 21:* The runtime for StackGraph, StackState, and the Platform has been upgraded from Java 11 to Java 21. This upgrade introduces stricter encapsulation rules that may impact existing Groovy expressions.
+** *Groovy Expressions:* Groovy expressions using `.value` (e.g., `someList.collect { it.size }.value.sum()`) will now fail. To fix this, simply remove the internal `.value` invocation (e.g., `someList.collect { it.size }.sum()`).
+** *StackPack `StringTemplate` References:* In Groovy scripts for StackPack functionality, references to `StringTemplate` must be updated to `StsStringTemplate`, as `StringTemplate` is now an interface in Java 21.
+
+* *Notification Filtering:* Notifications can now be filtered on resource tags. For each key, at least one value must match for the filter to apply.
+* *Helm Configuration Key Renaming:* The `stackstate.experimental` Helm configuration key has been renamed to `stackstate.features`. The old key is still supported for backward compatibility but will be removed in a future release. **Upgrade Note:** If you have custom values, manually rename the key. If you are using a generated `sizing_values.yaml` file, you must regenerate it using the `--set 'basicConfig.generate=false'` option to update the key.
+* *Performance Improvements:*
+** *Views:* Performance for retrieving large views has been improved.
+** *Authorization:* Authorization performance has been enhanced for users who belong to many (more than 10) groups.
+
+== Bug Fixes
+
+* *Removed Settings Page Functionality:* The "DataSource connection testing" and "Reset Sync" buttons have been removed from the settings page. The synchronization process now automatically resets after a configuration update.
+* *Hadoop DataNode Performance:* Fixed an issue where DataNodes took a long time to locate a data block's new location, which could cause poor performance and backup failures.
+* *Topology Health Aggregation:* The number of components reported in topology health aggregation monitors is now limited to prevent performance issues.
+* *Permissions Migration:* Resolved an issue where permissions were not correctly migrated.
+
+=== Agent Bug Fixes
+
+* *Process Agent Panic:* The process agent now avoids a panic when PostgreSQL traffic is misclassified.
+* *OpenMetrics Check:* Fixed an issue where the `openmetrics` check was unable to scrape data from pods.
+* *Splunk Integration:* Added support for varying JWT authentication mechanisms for the Splunk integration.
+* *Kubernetes Pod Enrichment:* Fixed an issue with pod enrichment on Kubernetes versions 1.33 and newer.
