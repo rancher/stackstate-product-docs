@@ -1,4 +1,6 @@
 = SUSE Observability
+:revdate: 2025-07-25
+:page-revdate: {revdate}
 :description: SUSE Observability
 
 == Introduction
@@ -105,6 +107,10 @@ The minimum requirements do not include spare CPU/Memory capacity to ensure smoo
 
 SUSE Observability uses persistent volume claims for the services that need to store data. The default storage class for the cluster will be used for all services unless this is overridden by values specified on the command line or in a `values.yaml` file. All services come with a pre-configured volume size that should be good to get you started, but can be customized later using variables as required.
 
+[NOTE]
+====
+SUSE Observability requires the underlying storage to be based on flash memory (SSD) or similar in performance.
+====
 [NOTE]
 ====
 For production environments, NFS is not recommended and supported for storage provisioning in SUSE Observability due to the potential risk of data corruption.
@@ -345,6 +351,7 @@ sts service-token create --name suse-observability-extension --roles stackstate-
 The deployment of the SUSE Observability agent requires the following system privileges:
 
 . `hostPID: true`: This privilege is required to associate process identifiers (PIDs) with their corresponding control groups (cgroups). This association is essential for accurately mapping processes to their respective containers.
+. `hostNetwork: true`: this privilege is required to scrape open metrics data from other pods on the node.
 . `securityContext.privileged: true`: This elevated privilege is required for several critical functions. Primarily, it permits the agent to inject eBPF (extended Berkeley Packet Filter) programs into each network namespace for monitoring purposes. It is also necessary for reading the connection tracking (conntrack) tables across all network namespaces. While this list is not exhaustive, future development aims to replace this broad privilege with more granular Linux capabilities where feasible.
 
 Furthermore, the agent requires container runtime sockets to be mounted within its pod. This configuration is essential as it facilitates direct communication with the container runtime daemons, which is a prerequisite for scraping metrics and metadata from all containers on the host system.
