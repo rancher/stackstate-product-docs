@@ -1,0 +1,125 @@
+= KeyCloak
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Overview
+
+SUSE Observability can authenticate using KeyCloak as an authentication provider, you will need to configure both SUSE Observability and KeyCloak to be able to talk to each other. The following sections describe the respective setups.
+
+== Authentication flow
+
+When using Keycloak as an authentication provider, SUSE Observability will use OIDC (OpenID Connect) to authenticate users. The following diagram describes the authentication flow.
+
+image::k8s/keycloak-flow.png[Keycloak authentication flow]
+
+== Configure KeyCloak
+
+Before you can configure SUSE Observability to authenticate using KeyCloak, you need to add a new client configuration to the KeyCloak Authentication Server. The necessary settings for the client are:
+
+* *Client ID* - The ID of the client that's connecting, we recommend naming this `stackstate`
+* *Client Protocol* - Set to `openid-connect`
+* *Access Type* - Set to `confidential`, so that a secret is used to establish the connection between KeyCloak and SUSE Observability
+* *Standard Flow Enabled* - Set to `Enabled`
+* *Implicit Flow Enabled* - Set to `Disabled`
+* *Root URL* - The root location of SUSE Observability (the same value configured in as base URL of the SUSE Observability configuration
+* *Valid redirect URIs* - This should be `/loginCallback/*`
+* *Base URL* - This should point to the root location of SUSE Observability
+
+== Configure SUSE Observability
+
+=== Kubernetes
+
+To configure SUSE Observability to authenticate using KeyCloak, KeyCloak details and user role mapping needs to be added to the file `authentication.yaml`. For example:
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    keycloak:
+      url: "https://keycloak.acme.com/auth"
+      realm: acme
+      authenticationMethod: client_secret_basic
+      clientId: stackstate
+      secret: "8051a2e4-e367-4631-a0f5-98fc9cdc564d"
+      jwsAlgorithm: RS256
+      # scope is optional. By default `openid`, `profile` and `email` are requested
+      #_ scope: ["openid", "profile", "email"]
+      # jwtClaims:
+      #   usernameField: preferred_username
+      #   groupsField: roles
+
+    # map the roles from Keycloak to the
+    # 3 standard subjects in SUSE Observability (guest, powerUser and admin)
+    roles:
+      guest: ["keycloak-guest-role-for-stackstate"]
+      powerUser: ["keycloak-power-user-role-for-stackstate"]
+      admin: ["keycloak-admin-role-for-stackstate"]
+----
+
+[NOTE]
+====
+*Note:*
+By default when authenticating a user the request to KeyCloak specifies a default scope of `openid profile email` if a custom scope has not been specified on the configuration. Verify the `Client scopes` on your KeyCloak instance to be sure that the default scope is correct or you need a custom one.
+====
+
+
+Follow the steps below to configure SUSE Observability to authenticate using KeyCloak:
+
+. In `authentication.yaml` - add details of the KeyCloak authentication provider (see the example above). The KeyCloak specific values can be obtained from the client configuration in KeyCloak:
+ ** *url* - The base URI for the KeyCloak instance
+ ** *realm* - The KeyCloak realm to connect to
+ ** *authenticationMethod* - Set to `client_secret_basic`, this is currently the only supported value.
+ ** *clientId* - The ID of the KeyCloak client as configured in KeyCloak
+ ** *secret* - The secret attached to the KeyCloak client, which is used to authenticate this client to KeyCloak
+ ** *redirectUri* - Optional: The URI where the login callback endpoint of SUSE Observability is reachable. Populated by default using the `stackstate.baseUrl`, but can be overridden (must be a fully qualified URL that points to the `/loginCallback` path)
+ ** *jwsAlgorithm* - Set this to `RS256`, this is currently the only supported value.
+ ** *jwtClaims* - Optional: The roles or username can be retrieved from a different attribute than the Keycloak default behavior
+  *** *usernameField* - Optional: The field in the OIDC user profile that should be used as the username. By default, this will be the `preferred_username`.
+  *** *groupsField* - Optional: SUSE Observability will always, and by default only, use the `roles` Keycloak provides. But it can also add roles from the field specified here. This is mainly useful when Keycloak is mapping roles/groups from a third-party system.
+. In `authentication.yaml` - map user roles from KeyCloak to the correct SUSE Observability subjects using the `roles.guest`, `roles.powerUser` or `roles.admin` settings (see the example above). For details, see the xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[default SUSE Observability roles]. More SUSE Observability roles can also be created, see the xref:/setup/security/rbac/README.adoc[RBAC documentation].
+. Store the file `authentication.yaml` together with the `values.yaml` file from the SUSE Observability installation instructions.
+. Run a Helm upgrade to apply the changes:
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*Note:*
+
+* The first run of the helm upgrade command will result in pods restarting, which may cause a short interruption of availability.
+* Include `authentication.yaml` on every `helm upgrade` run.
+* The authentication configuration is stored as a Kubernetes secret.
+====
+
+
+=== Using an external secret
+
+When the keycloak secrets should come from an external secret, follow xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[these steps] but fill in the following data:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  keycloak_client_id: <base64 of client id>
+  keycloak_secret: <base64 of secret>
+----
+
+== See also
+
+* xref:/setup/security/authentication/authentication_options.adoc[Authentication options]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permissions for predefined SUSE Observability roles]
+* xref:/setup/security/rbac/rbac_roles.adoc[Create RBAC roles]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[External Secrets]

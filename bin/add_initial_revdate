@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Frank's original scriptlet from https://suse.slack.com/archives/C02CX23RNMV/p1753279891722769
+# for ADOC in $(find -type f -name "*.adoc"); do
+#   RDATE=$(git --no-pager log -1 --format="%cd" --date='format:%Y-%m-%d' $FILE)
+#   sed -i "0,/==*..*/ s/\(==*..*\)/\1\n:revdate: $RDATE\n/" $ADOC
+# done
+
+docs_dir="${1:-docs}"
+
+find "$docs_dir" -type f -name "*.adoc" \
+  | grep -vE 'nav.adoc|asciidoctorconfig.adoc|partials/variables.adoc' \
+  | while read -r adf; do
+  RDATE=$(git --no-pager log -1 --format="%cd" --date='format:%Y-%m-%d' $adf)
+  check=$(grep '^:revdate:' "$adf")
+  if [ "$check" == "" ]; then
+    echo Inserting revdate of "$RDATE" into "$adf"
+    gsed -i "0,/==*..*/ s/\(==*..*\)/\1\n:revdate: $RDATE\n:page-revdate: {revdate}/" "$adf"
+  fi
+done
