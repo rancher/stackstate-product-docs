@@ -16,12 +16,13 @@ The endpoints for SUSE Cloud Observability are:
 
 For a self-hosted installation you need to enable one of the endpoints, or both, by configuring the ingress for SUSE Observability as xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_rule_for_open_telemetry[described here].
 
-When SUSE Observability is running in the same cluster as the collector you can also use it without ingress by using the service endpoints:
+When SUSE Observability is running in the same cluster as the collector you can also use it without ingress by using the service endpoints, however this is only possible using the HTTP protocol:
 
-* OTLP: `+http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4317+`
 * OTLP over HTTP: `+http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4318+`
 
-Make sure to set `insecure: true` in the collector configuration (see next section) to allow the usage of plain http endpoints instead of https.
+Make sure to set `insecure: true` in the collector configuration (see next section) to allow the usage of plain http endpoints instead of https. 
+
+The GRPC protocol does not support sending credentials over an insecure connection, therefore you can only use it in combination with a secure ingress setup.
 
 == Collector configuration
 
@@ -39,8 +40,6 @@ exporters:
     endpoint: <otlp-suse-observability-endpoint>
     # Optional TLS configurations:
     #tls:
-    # To disable TLS entirely:
-    #  insecure: true
     # To disable certificate verification (but still use TLS):
     #  insecure_skip_verify: true
 ----
