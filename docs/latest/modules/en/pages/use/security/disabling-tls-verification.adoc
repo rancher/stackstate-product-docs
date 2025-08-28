@@ -1,0 +1,61 @@
+= Disabling TLS verification
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== SUSE Observability Agent
+
+To disable the SSL validation for your xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent], you need to configure the Helm string value as shown below:
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+To disable the SSL validation from the xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability CLI], you need to specify the `--skip-ssl` flag with the `sts CLI` commands. This can be done using one of the below two methods:
+
+*Method 1*: 
+
+Specify the `--skip-ssl` flag in the PEM-encoded CA certificate file for persistent configuration:
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip—-ssl
+----
+
+*Method 2*:
+
+Specify the `--skip-ssl` flag in any CLI command that is used for one-time certificate validation:
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip—-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip—-ssl
+----
+
+[WARNING]
+====
+Using the `--skip-ssl` flag will ignore `STS_CA_CERT_PATH` and `STS_CA_CERT_BASE64_DATA` settings. Use with caution as this reduces security.
+====
+
+== Rancher UI extension for SUSE Observability
+
+To disable the SSL validation from the Rancher UI extension, you need to change the `agent-tls-mode` setting. 
+
+To change the setting's value through the UI, navigate to the Global Settings page and find the `agent-tls-mode` setting at the bottom of the page. After changing the setting through the UI, clusters are checked to have the condition `AgentTlsStrictCheck` set to 'True' before allowing the request. This prevents outages from a certificate mismatch.
