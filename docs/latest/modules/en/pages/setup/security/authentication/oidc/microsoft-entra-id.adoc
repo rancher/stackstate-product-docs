@@ -1,0 +1,59 @@
+= Microsoft Entra ID
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+:experimental:
+
+== Creating an application in Entra ID
+
+. Register an application in Entra ID by following https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app?tabs=client-secret[this guide]
+ .. As a display name you can use, for example, `SUSE Observability`
+ .. Select the `Web` platform and specify the redirect URL: `https://<your-stackstate-installation>/loginCallback?client_name=StsOidcClient`
+ .. When adding credentials use the `client secret` credentials and make sure to store the secret
+. The other sections in the `Prepare for development` section are not required but for a production installation you should follow them to set an owner and possible pre-approve certain scopes (see the next section for the scopes SUSE Observability will request)
+. Finally make sure SUSE Observability will receive the groups for a user (needed for authorization) by adding the groups claim to the app registration using https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims?tabs=appui#_configure_groups_optional_claims[this guide]. Select which types of groups you want to expose, the rest of this document assumes you didn't customize the token properties and SUSE Observability receives the Group Id.
+
+== Configuring SUSE Observability
+
+Using the app registration information create a new `authentication.yaml` file for SUSE Observability:
+
+----
+stackstate:
+  authentication:
+    oidc:
+      # The client id is in the list of essentials on the overview page of the App registration
+      clientId: "<Application (client) ID>"
+      secret: "<Application (client) secret>"
+      # The Directory (Tenant) ID is in the list of essentials on the overview page of the App registration
+      discoveryUri: "https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0/.well-known/openid-configuration"
+      jwsAlgorithm: RS256
+      scope: ["openid", "email", "profile", "offline_access"]
+      jwtClaims:
+        usernameField: "email"
+        groupsField: groups
+    roles:
+      guest: []
+      powerUser: []
+      admin: [ "aaaaaaaa-bbbb-1111-2222-aabbccddeeff", "eeeeeeeeee-bbbb-1111-2222-aabbccddeeff" ]
+      k8sTroubleshooter: []
+----
+
+Get the values for:
+
+* Application (client) ID: in the Essentials section on the Overview page of the app registration
+* Application (client) secret: created in step 1 of the previous section and saved somewhere
+* Directory (tenant) ID: in the Essentials section on the Overview page of the app registration
+* The group ids for the different roles: in Entra ID admin browse to menu:Identity[All Groups]. The group id's are in the second column labeled `Object Id`. Decide which Entra ID groups should have which level of permissions and assign them to their respective roles in the above yaml example (removing the 2 example group ids).
+
+Now redeploy SUSE Observability with the helm command used to install but now include the new `authentication.yaml` file, `+helm upgrade ... --values authentication.yaml+`. Make sure to always include this file now when upgrading.
+
+=== Used scopes
+
+SUSE Observability is configured to requests 4 scopes:
+
+* openid, to do authentication
+* email, to identify users
+* profile, to be able to request the user profile which contains the groups for the users
+* offline_access, to be able to keep a user logged in for a longer time without re-authentication and to allow the user to use SUSE Observabilities API tokens.
+
+For further details, see https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-permissions-and-consent[Permissions and consent in the Microsoft identity platform (learn.microsoft.com)].

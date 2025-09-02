@@ -1,0 +1,190 @@
+= Service tokens
+:revdate: 2025-07-22
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+Using Service tokens it's possible to authenticate to SUSE Observability without having an associated a user account. This is useful for situations where you want to use SUSE Observability from headless services like a CI server. In such a scenario you typically don't want to provision a user account in your identity provider.
+
+== Manage service tokens
+
+Service tokens can be managed via the `sts` CLI. The following commands are available:
+
+[,sh]
+----
+> sts service-token --help
+Manage service tokens.
+
+Usage:
+  sts service-token [command]
+
+Available Commands:
+  create      Create a service token
+  delete      Delete a service token
+  list        List service tokens
+
+Use "sts service-token [command] --help" for more information about a command.
+----
+
+=== Create service tokens
+
+[NOTE]
+====
+The Open Telemetry and Kubernetes StackPacks let you create a subject and service token with all required permissions set up.
+====
+
+To create a service token in your instance of SUSE Observability, you can use the `sts` CLI.
+
+[,sh]
+----
+sts service-token create
+----
+
+[NOTE]
+====
+Note that the service token will only be displayed once. It isn't possible to see the token again.
+====
+
+
+This command takes the following command line arguments:
+
+|===
+| Flag | Description
+
+| `--name`
+| The name of the service token
+
+| `--expiration`
+| The expiration date of the service token, the format is yyyy-MM-dd. The expiration is optional.
+
+| `--roles`
+| A comma separated list of roles to assign to the service token
+|===
+
+For example, the command below will create a service token with the name `my-service-token` and the role `stackstate-k8s-troubleshooter`:
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+=== List service tokens
+
+The ID, name, expiration date and roles of all created service tokens can be seen using the `sts` CLI. For example:
+
+[,bash]
+----
+> sts service-token list
+ID              | NAME             | EXPIRATION | ROLES
+107484341630693 | my-service-token |            | [stackstate-k8s-troubleshooter]
+----
+
+=== Delete service tokens
+
+A service token can be deleted using the `sts` CLI. Pass the ID of the service token as an argument. For example:
+
+[,sh]
+----
+> sts service-token delete 107484341630693
+✅ Service token deleted: 107484341630693
+----
+
+== Authenticating using service tokens
+
+Once created, a service token can be used to authenticate to SUSE Observability from a headless service. To do this you can either use the CLI or directly talk to the API.
+
+=== SUSE Observability `sts` CLI
+
+A service token can be used for authentication with the new `sts` CLI.
+
+[,sh]
+----
+> sts context --name <name> --service-token <TOKEN> --url https://<tenant>.app.stackstate.io
+----
+
+=== SUSE Observability APIs
+
+To use a service token to talk directly to the SUSE Observability API, add it to the header of the request in one of the following ways:
+
+* In the `Authorization` header:
++
+[,sh]
+----
+  > curl -X GET -H "Authorization: ApiKey <TOKEN>" http://<tenant>.app.stackstate.io/api/server/status
+----
+
+* In the `X-API-Key` header:
++
+[,sh]
+----
+  > curl -X GET -H "X-API-Key: <TOKEN>" http://<tenant>.app.stackstate.io/api/server/status
+----
+
+
+== Authenticate using Service Tokens for Data Ingestion
+
+In order to create a Service Token for data ingestion you need first to create a dedicated role for this purpose:
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+If you want to use the service token to ingest Kubernetes RBAC data, you also need to grant `update-scoped-permissions`:
+[,sh]
+----
+> sts rbac grant --subject my-agent --permission update-scoped-permissions --resource my-cluster
+✅ Granted permission 'update-scoped-permissions' on 'my-cluster' to subject 'my-agent'
+PERMISSION                | RESOURCE
+update-metrics            | system
+update-scoped-permissions | my-cluster
+----
+
+This will create a new role in SUSE Observability called `my-agent` and grant it the `update-metrics` permission. You can then create a ServiceToken for this role:
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+The newly created service token can be used to authenticate:
+
+* suse-observability-agent
+* OTel Collector
+
+=== suse-observability-agent
+
+The SUSE Observability agent requires an API key for communication, historically known as the Receiver API Key. SUSE Observability now offers two options for authentication:
+
+* Receiver API Key: This key is typically generated during the initial installation of your SUSE Observability instance,
+* Service Token: You can create a Service Token using the SUSE Observability CLI (STS). These keys offer expiration dates, requiring periodic rotation for continued functionality.
+
+=== OTel Collector
+
+When using the SUSE Observability collector, you'll need to include an `Authorization` header in your configuration. The collector accepts either a Receiver API Key or a Service Token for authentication.
+The following code snippet provides an example configuration:
+
+[,yaml]
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSE Observability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    endpoint: <otlp-suse-observability-endpoint>:443
+  # or
+  otlphttp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    endpoint: https://<otlp-http-suse-observability-endpoint>
+----
