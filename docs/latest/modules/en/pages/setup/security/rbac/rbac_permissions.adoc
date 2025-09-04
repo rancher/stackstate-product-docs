@@ -18,69 +18,124 @@ Permissions are stored in StackGraph. This means that:
 
 == SUSE Observability permissions
 
-There are two types of permission in SUSE Observability. *System permissions* scope user capabilities, such as access to settings, query execution and scripting. *View permissions* allow for CRUD operations on SUSE Observability Views, these can be granted for a specific view or for all views. For details of the permissions attached to each predefined role in SUSE Observability, see xref:/setup/security/rbac/rbac_roles.adoc#_predefined_roles[predefined roles]
+There are two types of permission in SUSE Observability. *System permissions* scope user capabilities, such as access to settings, query execution and scripting. *Scoped permissions* determine access to observability data and some resource types like SUSE Observability Views.  For CRUD operations on SUSE Observability Views, these can be granted for a specific view or for all views. For details of the permissions attached to each predefined role in SUSE Observability, see xref:/setup/security/rbac/rbac_roles.adoc#_predefined_roles[predefined roles]
 
 The following permissions are available in SUSE Observability:
 
-* `access-analytics` - Access the Analytics page in the SUSE Observability UI.
-* `access-cli` - Access the CLI page. This provides the API key to use for authentication with the SUSE Observability CLI.
-* `access-explore` - Access the Explore page in the SUSE Observability UI.
-* `access-log-data` - Access SUSE Observability logs using the CLI.
-* `access-synchronization-data` - Access SUSE Observability synchronization status and data using the CLI.
-* `access-topic-data` - Access SUSE Observability Receiver data using the CLI.
-* `access-view` - A *View permission*. Access a specific view (when granted on a view) or all views (when granted on `everything`). Granted on the following views for predefined SUSE Observability roles:
- ** Administrator: `everything` (all views)
- ** Platform Administrator: `everything` (all views)
- ** Power User: `everything` (all views)
- ** Guest: `everything` (all views)
-* `create-views` - xref:/use/views/k8s-custom-views.adoc[Create views] in the SUSE Observability UI.
-* `delete-view` - A *view permission*. Delete a specific view (when granted on a view) or all views (when granted on `everything`). Granted on the following views for predefined SUSE Observability roles:
- ** Administrator: `everything` (all views)
- ** Platform Administrator: -
- ** Power User: `everything` (all views)
- ** Guest: -
-* `execute-component-actions` - Execute xref:/use/views/k8s-topology-perspective.adoc#_actions[component actions].
-* `execute-component-templates` - Invoke a component template API extension (internal use only).
-* `execute-node-sync` - Reset or delete a synchronization.
-* `execute-restricted-scripts` - Execute scripts using the HTTP script API in the SUSE Observability UI analytics environment. Also requires `execute-scripts`.
-* `execute-scripts` - Execute a query in the SUSE Observability UI Analytics environment. The `execute-restricted-scripts` permission is also required to execute scripts using the HTTP script API.
-* `export-settings` - Export settings.
-* `import-settings` - Import settings.
-* `manage-annotations` - Persist and fetch Anomaly annotations in SUSE Observability.
-* `manage-ingestion-api-keys` - Manage xref:/use/security/k8s-ingestion-api-keys.adoc[API keys] for data ingestion.
-* `manage-metric-bindings` - Create, delete and change xref:/use/metrics/k8s-add-charts.adoc[metric bindings]
-* `manage-monitors` - Create, delete and change xref:/use/alerting/k8s-monitors.adoc[monitors].
-* `manage-notifications` - Create, delete, and modify xref:/use/alerting/notifications/configure.adoc[notifications].
-* `manage-service-tokens`- Create/delete xref:/use/security/k8s-service-tokens.adoc[Service Tokens] in SUSE Observability.
-* `manage-stackpacks` - Install/upgrade/uninstall StackPacks.
-* `manage-star-view` - Add and remove stars from views in the SUSE Observability UI.
-* `manage-topology-elements` - Create/update/delete topology elements.
-* `perform-custom-query` - Access the xref:/use/views/k8s-filters.adoc#_filter_topology[topology filter].
-* `read-agents` - List connected agents with the cli `agent list` command
-* `read-permissions` - List all granted permissions across the entire system using the CLI.
-* `read-settings` - Access the Settings page in the SUSE Observability UI.
-* `read-stackpacks`
-* `read-system-notifications` - Access the system notifications in the UI
-* `read-telemetry-streams` - Access the telemetry data for components in the StackState UI
-* `read-traces` - Read and access trace data.
-* `run-monitors` - Execute a xref:/use/alerting/k8s-monitors.adoc[monitor] and make it run periodically.
-* `save-view`- A *view permission*. Update a specific view (when granted on a view) or all views (when granted on `everything`). Granted on the following views for predefined StackState roles:
- ** Administrator: `everything` (all views)
- ** Platform Administrator: -
- ** Power User: `everything` (all views)
- ** Guest: -
-* `unlock-node` - Unlock xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[locked configuration items].
-* `update-permissions` - Grant/revoke permissions or change subjects.
-* `update-settings` - Update settings.
-* `update-visualization` - Change xref:/use/views/k8s-topology-perspective.adoc#_visualization_settings[visualization settings].
-* `upload-stackpacks` - Upload new (versions of) StackPacks.
-* `view-metric-bindings` - View xref:/use/metrics/k8s-add-charts.adoc[metric bindings] (via the cli)
-* `view-monitors` - View monitor configurations.
-* `view-notifications` - View notification settings.
+.Permissions
+[cols="2,2,5"]
+|===
+|Resources |Verbs |Description
+
+|agents
+|get
+|Connected agents
+
+|api-tokens
+|get
+|The API key to use for authentication with the SUSE Observability CLI.  This is unique per user.
+
+|component-actions
+|execute
+|xref:/use/views/k8s-topology-perspective.adoc#_actions[Component actions in the topology perspective].
+
+|metric-bindings
+|get, create, update, delete
+|xref:/use/metrics/k8s-add-charts.adoc[Bindings to visualize data in the metrics perspective].
+
+|metrics
+|get^[1]^, update
+|Ingest and query metric data using PromQL
+
+|monitors
+|get, create, update, delete, execute
+|xref:/use/alerting/k8s-monitors.adoc[Determine component health with monitors].
+
+|notifications
+|get, create, update, delete
+|xref:/use/alerting/notifications/configure.adoc[Get alerted with notifications].
+
+|permissions
+|get, update
+|Manage permissions on subjects.
+
+|scoped-permissions
+|update^[1]^
+|Manage scoped permissions, granting (or revoking) access to topology, metrics and traces from a single cluster.
+
+|scripts
+|execute
+|Execute a script in the SUSE Observability UI Analytics environment.
+
+|restricted-scripts
+|execute
+|Use the HTTP script and Gremlin graph API in the Analytics environment.
+
+|service-token
+|get, create, delete
+|xref:/use/security/k8s-service-tokens.adoc[Service tokens] authenticate an external service and can be used for data ingestion.
+
+|settings
+|get, update, unlock
+|Export or import settings or unlock xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[locked configuration items].
+
+|stackpacks
+|get, update
+|List or upload xref:/stackpacks/about-stackpacks.adoc[Stackpacks].
+
+|stackpack-configurations
+|create, update, delete
+|Manage integrations using xref:/stackpacks/about-stackpacks.adoc[Stackpacks].
+
+|sync-data
+|get, delete
+|Inspect or reset the topology and health synchronization pipelines.
+
+|system-notifications
+|get
+|Access the system notifications in the UI
+
+|topic-messages
+|get
+|Access SUSE Observability Receiver data.
+
+|topology
+|get^[1]^
+|xref:/use/views/k8s-views.adoc[Explore topology scoped views].
+
+|traces
+|get^[1]^
+|xref:/use/traces/k8sTs-explore-traces.adoc[Explore traces].
+
+|views
+|get^[1]^, create, update^[1]^, delete^[1]^
+|Use or manage xref:/use/views/k8s-custom-views.adoc[custom views].
+
+|favorite-views
+|create, delete
+|Add and remove stars from views.
+
+|visualization
+|update
+|Change xref:/use/views/k8s-topology-perspective.adoc#_visualization_settings[visualization settings].
+
+|===
+^[1]^ This is a *scoped permission*, the interpretation of the resource name depends on the context
+
+=== Scoped permissions
+
+You can grant certain permissions system-wide, or you can limit them to a subset of the resources.  You can give them a *Resource Name*, which indicates the scope.  The interpretation of this name is dependent on the type of resource.  Note that the scoping may apply to only some of the verbs.
+
+* `views` - The name of the view
+* `topology` - Any component label. In a Kubernetes environment, this can be, for example, `cluster-name:<cluster-name>` or `k8s-scope:<cluster-name>/<namespace>`
+* `metrics` - In a Kubernetes environment, either `k8s:<cluster-name>:\\__any__` or `k8s:<cluster-name>:<namespace>`
+* `traces` - In a Kubernetes environment, either `k8s.cluster.name:<cluster-name>` or `k8s.scope:<cluster-name>/<namespace>`
+* `scoped-permissions` - The name of the cluster for which permissions are managed
 
 == Manage permissions
 
-SUSE Observability permissions can be managed using the `sts` CLI.
+You can manage SUSE Observability permissions using the `sts` CLI.
+For scoped permissions, a resource name may be specified.  If none is given, the permission will be granted (or revoked) system-wide.
 
 [NOTE]
 ====
@@ -88,13 +143,59 @@ SUSE Observability permissions can be managed using the `sts` CLI.
 ====
 
 
-=== List all permissions
+=== List all available permissions
 
-List all permissions:
+List all available permissions:
 
 [,text]
 ----
 sts rbac list-permissions
+----
+
+=== List all subjects
+
+List all subjects:
+
+[,text]
+----
+sts rbac describe subjects
+
+SUBJECT                                    | SOURCE
+stackstate-admin                           | Static
+suse-observability-instance-admin          | Kubernetes
+suse-observability-agent-clusterA          | Observability
+----
+[NOTE]
+====
+`The subject `SOURCE` shows who owns and manages the subject. It can be one of our RBAC sources (Configuration|Static, Observability, Kubernetes)
+
+* Configuration|Static: Subjects obtained via Suse Observability configuration through helm
+* Observability: Subjects managed via the sts cli
+* Kubernetes: Subjects obtained via RBAC agent from Kubernetes RoleBindings and ClusterRoleBindings
+====
+
+=== List subjects for a user
+
+List all subjects that are assigned to the context:
+
+[,text]
+----
+sts user-session roles
+
+keycloakoidc_group://suse-observability-instance-troubleshooter                                                            
+keycloakoidc_group://suse-observability-instance-observer
+keycloakoidc_group://suse-observability-cluster-observer
+keycloakoidc_group://suse-observability-instance-admin
+keycloakoidc_group://suse-observability-observer
+----
+
+List all subjects that are assigned to a user, by providing their `api-token`:
+
+[,text]
+----
+sts user-session roles --api-token [api-token]
+
+keycloakoidc_group://suse-observability-instance-admin
 ----
 
 === Show granted permissions
@@ -106,7 +207,16 @@ Show the permissions granted to a specific role.
 sts rbac describe-permissions --subject [role-name]
 ----
 
+[NOTE]
+====
+`--subject` can be any of the subjects available in the different RBAC sources (Configuration, Observability, Kubernetes)
+====
+
 === Grant permissions
+[NOTE]
+====
+`--subject` can be an Observability subject, Configuration and Kubernetes subjects are read-only
+====
 
 ==== Allow a user to open a view
 
@@ -114,12 +224,12 @@ Give a subject with permission to open a view:
 
 [,text]
 ----
-sts rbac grant --subject [role-name] --permission access-view --resource [view-name]
+sts rbac grant --subject [role-name] --permission get-views --resource [view-name]
 ----
 
-==== Allow a user to create (save) views
+==== Allow a user to create views
 
-Give a subject with the system permission to create (save) views:
+Give a subject with the system permission to create views:
 
 [,text]
 ----
@@ -132,25 +242,20 @@ Give a subject with the system permission to check SUSE Observability settings:
 
 [,text]
 ----
-sts rbac grant --subject [role-name] --permission read-settings
-----
-
-==== Allow a user to add or edit event handlers
-
-Give a subject with the system permission to add new event handlers and edit existing event handlers:
-
-[,text]
-----
-sts rbac grant --subject [role-name] --permission manage-event-handlers
+sts rbac grant --subject [role-name] --permission get-settings
 ----
 
 === Revoke permissions
+[NOTE]
+====
+`--subject` can be an Observability subject, Configuration and Kubernetes subjects are read-only
+====
 
 Revoke permissions for a subject to open a view:
 
 [,text]
 ----
-sts rbac revoke --subject [role-name] --permission access-view --resource [view-name]
+sts rbac revoke --subject [role-name] --permission get-views --resource [view-name]
 ----
 
 == SUSE Observability UI with no permissions
