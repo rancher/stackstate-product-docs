@@ -72,8 +72,28 @@ Omitting the deviating threshold from this json snippet would have kept it at th
 
 === HTTP - response time - Q95 is above 3 seconds
 
-It is important to keep an eye on the HTTP response times for a Kubernetes service. SUSE Observability monitors the 95th percentile response time, or Q95, which is a statistical measure indicating that 95% of the responses are faster than this time.
-This is a useful measure for identifying outliers and slow requests that may negatively impact the user experience. If the Q95 response time is above 3 seconds during a specified time window, the monitor will produce a notification indicating a deviating state.
+Tracking the 95th percentile (Q95) HTTP response time for your Kubernetes services helps you spot slow requests and performance outliers that could affect users. If the Q95 response time goes above 3 seconds during a specified time window, the monitor will alert you with a deviating state.
+
+You can tailor this monitor to your application's needs by xref:/use/alerting/k8s-override-monitor-arguments.adoc[overriding the default settings] (such as the time window, threshold, or quantile) using a Kubernetes annotation on your service. This flexibility is useful if your service has unique performance requirements (e.g. long polling services).
+
+To customize the monitor, add an annotation like the following to your service and adjust the values as needed:
+
+```
+monitor.kubernetes-v2.stackstate.io/http-response-time/overrides: |
+  {
+    "deviatingTimeWindow": "10m",            // Time window for a deviating state (e.g., "10m", "1h")
+    "deviatingThreshold": 1.2,               // Threshold in seconds for a deviating state
+    "criticalTimeWindow": "30m",             // Time window for a critical state
+    "criticalThreshold": 2.0,                // Threshold in seconds for a critical state
+    "quantile": 0.99,                        // Quantile to monitor (e.g., 0.95, 0.99)
+    "nameTemplate": "API latency (p{{ quantile }}) > {{ threshold }}", // Custom monitor name
+    "enabled": true                          // Set to false to disable this monitor for the service
+  }
+```
+
+- You can leave out any field to use its default value.
+- The monitor evaluates the chosen quantile of response time over the specified window. If the value is above the threshold, the monitor triggers.
+- In the example above, the monitor will signal a deviating state if the 99th percentile (Q99) response time is above 1.2 seconds (over the last 10 minutes), and a critical state if it is above 2.0 seconds (over the last 30 minutes).
 
 === Kubernetes volume usage trend over 12 hours
 
