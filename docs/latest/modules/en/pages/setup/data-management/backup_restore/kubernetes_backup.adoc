@@ -587,7 +587,7 @@ where is printed:
 
 [CAUTION]
 ====
-*Restore functionality always overrides data (all tables in the `otel` database). You must be careful to avoid the unexpected loss of existing data.*
+*Restore functionality overwrites the data. All tables in the `otel` database are dropped and restored from the backup. Beware to avoid unexpected data loss.*
 ====
 
 
@@ -599,7 +599,7 @@ The following script needs permission to execute the `kubectl exec` command.
 
 [CAUTION]
 ====
-*Restore functionality requires stopping all producers (like OpenTelemetry exporters). The script scales the StatefulSet down and then back up afterward.*
+*Restore functionality requires stopping all producers (like OpenTelemetry exporters). The script scales down the workloads before the backup, and scales up the workloads after the backup finishes.*
 ====
 
 
@@ -623,17 +623,6 @@ The output should look like this:
 2024/06/17 19:14:19.509684  info clickhouse connection closed logger=clickhouse
 Data restored
 ----
-
-[NOTE]
-====
-*Error: error can't create table .... code: 57, message: Directory for table data store/.../ already exists*
-
-ClickHouse does not permanently delete tables when the `+DROP DATABASE/TABLE ...+` command is executed. Instead, the database is marked as deleted and will be permanently removed after 8 minutes. This delay provides additional time to undo the operation. More details can be found at https://clickhouse.com/docs/en/sql-reference/statements/undrop[UNDROP TABLE]. If you attempt to restore data during this period, it will fail and produce the aforementioned error. Available solutions:
-
-* wait 8 minutes (check table `select * from system.dropped_tables;` )
-* configure `database_atomic_delay_before_drop_table_sec`
-====
-
 
 === List Elasticsearch snapshots
 
