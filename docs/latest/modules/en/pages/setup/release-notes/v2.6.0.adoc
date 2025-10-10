@@ -1,0 +1,36 @@
+= v2.6.0 - 29/Sep/2025
+:revdate: 2025-09-29
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: SUSE Observability Helm Chart v2.6.0
+
+WARNING:  This release has a *BREAKING CHANGE* for `clickhouse.commonLabels` and `zookeeper.commonLabels` (Helm chart).
+
+== New Features & Enhancements
+
+* *HBase Upgrade:* HBase has been updated to version `2.6.3` to improve compatibility with Hadoop 3.4.
+
+* *Global Common Labels Support (Helm Chart):* The SUSE Observability Helm chart now supports the `global.commonLabels` configuration. This allows you to add custom Kubernetes labels to all Deployments, StatefulSets, CronJobs, Jobs, and Pods created by the Helm chart.
+** *BREAKING CHANGE:* If you explicitly configured `clickhouse.commonLabels` and `zookeeper.commonLabels`, the Helm upgrade will fail due to the immutable nature of StatefulSets. To prevent this, you must delete the corresponding StatefulSets *before* upgrading, while leaving the running pods intact.
+** Use the following commands to safely delete the StatefulSets:
++
+[source,bash]
+----
+kubectl delete statefulset -n <suse observability namespace> -l app.kubernetes.io/name=zookeeper --cascade=orphan
+kubectl delete statefulset -n <suse observability namespace> -l app.kubernetes.io/name=clickhouse --cascade=orphan
+----
+
+* *Editable Service Monitors:* Monitors for SUSE Observability's own internal services are now editable. This also applies to other monitors that create multiple health states per component.
+
+== Bug Fixes
+
+* *ClusterRole Name Conflict:* Fixed an issue where the agent and platform could not be installed in the same namespace due to a conflicting `ClusterRole` name.
+* *Data Corruption (Non-HA Setups):* Resolved a data corruption issue that occurred after a Tephra and server restart on non-HA setups.
+* *Topology Overview Performance:* Fixed a performance degradation issue when running the topology overview on views containing a large number of components (over 4000).
+* *CLI Emoji Formatting:* Formatting has been corrected for fields containing Emojis in the CLI.
+
+=== Agent Bug Fixes
+
+* *RBAC Agent Self-Signed Certificates:* Fixed an issue to properly support self-signed certificates within the RBAC agent.
+* *RBAC Agent SSL Validation Skip:* The RBAC agent now supports the `global.skipSslValidation` setting.
