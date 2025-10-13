@@ -1,0 +1,36 @@
+= v2.6.1 - 13/Oct/2025
+:revdate: 2025-10-13
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: {stackstate-product-name} Helm Chart v2.6.1
+
+== New Features & Enhancements
+
+* *Base URL Scheme Enforcement:* The `suse-observability` and `suse-observability-values` Helm charts now strictly enforce that the `baseUrl` value must be provided and must include a scheme (either `http://` or `https://`).
+* *Improved Kafka Reliability:* Kafka pod restart reliability has been improved by introducing a startup probe and increasing the termination grace period.
+* *Anonymous SMTP Support:* Added support for configuring anonymous SMTP for notifications.
+* *HA Data Corruption Fix (Clock Misalignment):* Resolved a data corruption issue in HA setups that occurred due to clock misalignment between the nodes running Tephra.
+* *Consistent Job and CronJob Configuration:* Ensured that `podAnnotations`, `podLabels`, `nodeSelectors`, `affinity`, and `tolerations` now apply to all Jobs and CronJobs.
+** All Jobs and CronJobs now also support the `global.imagePullSecrets` configuration.
+* *HBase Deployment Conditionals:* Fixed HBase deployment mode conditionals to prevent resources intended for distributed mode only (e.g., PodDisruptionBudgets, Secrets, ServiceMonitors, ConfigMaps) from being deployed in Mono mode.
+* *Elasticsearch Startup Probe:* Added a startup probe for Elasticsearch, giving it up to 10 minutes to successfully start up.
+* *Elasticsearch Restoration Enhancements:*
+** Added the `--delete-all-indices` flag to `restore-elasticsearch-snapshot.sh` to automatically delete all existing Elasticsearch indices before restoring.
+** Documentation explaining how to restore Elasticsearch data if the Elasticsearch persistent volume is accidentally deleted has been provided.
+
+
+== Bug Fixes
+
+* *Rancher UI Extension Access:* Non-admin Rancher users can now correctly view the health state of clusters and resources in the cluster via the UI extension.
+* *OpenShift Installation:* Fixed OpenShift cluster installation issues by correctly configuring `SecurityContextConstraints` with `seccompProfiles`.
+** The  xref:setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[OpenShift installation documentation] has been updated.
+* *StackGraph Data Retention:* Restored StackGraph data to use the full retention window instead of limiting it to only 8 days during a restore.
+* *Configuration Restore (RBAC):* Added subjects and permissions to the configuration restore process, ensuring that all configured RBAC permissions and service tokens are effectively preserved.
+* *Basic-Access Template Fix:* Fixed an issue where the `basic-access` templates incorrectly applied `k8sAuthorization` roles even when this feature was disabled.
+
+=== Agent Bug Fixes
+
+* *Container Metrics Collection:* The agent no longer stops container metrics collection due to `EPERM` on a single directory.
+* *Process Agent File Descriptors:* Fixed a memory leak issue related to file descriptors in the process agent.
+* *Process Agent Protocol Tracing:* The {stackstate-product-name} agent Helm chart now supports the `processAgent.disabledProtocols` configuration, allowing you to specify which network protocols should *not* be traced.
