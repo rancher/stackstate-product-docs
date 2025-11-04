@@ -25,7 +25,7 @@ The following data will *not* be backed up:
 
 === Storage options
 
-Backups are sent to an instance of https://min.io/[MinIO (min.io)], which is automatically started by the `stackstate` Helm chart when automatic backups are enabled. MinIO is an object storage system with the same API as AWS S3. It can store its data locally or act as a gateway to https://docs.min.io/docs/minio-gateway-for-s3.html[AWS S3 (min.io)], https://docs.min.io/docs/minio-gateway-for-azure.html[Azure BLob Storage (min.io)] and other systems.
+Backups are sent to an instance of https://min.io/[MinIO (min.io)], which is automatically started by the `suse-observability` Helm chart when automatic backups are enabled. MinIO is an object storage system with the same API as AWS S3. It can store its data locally or act as a gateway to https://docs.min.io/docs/minio-gateway-for-s3.html[AWS S3 (min.io)], https://docs.min.io/docs/minio-gateway-for-azure.html[Azure BLob Storage (min.io)] and other systems.
 
 The built-in MinIO instance can be configured to store the backups in three locations:
 
@@ -46,7 +46,7 @@ Amazon S3-managed keys (SSE-S3) should be used when encrypting S3 buckets that s
 
 ⚠️ Encryption with AWS KMS keys stored in AWS Key Management Service (SSE-KMS) isn't supported. This will result in errors such as this one in the Elasticsearch logs:
 
-`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: stackstate-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)",`
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)",`
 ====
 
 
@@ -265,7 +265,7 @@ The backup schedule can be configured using the Helm value `victoria-metrics-0.b
 
 == OpenTelemetry (ClickHouse)
 
-ClickHouse uses both incremental and full backups. By default, full backups are executed daily at 00:45 am, and incremental backups are performed every hour. Each backup creates a new directory, old backups (directories) are deleted automatically. All files located in a backup directory should be treated as a single whole and can only be moved, copied or deleted as a whole. We recommend to uses `clickhouse-backup` tool to manage backups. The tool is available on the `stackstate-clickhouse-shard0-0` Pod.
+ClickHouse uses both incremental and full backups. By default, full backups are executed daily at 00:45 am, and incremental backups are performed every hour. Each backup creates a new directory and old backups (directories) are deleted automatically. All files located in a backup directory are treated as a singular group and can only be moved, copied or deleted as a group. It's recommended to use the `clickhouse-backup` tool available on the `suse-observability-clickhouse-shard0-0` Pod to manage backups.
 
 === Enable scheduled backups
 
@@ -521,7 +521,7 @@ The output should look like this:
 [,bash]
 ----
 === Scaling down the Victoria Metrics instance
-statefulset.apps/stackstate-victoria-metrics-0 scaled
+statefulset.apps/suse-observability-victoria-metrics-0 scaled
 === Allowing pods to terminate
 === Starting restore job
 job.batch/victoria-metrics-restore-backup-20231017t092607 created
@@ -529,7 +529,7 @@ job.batch/victoria-metrics-restore-backup-20231017t092607 created
 kubectl logs --follow job/victoria-metrics-restore-backup-20231017t092607
 === After the job has completed clean up the job and scale up the Victoria Metrics instance pods again with the following commands:
 kubectl delete job victoria-metrics-restore-backup-20231017t092607
-kubectl scale statefulsets stackstate-victoria-metrics-0 --replicas=1
+kubectl scale statefulsets suse-observability-victoria-metrics-0 --replicas=1
 ----
 
 Then follow logs to check the job status
@@ -654,20 +654,25 @@ The timestamp when the backup was taken is part of the backup name.
 
 === Delete Elasticsearch indices
 
-To delete existing Elasticsearch indices so that a snapshot can be restored, follow these steps.
+[NOTE]
+====
+You can use the `--delete-all-indices` flag with the restore script to automatically delete all indices before restoring. For more information, see xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_restore_an_elasticsearch_snapshot[restore an Elasticsearch snapshot].
+====
 
-. Stop indexing - scale down all `*2es` deployments to 0:
+To manually delete the existing Elasticsearch indices and restore a snapshot, follow these steps:
+
+. Stop indexing - scale down all deployments using Elasticsearch to 0:
 +
 [,bash]
 ----
-kubectl scale --replicas=0 deployment/e2es
+kubectl scale --replicas=0 deployment -l observability.suse.com/scalable-during-es-restore="true"
 ----
 
 . Open a port-forward to the Elasticsearch master:
 +
 [,bash]
 ----
-kubectl port-forward service/stackstate-elasticsearch-master 9200:9200
+kubectl port-forward service/suse-observability-elasticsearch-master 9200:9200
 ----
 
 . Get a list of all indices:
@@ -681,10 +686,12 @@ The output should look like this:
 +
 [,bash]
 ----
-health status index                          uuid                   pri rep docs.count docs.deleted store.size pri.store.size
-green  open   sts_internal_events-2022.09.20 fTk7iEYtQI6ruVFuwNnbPw   1   0        125            0     71.7kb         71.7kb
-green  open   .geoip_databases               GYA_c3i6QKenfFehnwBcAA   1   0         41            0     38.8mb         38.8mb
-green  open   sts_multi_metrics-2022.09.20   MT1DceQPTDWVIfBJdl7qUg   3   0       1252            0    550.1kb        550.1kb
+health status index                              uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+green  open   .ds-sts_k8s_logs-2025.09.28-004619 9p7RZwNCR-aQwInTMr5Bow   3   1   24511032            0        6gb            3gb          3gb
+green  open   sts_topology_events-2025.10.01     86I2JZIeRzqWkK1dolHzhg   1   1    1576132            0    111.6mb         55.8mb       55.8mb
+green  open   sts_topology_events-2025.10.02     T-bcrok_S1uVPLusQuCMxw   1   1     999748            0     75.2mb         37.6mb       37.6mb
+green  open   .ds-sts_k8s_logs-2025.09.30-004653 rwlcAr0sTPe9NaImtJLIiw   3   1   24387607            0        6gb            3gb          3gb
+green  open   sts_topology_events-2025.09.10     T0x-qvyUR2-dg4fyvdZIaQ   1   1    1746143            0    131.6mb         65.8mb       65.8mb
 ----
 
 . Delete an index with a following command:
@@ -716,11 +723,36 @@ curl -X DELETE "http://localhost:9200/sts_internal_events-2021.02.19?pretty"
 ====
 *When a snapshot is restored, existing indices won't be overwritten.*
 
-See xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_delete_elasticsearch_indices[delete Elasticsearch indices].
+You can use the `--delete-all-indices` flag to automatically delete all indices by the restoring script, or manually delete them as described in xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_delete_elasticsearch_indices[delete Elasticsearch indices].
+
 ====
 
+[WARNING]
+====
+*If the Elasticsearch `PersistentVolumes` were re-created* (for example, by accidental deletion and following pod restart), you must recreate the Elasticsearch backup configuration by using either of the below two methods:
 
-To restore an Elasticsearch snapshot, select a snapshot name and pass it as the first parameter in the following command line. You can optionally specify a second parameter with a comma-separated list of the indices that should be restored. If not specified, all indices that match the Helm value `backup.elasticsearch.scheduled.indices` will be restored (default `"sts*"`):
+* Reinstalling the SUSE Observability Helm chart with the same configuration used for the initial installation (OR)
+* Manually triggering the backup initialization CronJob:
++
+[,bash]
+----
+kubectl create job --from=cronjob.batch/suse-observability-backup-init "suse-observability-backup-init-$(date +%s)"
+----
+====
+To restore an Elasticsearch snapshot, select a snapshot name and pass it as the first parameter. You can optionally specify:
+
+* A comma-separated list of indices to restore. If not specified, all indices matching the Helm value `backup.elasticsearch.scheduled.indices` will be restored. The default value is `"sts*"`).
+* Introduced in version `2.6.1`, you can use the "--delete-all-indices" flag to automatically delete all existing indices before restoring.
+
+==== Basic restore
+
+[,bash]
+----
+./restore/restore-elasticsearch-snapshot.sh \
+  sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk
+----
+
+==== Restore specific indices
 
 [,bash]
 ----
@@ -729,38 +761,64 @@ To restore an Elasticsearch snapshot, select a snapshot name and pass it as the 
   "<INDEX_TO_RESTORE>,<INDEX_TO_RESTORE>"
 ----
 
-The output should look like this:
+==== Restore with automatic index deletion
+
+[,bash]
+----
+./restore/restore-elasticsearch-snapshot.sh \
+  sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk \
+  --delete-all-indices
+----
+
+When using the `--delete-all-indices` flag, confirm in the prompt to continue the action:
 
 [,text]
 ----
-job.batch/elasticsearch-restore-20210229t152530 created
-Waiting for job to start...
-Waiting for job to start...
-=== Restoring Elasticsearch snapshot "sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk" from snapshot repository "sts-backup" in bucket "sts-elasticsearch-backup"...
+WARNING: All indices will be deleted before restore!
+Are you sure you want to continue? (yes/no): yes
+=== Starting restore job
+job.batch/elasticsearch-restore-20251003t115746 created
+=== Restore job started. Follow the logs and clean up the job with the following commands:
+kubectl logs --follow job/elasticsearch-restore-20251003t115746
+kubectl delete job/elasticsearch-restore-20251003t115746
+----
+
+Follow the logs to see the deletion and restore progress:
+
+[,text]
+----
+kubectl logs --follow job/elasticsearch-restore-20251003t115746
+
+=== Deleting all indices matching pattern "sts*"...
+Found indices to delete:
+.ds-sts_k8s_logs-2025.10.03-000007
+.ds-sts_k8s_logs-2025.10.03-000004
+sts_topology_events-2025.10.02
+sts_topology_events-2025.10.03
+...
+=== All indices deleted successfully
+=== Restoring ElasticSearch snapshot "sts-backup-20251003-0925-aby7d1tgs9whvbm6qj04ug" (indices = "sts*") from snapshot repository "sts-backup" in bucket "sts-elasticsearch-backup"...
 {
   "snapshot" : {
-    "snapshot" : "sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk",
+    "snapshot" : "sts-backup-20251003-0925-aby7d1tgs9whvbm6qj04ug",
     "indices" : [
-      ".slm-history-1-000001",
-      "ilm-history-1-000001",
-      "sts_internal_events-2021.02.19"
+      ".ds-sts_k8s_logs-2025.10.02-000003",
+      "sts_topology_events-2025.10.02",
+      "sts_topology_events-2025.10.03"
     ],
     "shards" : {
-      "total" : 3,
+      "total" : 15,
       "failed" : 0,
-      "successful" : 3
+      "successful" : 15
     }
   }
 }
 ===
-job.batch "elasticsearch-restore-20210229t152530" deleted
 ----
 
-The indices restored are listed in the output, as well as the number of failed and successful restore actions.
-
-After the indices have been restored, scale up all `*2es` deployments:
+After the indices have been restored, scale up all deployments using Elasticsearch:
 
 [,bash]
 ----
-   kubectl scale --replicas=1 deployment/e2es
+kubectl scale --replicas=1 deployment -l observability.suse.com/scalable-during-es-restore="true"
 ----
