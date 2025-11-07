@@ -36,11 +36,27 @@ shift $(($OPTIND - 1))
 # Namespace to collect information
 NAMESPACE=${1:-suse-observability}
 
-# Check if kubectl is installed or not
-if ! command -v kubectl &>/dev/null; then
-   echo "kubectl is not installed. Please install it and try again."
-   exit 1
+# Check if commands are installed or not
+COMMANDS=("kubectl" "tar")
+if [ $ELASTICSEARCH_LOGS ]; then
+  COMMANDS+=("curl" "jq")
 fi
+for cmd in ${COMMANDS[@]}; do
+  if ! command -v $cmd &>/dev/null; then
+     echo "$cmd is not installed. Please install it and try again."
+     exit 1
+  fi
+done
+
+# skip helm release analysis when not all its dependencies are present
+HELM_RELEASES=1
+for cmd in base64 gzip jq
+do
+  if ! command -v $cmd &>/dev/null; then
+     echo "$cmd is not installed. Skipping analysis of helm releases."
+     HELM_RELEASES=0
+  fi
+done
 
 # Check if KUBECONFIG is set
 if [[ -z "$KUBECONFIG" || ! -f "$KUBECONFIG" ]]; then
@@ -116,8 +132,8 @@ collect_helm_releases() {
     mkdir -p "$OUTPUT_DIR/releases"
     RELEASES=$(kubectl -n "$NAMESPACE" get secrets -l owner=helm -o jsonpath="{.items[*].metadata.name}")
     for release in $RELEASES; do
-        kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data}' | \
-          jq -r .release | base64 --decode | base64 --decode | gzip -d | \
+        kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data.release}' | \
+          base64 --decode | base64 --decode | gzip -d | \
           jq '{ info: .info, metadata: .chart.metadata, config: .config }' > "$OUTPUT_DIR/releases/$release"
     done
 }
@@ -288,7 +304,9 @@ kubectl -n "$NAMESPACE" get events --sort-by='.metadata.creationTimestamp' > "$O
 collect_pod_logs
 collect_pod_disk_usage
 collect_yaml_configs
-collect_helm_releases
+if [ $HELM_RELEASES ]; then
+  collect_helm_releases
+fi
 if [ $ELASTICSEARCH_LOGS ]; then
   collect_pod_logs_from_elasticsearch
 fi
