@@ -1,0 +1,77 @@
+= Metrics references 
+:revdate: 2025-11-07
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+This page defines common Kubernetes-related metrics collected by SUSE Observability and explains how they are computed.
+
+=== container_memory_usage
+
+[horizontal]
+Name:: `container_memory_usage`
+Type:: gauge
+Unit:: bytes
+Source:: Direct read from the container cgroup hierarchy.
+
+[cols="1,3"]
+|===
+|cgroup version | Source file
+
+|v1 | `memory.usage_in_bytes`
+|v2 | `memory.current`
+|===
+
+Summary:: The total amount of memory currently being used by the cgroup and its descendants. This is a sum that includes Anonymous Memory (RSS), Page Cache, and Kernel Memory. Use one of the following metrics to get more details about a specific memory area.
+
+=== container_memory_kernel
+
+[horizontal]
+Name:: `container_memory_kernel`
+Type:: gauge
+Unit:: bytes
+Source:: Direct read from the container cgroup hierarchy.
+
+[cols="1,3"]
+|===
+|cgroup version | Source file
+
+|v1 | `memory.kmem.usage_in_bytes`
+|v2 | `memory.stat` -> `kernel` field inside the file
+|===
+Summary:: Amount of total kernel memory, including (kernel_stack, pagetables, percpu, vmalloc, slab)
+
+=== container_memory_rss
+
+[horizontal]
+Name:: `container_memory_rss`
+Type:: gauge
+Unit:: bytes
+Source:: Direct read from the container cgroup hierarchy.
+
+[cols="1,3"]
+|===
+|cgroup version | Source file
+
+|v1 | `memory.stat` -> `total_rss` field inside the file
+|v2 | `memory.stat` -> `anon` field inside the file
+|===
+Summary:: The Resident Set Size (RSS) of Anonymous Memory. This is the non-file-backed memory (heap and stack) actively used by the processes within the cgroup. This value often reflects the true "working set" of the application. 
+
+=== container_memory_cache
+
+[horizontal]
+Name:: `container_memory_cache`
+Type:: gauge
+Unit:: bytes
+Source:: Direct read from the container cgroup hierarchy.
+
+[cols="1,3"]
+|===
+|cgroup version | Source file
+
+|v1 | `memory.stat` -> `total_cache` field inside the file
+|v2 | `memory.stat` -> `file` field inside the file
+|===
+Summary:: The Page Cache (memory used to cache filesystem data, including tmpfs and shared memory).
