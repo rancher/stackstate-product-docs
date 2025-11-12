@@ -3,19 +3,19 @@
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
-== SUSE Observability Server
+== {stackstate-product-name} Server
 
-=== Exposing SUSE Observability Server with self-signed certificates
+=== Exposing {stackstate-product-name} Server with self-signed certificates
 
-xref:k8s-suse-rancher-prime.adoc#_installation[SUSE Observability Server] components cannot terminate SSL themselves and must use an SSL-protected Ingress Controller or LoadBalancer to expose the service with HTTPS. This section explains how to configure an Ingress Controller with self-signed certificates.
+xref:k8s-suse-rancher-prime.adoc#_installation[{stackstate-product-name} Server] components cannot terminate SSL themselves and must use an SSL-protected Ingress Controller or LoadBalancer to expose the service with HTTPS. This section explains how to configure an Ingress Controller with self-signed certificates.
 
 ==== Using Ingress Controller with TLS
 
-To expose SUSE Observability Server using https://kubernetes.github.io/ingress-nginx/[Nginx Ingress Controller] with self-signed certificates, you need to:
+To expose {stackstate-product-name} Server using https://kubernetes.github.io/ingress-nginx/[Nginx Ingress Controller] with self-signed certificates, you need to:
 
 1. Create Kubernetes TLS secrets from your server certificate and key
 2. Configure the Ingress resource with TLS settings
-3. Deploy SUSE Observability Server with Ingress enabled
+3. Deploy {stackstate-product-name} Server with Ingress enabled
 
 ===== Creating TLS secrets
 
@@ -23,7 +23,7 @@ Create Kubernetes TLS secrets from your certificate and private key files:
 
 [,bash]
 ----
-# Create TLS secret for main SUSE Observability Server
+# Create TLS secret for main {stackstate-product-name} Server
 kubectl create secret tls tls-secret \
   --cert=server.crt \
   --key=server.key \
@@ -101,7 +101,7 @@ opentelemetry-collector:
 
 ===== Installing with Ingress
 
-Deploy SUSE Observability Server using the Ingress configuration:
+Deploy {stackstate-product-name} Server using the Ingress configuration:
 
 [,bash]
 ----
@@ -115,24 +115,24 @@ helm upgrade --install \
 
 For complete installation instructions, see xref:k8s-suse-rancher-prime.adoc#_installation[Installation].
 
-=== SUSE Observability Server connecting to external systems with self-signed certificates
+=== {stackstate-product-name} Server connecting to external systems with self-signed certificates
 
 [NOTE]
 ====
-This section is for configuring SUSE Observability Server to trust external systems that use self-signed certificates. This applies when the server needs to make outgoing connections to external services (like webhooks) that are secured with self-signed certificates.
+This section is for configuring {stackstate-product-name} Server to trust external systems that use self-signed certificates. This applies when the server needs to make outgoing connections to external services (like webhooks) that are secured with self-signed certificates.
 ====
 
-SUSE Observability Server has several points of interaction with external systems. For example, event handlers can call out to webhooks in other systems. With the default configuration, SUSE Observability Server won't be able to communicate with these systems if they're secured with TLS using a self-signed certificate, or a certificate that isn't by default trusted by the JVM.
+{stackstate-product-name} Server has several points of interaction with external systems. For example, event handlers can call out to webhooks in other systems. With the default configuration, {stackstate-product-name} Server does not communicate with these systems if they are secured with TLS using a self-signed certificate, or a certificate that is not, by default, trusted by the JVM.
 
-To mitigate this, SUSE Observability Server allows configuration of a custom trust store.
+To mitigate this, {stackstate-product-name} Server allows configuration of a custom trust store.
 
 === Create a custom trust store
 
-You need to have the custom TLS certificate available. If you don't have that, you will need to xref:/use/security/self-signed-certificates.adoc#_retrieve_certificate_via_the_browser[retrieve it via the browser].
+You need to have the custom TLS certificate available. If you do not have that, you need to xref:/use/security/self-signed-certificates.adoc#_retrieve_certificate_via_the_browser[retrieve it via the browser].
 
-Use the keytool tool and the `cacerts` file included in the JVM (Java Virtual Machine) installation to convert an existing TLS certificate file to the format needed by SUSE Observability Server. You can run this on any machine, regardless of the type of operating system.
+Use the keytool tool and the `cacerts` file included in the JVM (Java Virtual Machine) installation to convert an existing TLS certificate file to the format needed by {stackstate-product-name} Server. You can run this on any machine, regardless of the type of operating system.
 
-If you don't have the JVM installed on your computer, you can also xref:/use/security/self-signed-certificates.adoc#_using_a_docker_jvm[use a JVM Docker image] instead.
+If you do not have the JVM installed on your computer, you can also xref:/use/security/self-signed-certificates.adoc#_using_a_docker_jvm[use a JVM Docker image] instead.
 
 ==== Using an installed JVM
 
@@ -147,7 +147,7 @@ cd workdir
 cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
 ----
 
-. Run the following keytool command to add the certificate. The required password is `changeit`. The alias needs to be a unique alias for the certificate, for example the domain name itself without any dots.
+. Run the following keytool command to add the certificate. The required password is `changeit`. The alias needs to be a unique alias for the certificate. For example, the domain name itself without any dots.
 +
 [,bash]
 ----
@@ -163,7 +163,7 @@ keytool -list -keystore custom_cacerts
 
 ==== Using a Docker JVM
 
-If you don't have JVM installed on your computer, you can use a JVM Docker image. The certificate should be retrieved and saved as a file `site.cert`.
+If you do not have JVM installed on your computer, you can use a JVM Docker image. The certificate should be retrieved and saved as a file `site.cert`.
 
 . Create a working directory `workdir` and copy the certificate file `site.cert` to this directory.
 . Start the Java Docker container with the `workdir` mounted as a volume so it can be accessed:
@@ -181,14 +181,14 @@ cd /workdir
 cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
 ----
 
-. Run the following keytool command to add the certificate. The required password is `changeit`. The alias needs to be a unique alias for the certificate, for example the domain name itself without any dots.
+. Run the following keytool command to add the certificate. The required password is `changeit`. The alias needs to be a unique alias for the certificate. For example, the domain name itself without any dots.
 +
 [,bash]
 ----
 keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -file site.cert
 ----
 
-. The `custom_cacerts` store file will now include the `site.cert` certificate. You can verify that by searching for the alias in the output of
+. The `custom_cacerts` store file now includes the `site.cert` certificate. You can verify that by searching for the alias in the output:
 +
 [,bash]
 ----
@@ -215,7 +215,7 @@ suse-observability/suse-observability
 ====
 *Note:*
 
-* The first run of the helm upgrade command will result in pods restarting, which may cause a short interruption of availability.
+* The first run of the helm upgrade command restarts the pods which may cause a short interruption of availability.
 * Include these arguments on every `helm upgrade` run.
 * The password and trust store are stored as a Kubernetes secret.
 ====
@@ -274,14 +274,14 @@ The certificate can be directly downloaded from the Chrome browser. The steps in
 
 . Navigate to the URL you need the certificate from.
 . Click the padlock icon in the location bar.
-. Click on *Certificate*.
+. Click *Certificate*.
 . Select *Details*.
 . Select *Export*.
 . Save using the default export file type (Base64 ASCII encoded).
 
-== SUSE Observability Agent
+== {stackstate-product-name} Agent
 
-xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[The SUSE Observability Agent] connects to the SUSE Observability Server via HTTPS. If your server uses a self-signed certificate, you must configure the Agent to trust this certificate to establish secure connections.
+xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[The {stackstate-product-name} Agent] connects to the {stackstate-product-name} Server via HTTPS. If your server uses a self-signed certificate, you must configure the Agent to trust this certificate to establish secure connections.
 
 [NOTE]
 ====
@@ -410,9 +410,9 @@ helm upgrade --install \
   suse-observability-agent suse-observability/suse-observability-agent
 ----
 
-== SUSE Observability CLI
+== {stackstate-product-name} CLI
 
-xref:setup/cli/cli-sts.adoc[The SUSE Observability CLI] connects to the SUSE Observability Server via HTTPS. When your server uses self-signed certificates or certificates from a private Certificate Authority (CA), configure the CLI to trust these certificates.
+xref:setup/cli/cli-sts.adoc[The {stackstate-product-name} CLI] connects to the {stackstate-product-name} Server via HTTPS. When your server uses self-signed certificates or certificates from a private Certificate Authority (CA), configure the CLI to trust these certificates.
 
 === Configure custom CA certificates
 
@@ -479,10 +479,57 @@ Certificate configurations are stored in: `~/.config/stackstate-cli/config.yaml`
 **Important**: The `--skip-ssl` flag disables all SSL verification and ignores certificate configurations. Always use the CA certificate options for secure connections with custom certificates.
 ====
 
-== Rancher UI extension for SUSE Observability
+== {stackstate-product-name} Open Telemetry Collector Exporter
 
-When installing the Rancher UI extension for SUSE Observability (see xref:/k8s-suse-rancher-prime.adoc#_installing_ui_extensions[Installing UI extensions]), the extension must communicate with your SUSE Observability Server. If your server uses self-signed certificates, the extension installation will fail.
+=== Configure custom CA certificates
+
+. Create a configmap for the Certificate Authority:
+
+[bash, shell]
+----
+kubectl create configmap tls-config \
+  --namespace open-telemetry \
+  --from-file=tls.crt=<your-certificate>
+----
+
+. Update the `otel-collector.yaml` with the below configuration and mount the configmap at the top-level:
+
+[yaml]
+----
+# Mounting volume for CA certificate
+extraVolumes: 
+  - name: tls-config
+    configMap:
+      items:
+        - key: tls.crt
+          path: tls.crt
+      name: tls-config
+extraVolumeMounts:
+  - mountPath: "/certs"
+    name: tls-config
+    readOnly: true
+----
+
+. Update the exporter configuration in the `otel-collector.yaml` to use the certificate `ca_file` by adding the `tls.ca_file` key:
+
+[yaml]
+----
+otlp/suse-observability:
+  auth:
+    authenticator: bearertokenauth
+  # Put in your own otlp endpoint, for example suse-observability.my.company.com:443
+  endpoint: <your-endpoint>
+  compression: snappy
+  tls:
+    ca_file: /certs/tls.crt
+----
+
+. Install (or upgrade) your Open Telemetry collector.
+
+== Rancher UI extension for {stackstate-product-name}
+
+When installing the Rancher UI extension for {stackstate-product-name} (see xref:/k8s-suse-rancher-prime.adoc#_installing_ui_extensions[Installing UI extensions]), the extension must communicate with your {stackstate-product-name} Server. If your server uses self-signed certificates, the extension installation will fail.
 
 **Solution**: Add your custom certificate to Rancher before installing the extension. Follow the Rancher documentation: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/custom-ca-root-certificates[configuring custom CA root certificates^].
 
-After configuring the certificate in Rancher, the extension will successfully connect to your SUSE Observability Server.
+After configuring the certificate in Rancher, the extension connect to your {stackstate-product-name} Server.
