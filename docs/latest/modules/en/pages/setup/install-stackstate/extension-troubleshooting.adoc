@@ -1,0 +1,33 @@
+= Extension Troubleshooting
+:revdate: 2025-11-03
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+This section provides troubleshooting steps for any interoperability issues between {stackstate-product-name} and the Rancher UI extension.
+
+== Collect a HAR (Http ARchive)
+
+Http ARchive collects details on requests that are sent by the browser to Rancher and {stackstate-product-name}.  It also logs the responses received.
+This archive is specific to the page/browser tab with the error.  It does not need access to the backing Rancher or {stackstate-product-name} instances (though their logs may be useful at a later stage).
+
+* Open the *Network* tab in the "Developer Tools" panel.  You can access this by using `F12`.  The network tab shows a log of all requests that are made.
+* Clear the log and do a (hard) refresh of the page that is displaying the problematic behavior.
+* There should now be a large number of requests to both Rancher and SUSE Observability visible.
+* Export/Download/Save the HAR - different browsers use different names here.
+
+== Cluster is unobserved
+
+For the cluster health status to be visible in Rancher, there needs to be alignment between these configurations:
+
+* The (display) name of the cluster in the Rancher UI.
+* The `stackstate.cluster.name` set on the agent deployed on the cluster
+* The cluster name in the configuration of the Kubernetes stackpack in SUSE Observability
+
+A mismatch will tend to show up as "no data received" in the cluster overview in Rancher.
+
+== Connection failed
+
+The configuration for SUSE Observability may sometimes not yield a valid connection in the Rancher UI due to the following reasons:
+
+* The Rancher host is not configured as an allowed origin for SUSE Observability.  You can fix this by adding it to the `stackstate.allowedOrigins` list in the helm values, or by passing `--set stackstate.allowedOrigins={"https://<rancher-url>"}` to the deployment command.
+* SUSE Observability is not accessible from the browser. For example, the root certificate has not been installed.
