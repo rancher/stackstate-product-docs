@@ -1,13 +1,13 @@
 = Getting Started with Open Telemetry on Kubernetes
 :revdate: 2025-07-10
 :page-revdate: {revdate}
-:description: SUSE Observability
+:description: <stackstate-product-name>
 
-Here is the setup we'll be creating, for an application that needs to be monitored:
+This guide provides instructions on monitoring an application.
 
-* The monitored application / workload running in cluster A
-* The Open Telemetry collector running near the observed application(s), so in cluster A, and sending the data to SUSE Observability
-* SUSE Observability running in cluster B, or SUSE Cloud Observability
+* The monitored application/workload running in cluster A.
+* The Open Telemetry collector running near the observed application(s), so in cluster A, and sending the data to <stackstate-product-name>.
+* <stackstate-product-name> running in cluster B, or SUSE Cloud Observability.
 
 image::otel/open-telemetry-collector-kubernetes.png[Container instrumentation with Open Telemetry via collector running as Kubernetes deployment]
 
@@ -18,28 +18,27 @@ image::otel/open-telemetry-collector-kubernetes.png[Container instrumentation wi
 For a production setup it is strongly recommended to install the collector, since it allows your service to offload data quickly and the collector can take care of additional handling like retries, batching, encryption or even sensitive data filtering.
 ====
 
+Install the OTel (Open Telemetry) collector in cluster A and configure it to:
 
-First we'll install the OTel (Open Telemetry) collector in cluster A. We configure it to:
+* Receive data from, potentially many, instrumented applications.
+* Enrich collected data with Kubernetes attributes.
+* Generate metrics for traces.
+* Forward the data to <stackstate-product-name>, including authentication using the API key.
 
-* Receive data from, potentially many, instrumented applications
-* Enrich collected data with Kubernetes attributes
-* Generate metrics for traces
-* Forward the data to SUSE Observability, including authentication using the API key
-
-Next to that it will also retry sending data when there are connection problems.
+NOTE: <stackstate-product-name> also retries sending data when there are connection problems.
 
 === Create a Service Token
 
 There are two ways to create a service token:
 
-* **SUSE Observability UI** - open the main menu by clicking in the top left of the screen and go to `StackPacks` > `Open Telemetry`.  If you haven't done so before, click the `INSTALL` button.  Click the `CREATE NEW SERVICE TOKEN` button and copy the value onto your clipboard.
-* **SUSE Observability CLI** - see xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[Manage service tokens]
+* **<stackstate-product-name> UI** - open the main menu by clicking in the top left of the screen and go to `StackPacks` > `Open Telemetry`.  If you have not done so before, click the `INSTALL` button. Click the `CREATE NEW SERVICE TOKEN` button and copy the value onto your clipboard.
+* **<stackstate-product-name> CLI** - see xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[Manage service tokens]
 
 The service token value must be used where the instructions below mention `<SERVICE_TOKEN>`.
 
 === Create the namespace and a secret for the service token
 
-We'll install in the `open-telemetry` namespace and use the service token:
+Install in the `open-telemetry` namespace and use the service token:
 
 [,bash]
 ----
@@ -58,7 +57,7 @@ We install the collector with a Helm chart provided by the Open Telemetry projec
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 ----
 
-Create a `otel-collector.yaml` values file for the Helm chart. Here is a good starting point for usage with SUSE Observability, replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
+Create a `otel-collector.yaml` values file for the Helm chart. Here is a good starting point for usage with <stackstate-product-name>, replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
 
 .otel-collector.yaml
 [,yaml]
@@ -85,9 +84,9 @@ config:
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317
+          endpoint: <otlp-suse-observability-endpoint:port>
         http:
-          endpoint: 0.0.0.0:4318
+          endpoint: <otlp-suse-observability-endpoint:port>
   extensions:
     # Use the API key from the env for authentication
     bearertokenauth:
@@ -145,11 +144,10 @@ config:
 
 [CAUTION]
 ====
-*Use the same cluster name as used for installing the SUSE Observability agent* if you also use the SUSE Observability agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for SUSE Observability and your users.
+*Use the same cluster name as used for installing the <stackstate-product-name> agent* if you also use the <stackstate-product-name> agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for <stackstate-product-name> and your users.
 ====
 
-
-Now install the collector, using the configuration file:
+Install the collector using the configuration file:
 
 [,bash]
 ----
@@ -158,11 +156,11 @@ helm upgrade --install opentelemetry-collector open-telemetry/opentelemetry-coll
   --namespace open-telemetry
 ----
 
-The collector offers a lot more configuration receivers, processors and exporters, for more details see our xref:/setup/otel/collector.adoc[collector page]. For production usage often large amounts of spans are generated and you will want to start setting up xref:/setup/otel/sampling.adoc[sampling].
+The collector offers a lot more configuration receivers, processors and exporters, for more details see our xref:/setup/otel/collector.adoc[collector page]. For production usage often large amounts of spans are generated. Hence, set up xref:/setup/otel/sampling.adoc[sampling].
 
 == Collect telemetry data from your application
 
-The common way to collect telemetry data is to instrument your application using the Open Telemetry SDK's. We've documented some quick start guides for a few languages, but there are many more:
+The common way to collect telemetry data is to instrument your application using the Open Telemetry SDK's.
 
 * xref:/setup/otel/instrumentation/java.adoc[Java]
 * xref:/setup/otel/instrumentation/dot-net.adoc[.NET]
@@ -172,15 +170,15 @@ For other languages follow the documentation on https://opentelemetry.io/docs/la
 
 == View the results
 
-Go to SUSE Observability and make sure the Open Telemetry Stackpack is installed (via the main menu \-> Stackpacks).
+Go to <stackstate-product-name> and make sure the Open Telemetry Stackpack is installed (via the main menu \-> Stackpacks).
 
-After a short while and if your pods are getting some traffic you should be able to find them under their service name in the Open Telemetry \-> services and service instances overviews. Traces will appear in the xref:/use/traces/k8sTs-explore-traces.adoc[trace explorer] and in the xref:/use/views/k8s-traces-perspective.adoc[trace perspective] for the service and service instance components. Span metrics and language specific metrics (if available) will become available in the xref:/use/views/k8s-metrics-perspective.adoc[metrics perspective] for the components.
+If your pods are getting traffic, you should be able to find them under their service name in the Open Telemetry \-> services and service instances overviews. Traces appear in the xref:/use/traces/k8sTs-explore-traces.adoc[trace explorer] and in the xref:/use/views/k8s-traces-perspective.adoc[trace perspective] for the service and service instance components. Span metrics and language specific metrics (if available) become available in the xref:/use/views/k8s-metrics-perspective.adoc[metrics perspective] for the components.
 
 If you also have the Kubernetes stackpack installed the instrumented pods will also have the traces available in the xref:/use/views/k8s-traces-perspective.adoc[trace perspective].
 
 == Next steps
 
-You can add new charts to components, for example the service or service instance, for your application, by following xref:/use/metrics/k8s-add-charts.adoc[our guide]. It is also possible to create xref:/use/alerting/k8s-monitors.adoc[new monitors] using the metrics and setup xref:/use/alerting/notifications/configure.adoc[notifications] to get notified when your application is not available or having performance issues.
+You can add new charts to components, for example, the service or service instance, for your application, by following xref:/use/metrics/k8s-add-charts.adoc[our guide]. It is also possible to create xref:/use/alerting/k8s-monitors.adoc[new monitors] using the metrics and setup xref:/use/alerting/notifications/configure.adoc[notifications] to get notified when your application is not available or having performance issues.
 
 == More info
 
