@@ -24,6 +24,54 @@ Note that by adding more time to the data retention period, the amount of data s
 
 When lowering the retention period, it can take some time until disk space is freed up (at least 15 minutes).
 
+=== Troubleshooting topology disk space issues.
+In case of running into disk space issues, we usually find in the namenode a log line like `Not enough replicas was chosen. Reason: {NOT_ENOUGH_STORAGE_SPACE=1`, to deal with this scenario:
+
+* Lower the retention and prepare the instance to recover disk space immediately. Trigger a helm upgrade with:
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+hbase:
+  console:
+    enabled: true
+    replicaCount: 1
+  hdfs:
+    datanode:
+      extraEnv:
+        open:
+          HDFS_CONF_dfs_datanode_du_reserved_pct: "0"
+----
+
+[NOTE]
+====
+Wait until all the hbase and hdfs pods are stable before moving on to the next step.
+====
+
+* Trigger the compaction of historic data
+[,bash]
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediately\(\)\)"
+----
+
+* Follow the progress using
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediatelyStatus\(\)\)"
+----
+
+* Contact support to analyze why the budgeted disk space was insufficient.
+
+* Restore the settings. Once the status is no longer inProgress  `Status(inProgress = false, lastFailure = null)` trigger a helm upgrade just preserving the new retention as part of your values.
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+----
+
 == Retention of events and logs
 
 === SUSE Observability data store
