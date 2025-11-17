@@ -479,6 +479,48 @@ Certificate configurations are stored in: `~/.config/stackstate-cli/config.yaml`
 **Important**: The `--skip-ssl` flag disables all SSL verification and ignores certificate configurations. Always use the CA certificate options for secure connections with custom certificates.
 ====
 
+== SUSE Observability Open Telemetry  
+
+=== Create a configmap for the custom Certificate Authority
+
+----
+kubectl create configmap tls-config \
+  --namespace open-telemetry \
+  --from-file=tls.crt=<your-certificate>
+----
+
+. Mount the configmap by adding the following at the top-level of `otel-collector.yaml`:
+
+----
+# Mounting volume for CA certificate
+extraVolumes: 
+  - name: tls-config
+    configMap:
+      items:
+        - key: tls.crt
+          path: tls.crt
+      name: tls-config
+extraVolumeMounts:
+  - mountPath: "/certs"
+    name: tls-config
+    readOnly: true
+----
+
+. Update the exporter configuration in the `otel-collector.yaml` to use the certificate *ca_file* by adding the `tls.ca_file` key:
+
+----
+otlp/suse-observability:
+  auth:
+    authenticator: bearertokenauth
+  # Put in your own otlp endpoint, for example suse-observability.my.company.com:443
+  endpoint: <your-endpoint>
+  compression: snappy
+  tls:
+    ca_file: /certs/tls.crt
+----
+
+. Install (or upgrade) your Open Telemetry collector.
+
 == Rancher UI extension for SUSE Observability
 
 When installing the Rancher UI extension for SUSE Observability (see xref:/k8s-suse-rancher-prime.adoc#_installing_ui_extensions[Installing UI extensions]), the extension must communicate with your SUSE Observability Server. If your server uses self-signed certificates, the extension installation will fail.
