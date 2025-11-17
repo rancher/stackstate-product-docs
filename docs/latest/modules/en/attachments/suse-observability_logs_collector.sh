@@ -251,8 +251,28 @@ collect_hdfs_report() {
   POD=$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=hdfs-nn -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
   if [ -n "$POD" ]; then
     techo "Collecting HDFS report..."
-    mkdir -p "$OUTPUT_DIR/pods/$pod"
-    kubectl exec -n "$NAMESPACE" "$POD" -c namenode -- bash -c "unset HADOOP_OPTS; hdfs dfsadmin -report" >> "$OUTPUT_DIR/pods/$pod/hdfs-report.log"
+    mkdir -p "$OUTPUT_DIR/reports"
+    kubectl exec -n "$NAMESPACE" "$POD" -c namenode -- bash -c "unset HADOOP_OPTS; hdfs dfsadmin -report" > "$OUTPUT_DIR/reports/hdfs.log"
+  fi
+}
+
+collect_hbase_report() {
+  POD=$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=hbase-master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+  if [ -n "$POD" ]; then
+    # Running in HA Mode
+    techo "Collecting HBase report..."
+    mkdir -p "$OUTPUT_DIR/reports"
+    kubectl exec -n "$NAMESPACE" "$POD" -c master -- bash -c 'hbase hbck -details 2>&1' > "$OUTPUT_DIR/reports/hbase.log"
+  else
+    POD=$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=stackgraph -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+    if [ -n "$POD" ]; then
+      # Running in non-HA mode
+      techo "Collecting HBase report..."
+      mkdir -p "$OUTPUT_DIR/reports"
+      kubectl exec -n "$NAMESPACE" "$POD" -c stackgraph -- bash -c 'hbase hbck -details 2>&1' > "$OUTPUT_DIR/reports/hbase.log"
+    else 
+      techo "Could not find HBase or StackGraph pod to generate HBase report."
+    fi
   fi
 }
 
@@ -313,6 +333,7 @@ kubectl -n "$NAMESPACE" get events --sort-by='.metadata.creationTimestamp' > "$O
 collect_pod_logs
 collect_pod_disk_usage
 collect_hdfs_report
+collect_hbase_report
 collect_yaml_configs
 if $HELM_RELEASES; then
   collect_helm_releases
