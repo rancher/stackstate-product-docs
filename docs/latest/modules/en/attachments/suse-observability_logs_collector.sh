@@ -247,6 +247,15 @@ EOF
     kill $CHILD
 }
 
+collect_hdfs_report() {
+  POD=$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=hdfs-nn -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+  if [ -n "$POD" ]; then
+    techo "Collecting HDFS report..."
+    mkdir -p "$OUTPUT_DIR/pods/$pod"
+    kubectl exec -n "$NAMESPACE" "$POD" -c namenode -- bash -c "unset HADOOP_OPTS; hdfs dfsadmin -report" >> "$OUTPUT_DIR/pods/$pod/hdfs-report.log"
+  fi
+}
+
 archive_and_cleanup() {
     echo "Creating archive $ARCHIVE_FILE..."
     tar -czf "$ARCHIVE_FILE" "$OUTPUT_DIR"
@@ -303,6 +312,7 @@ kubectl -n "$NAMESPACE" get events --sort-by='.metadata.creationTimestamp' > "$O
 # Run the pod logs collection function
 collect_pod_logs
 collect_pod_disk_usage
+collect_hdfs_report
 collect_yaml_configs
 if [ $HELM_RELEASES ]; then
   collect_helm_releases
