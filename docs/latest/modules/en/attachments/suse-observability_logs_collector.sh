@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ELASTICSEARCH_LOGS=0
+ELASTICSEARCH_LOGS=false
 ELASTICSEARCH_RANGE="7d"
 while getopts "her:" option; do
   case $option in
@@ -23,7 +23,7 @@ options:
 EOF
       exit 0;;
      e) # Collect elasticsearch logs
-      ELASTICSEARCH_LOGS=1;;
+      ELASTICSEARCH_LOGS=true;;
      r) # Time range for elasticsearch logs
       ELASTICSEARCH_RANGE=$OPTARG;;
     \?) # Invalid option
@@ -49,12 +49,12 @@ for cmd in ${COMMANDS[@]}; do
 done
 
 # skip helm release analysis when not all its dependencies are present
-HELM_RELEASES=1
+HELM_RELEASES=true
 for cmd in base64 gzip jq
 do
   if ! command -v $cmd &>/dev/null; then
      echo "$cmd is not installed. Skipping analysis of helm releases."
-     HELM_RELEASES=0
+     HELM_RELEASES=false
   fi
 done
 
@@ -314,10 +314,10 @@ collect_pod_logs
 collect_pod_disk_usage
 collect_hdfs_report
 collect_yaml_configs
-if [ $HELM_RELEASES ]; then
+if $HELM_RELEASES; then
   collect_helm_releases
 fi
-if [ $ELASTICSEARCH_LOGS ]; then
+if $ELASTICSEARCH_LOGS; then
   collect_pod_logs_from_elasticsearch
 fi
 
