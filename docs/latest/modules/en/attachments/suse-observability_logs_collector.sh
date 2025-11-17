@@ -130,11 +130,25 @@ collect_pod_disk_usage() {
 collect_helm_releases() {
     techo "Collecting helm releases..."
     mkdir -p "$OUTPUT_DIR/releases"
+
+    # Restrict keys extracted from Helm values to only this include-list to avoid including any
+    included_keys='["resources", "affinity", "nodeSelector", "tolerations"]'
+ 
+    # 1. --argjson keys "$included_keys": Passes the shell variable as a JSON array $keys.
+    # 2. . as $input: Saves the entire original JSON into a variable $input.
+    # 3. [ paths | ... ]: Gathers all paths from the JSON.
+    # 4. select(.[-1] as $last | $keys | index($last)): Selects only paths where
+    #    the last element (.[-1]) is found inside the $keys array.
+    # 5. reduce .[] as $p (null; ...): Starts with an empty (null) document
+    #    and iterates over every path ($p) that was selected.
+    # 6. setpath($p; $input | getpath($p)): For each path, it sets that path
+    #    in the *new* document, pulling the *value* from the original $input.
+
     RELEASES=$(kubectl -n "$NAMESPACE" get secrets -l owner=helm -o jsonpath="{.items[*].metadata.name}")
     for release in $RELEASES; do
         kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data.release}' | \
           base64 --decode | base64 --decode | gzip -d | \
-          jq '{ info: .info, metadata: .chart.metadata, config: .config }' > "$OUTPUT_DIR/releases/$release"
+          jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
     done
 }
 
