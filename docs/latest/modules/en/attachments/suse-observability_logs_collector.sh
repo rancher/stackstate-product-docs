@@ -59,10 +59,14 @@ do
 done
 
 # Check if KUBECONFIG is set
-if [[ -z "$KUBECONFIG" || ! -f "$KUBECONFIG" ]]; then
-    echo "Error: KUBECONFIG is not set. Please ensure KUBECONFIG is set to the path of a valid kubeconfig file before running this script."
-    echo "If kubeconfig is not set, use the command: export KUBECONFIG=PATH-TO-YOUR/kubeconfig. Exiting..."
- exit 1
+if ! kubectl config current-context > /dev/null; then
+  echo "Error: Could not find kubernetes cluster to connect to."
+  echo "Please ensure KUBECONFIG is set to the path of a valid kubeconfig file before running this script."
+  echo "If kubeconfig is not set, use the command: export KUBECONFIG=PATH-TO-YOUR/kubeconfig. Exiting..."
+  exit 1
+else
+  CONTEXT=$(kubectl config current-context)
+  echo "Retrieving logs from kubernetes context: $CONTEXT"
 fi
 
 # Check if namespace exist or not
@@ -71,7 +75,7 @@ if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     exit 1
 fi
 # Directory to store logs
-OUTPUT_DIR="${NAMESPACE}_logs_$(date +%Y%m%d%H%M%S)"
+OUTPUT_DIR="${NAMESPACE}_logs_$(date -u +%Y-%m-%d_%H-%M-%SZ)"
 ARCHIVE_FILE="${OUTPUT_DIR}.tar.gz"
 
 techo() {
@@ -247,6 +251,18 @@ EOF
     kill $CHILD
 }
 
+collect_workload_observer_data() {
+    techo "Collecting workload observer data..."
+    POD=$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=workload-observer -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [ "$POD" == "" ]; then
+      techo "INFO: No workload observer pod found, skipping"
+      return
+    fi
+
+    mkdir -p "$OUTPUT_DIR/workload-observer-data"
+    kubectl -n "$NAMESPACE" cp "$POD:/report-data" "$OUTPUT_DIR/workload-observer-data/" > /dev/null 2>&1 &
+}
+
 archive_and_cleanup() {
     echo "Creating archive $ARCHIVE_FILE..."
     tar -czf "$ARCHIVE_FILE" "$OUTPUT_DIR"
@@ -304,6 +320,7 @@ kubectl -n "$NAMESPACE" get events --sort-by='.metadata.creationTimestamp' > "$O
 collect_pod_logs
 collect_pod_disk_usage
 collect_yaml_configs
+collect_workload_observer_data
 if [ $HELM_RELEASES ]; then
   collect_helm_releases
 fi
