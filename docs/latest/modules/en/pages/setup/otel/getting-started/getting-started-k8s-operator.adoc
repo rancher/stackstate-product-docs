@@ -162,33 +162,6 @@ spec:
         endpoint: <otlp-suse-observability-endpoint:port>
         compression: snappy
     processors:
-      k8sattributes:
-        passthrough: false
-        pod_association:
-        - sources:
-          - from: resource_attribute
-            name: k8s.pod.ip
-        - sources:
-          - from: resource_attribute
-            name: k8s.pod.uid
-        - sources:
-          - from: connection
-        extract:
-          metadata:
-            - k8s.namespace.name
-            - k8s.deployment.name
-            - k8s.statefulset.name
-            - k8s.daemonset.name
-            - k8s.cronjob.name
-            - k8s.job.name
-            - k8s.node.name
-            - k8s.pod.name
-            - k8s.pod.uid
-            - k8s.pod.start_time
-          labels:
-            - tag_name: $$1
-              key_regex: (.*)
-              from: pod
       memory_limiter:
         check_interval: 5s
         limit_percentage: 80
@@ -217,15 +190,15 @@ spec:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [k8sattributes, memory_limiter, resource, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [debug, spanmetrics, otlp/suse-observability]
         metrics:
           receivers: [otlp, spanmetrics, prometheus]
-          processors: [k8sattributes, memory_limiter, resource, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [debug, otlp/suse-observability]
         logs:
           receivers: [otlp]
-          processors: [k8sattributes]
+          processors: []
           exporters: [nop]
       telemetry:
         metrics:
@@ -236,8 +209,6 @@ spec:
 [CAUTION]
 ====
 *Use the same cluster name as used for installing the SUSE Observability agent* if you also use the SUSE Observability agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for SUSE Observability and your users.
-
-The `k8sattributes` processor must be the first in the pipelines. This lets it identify the pod that is sending the data.
 ====
 
 
@@ -354,7 +325,7 @@ For xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] to work, telemetry
 * `k8s.cluster.name` - the *Cluster* name as used by the Kubernetes stackpack
 * `k8s.namespace.name` - a *Namespace* managed by a Rancher *Project*
 
-This can be achieved by a configuration such as above.  There the `kubernetesAttributes` preset of the `opentelemetry-collector` Helm chart injects a `k8sattributes` processor into each pipeline.
+The Kubernetes Operator will inject these attributes by default into any telemetry data that is sent.
 
 == Next steps
 
