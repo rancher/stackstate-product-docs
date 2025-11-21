@@ -6,8 +6,8 @@
 This guide provides instructions on monitoring an application.
 
 * The monitored application/workload running in cluster A.
-* The Open Telemetry collector running near the observed application(s), so in cluster A, and sending the data to <stackstate-product-name>.
-* <stackstate-product-name> running in cluster B, or SUSE Cloud Observability.
+* The Open Telemetry collector running near the observed application(s), so in cluster A, and sending the data to {stackstate-product-name}.
+* {stackstate-product-name} running in cluster B, or SUSE Cloud Observability.
 
 image::otel/open-telemetry-collector-kubernetes.png[Container instrumentation with Open Telemetry via collector running as Kubernetes deployment]
 
@@ -23,16 +23,16 @@ Install the OTel (Open Telemetry) collector in cluster A and configure it to:
 * Receive data from, potentially many, instrumented applications.
 * Enrich collected data with Kubernetes attributes.
 * Generate metrics for traces.
-* Forward the data to <stackstate-product-name>, including authentication using the API key.
+* Forward the data to {stackstate-product-name}, including authentication using the API key.
 
-NOTE: <stackstate-product-name> also retries sending data when there are connection problems.
+NOTE: {stackstate-product-name} also retries sending data when there are connection problems.
 
 === Create a Service Token
 
 There are two ways to create a service token:
 
-* **<stackstate-product-name> UI** - open the main menu by clicking in the top left of the screen and go to `StackPacks` > `Open Telemetry`.  If you have not done so before, click the `INSTALL` button. Click the `CREATE NEW SERVICE TOKEN` button and copy the value onto your clipboard.
-* **<stackstate-product-name> CLI** - see xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[Manage service tokens]
+* **{stackstate-product-name} UI** - open the main menu by clicking in the top left of the screen and go to `StackPacks` > `Open Telemetry`.  If you have not done so before, click the `INSTALL` button. Click the `CREATE NEW SERVICE TOKEN` button and copy the value onto your clipboard.
+* **{stackstate-product-name} CLI** - see xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[Manage service tokens]
 
 The service token value must be used where the instructions below mention `<SERVICE_TOKEN>`.
 
@@ -57,7 +57,7 @@ We install the collector with a Helm chart provided by the Open Telemetry projec
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 ----
 
-Create a `otel-collector.yaml` values file for the Helm chart. Here is a good starting point for usage with <stackstate-product-name>, replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
+Create a `otel-collector.yaml` values file for the Helm chart. Here is a good starting point for usage with {stackstate-product-name}, replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
 
 .otel-collector.yaml
 [,yaml]
@@ -84,9 +84,18 @@ config:
     otlp:
       protocols:
         grpc:
-          endpoint: <otlp-suse-observability-endpoint:port>
+          endpoint: 0.0.0.0:4317
         http:
-          endpoint: <otlp-suse-observability-endpoint:port>
+          endpoint: 0.0.0.0:4318
+    # Scrape the collectors own metrics
+    prometheus:
+      config:
+        scrape_configs:
+        - job_name: opentelemetry-collector
+          scrape_interval: 10s
+          static_configs:
+          - targets:
+            - ${env:MY_POD_IP}:8888
   extensions:
     # Use the API key from the env for authentication
     bearertokenauth:
@@ -139,12 +148,15 @@ config:
         receivers: [otlp]
         processors: []
         exporters: [nop]
+    telemetry:
+      metrics:
+        address: ${env:MY_POD_IP}:8888
 ----
 
 
 [CAUTION]
 ====
-*Use the same cluster name as used for installing the <stackstate-product-name> agent* if you also use the <stackstate-product-name> agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for <stackstate-product-name> and your users.
+*Use the same cluster name as used for installing the {stackstate-product-name} Agent* if you also use the {stackstate-product-name} agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for {stackstate-product-name} and your users.
 ====
 
 Install the collector using the configuration file:
@@ -170,11 +182,20 @@ For other languages follow the documentation on https://opentelemetry.io/docs/la
 
 == View the results
 
-Go to <stackstate-product-name> and make sure the Open Telemetry Stackpack is installed (via the main menu \-> Stackpacks).
+Go to {stackstate-product-name} and make sure the Open Telemetry Stackpack is installed (via the main menu \-> Stackpacks).
 
 If your pods are getting traffic, you should be able to find them under their service name in the Open Telemetry \-> services and service instances overviews. Traces appear in the xref:/use/traces/k8sTs-explore-traces.adoc[trace explorer] and in the xref:/use/views/k8s-traces-perspective.adoc[trace perspective] for the service and service instance components. Span metrics and language specific metrics (if available) become available in the xref:/use/views/k8s-metrics-perspective.adoc[metrics perspective] for the components.
 
 If you also have the Kubernetes stackpack installed the instrumented pods will also have the traces available in the xref:/use/views/k8s-traces-perspective.adoc[trace perspective].
+
+== Rancher RBAC
+
+For xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] to work, telemetry data needs to have the following resource attributes present:
+
+* `k8s.cluster.name` - the *Cluster* name as used by the Kubernetes stackpack
+* `k8s.namespace.name` - a *Namespace* managed by a Rancher *Project*
+
+This can be achieved by a configuration such as above.  There the `kubernetesAttributes` preset of the `opentelemetry-collector` Helm chart injects a `k8sattributes` processor into each pipeline.
 
 == Next steps
 
