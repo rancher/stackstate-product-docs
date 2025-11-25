@@ -366,7 +366,7 @@ collect_hdfs_report
 collect_hbase_report
 collect_yaml_configs
 collect_workload_observer_data
-if $HELM_RELEASES then
+if $HELM_RELEASES; then
   collect_helm_releases
 fi
 if $ELASTICSEARCH_LOGS; then
