@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ELASTICSEARCH_LOGS=false
+ELASTICSEARCH_LOGS=false
 ELASTICSEARCH_RANGE="7d"
 while getopts "her:" option; do
   case $option in
@@ -23,6 +24,7 @@ options:
 EOF
       exit 0;;
      e) # Collect elasticsearch logs
+      ELASTICSEARCH_LOGS=true;;
       ELASTICSEARCH_LOGS=true;;
      r) # Time range for elasticsearch logs
       ELASTICSEARCH_RANGE=$OPTARG;;
@@ -50,10 +52,12 @@ done
 
 # skip helm release analysis when not all its dependencies are present
 HELM_RELEASES=true
+HELM_RELEASES=true
 for cmd in base64 gzip jq
 do
   if ! command -v $cmd &>/dev/null; then
      echo "$cmd is not installed. Skipping analysis of helm releases."
+     HELM_RELEASES=false
      HELM_RELEASES=false
   fi
 done
@@ -148,10 +152,25 @@ collect_helm_releases() {
     # 6. setpath($p; $input | getpath($p)): For each path, it sets that path
     #    in the *new* document, pulling the *value* from the original $input.
 
+
+    # Restrict keys extracted from Helm values to only this include-list to avoid including any
+    included_keys='["resources", "affinity", "nodeSelector", "tolerations"]'
+ 
+    # 1. --argjson keys "$included_keys": Passes the shell variable as a JSON array $keys.
+    # 2. . as $input: Saves the entire original JSON into a variable $input.
+    # 3. [ paths | ... ]: Gathers all paths from the JSON.
+    # 4. select(.[-1] as $last | $keys | index($last)): Selects only paths where
+    #    the last element (.[-1]) is found inside the $keys array.
+    # 5. reduce .[] as $p (null; ...): Starts with an empty (null) document
+    #    and iterates over every path ($p) that was selected.
+    # 6. setpath($p; $input | getpath($p)): For each path, it sets that path
+    #    in the *new* document, pulling the *value* from the original $input.
+
     RELEASES=$(kubectl -n "$NAMESPACE" get secrets -l owner=helm -o jsonpath="{.items[*].metadata.name}")
     for release in $RELEASES; do
         kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data.release}' | \
           base64 --decode | base64 --decode | gzip -d | \
+          jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
           jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
     done
 }
@@ -364,11 +383,14 @@ collect_pod_logs
 collect_pod_disk_usage
 collect_hdfs_report
 collect_hbase_report
+collect_hdfs_report
+collect_hbase_report
 collect_yaml_configs
 collect_workload_observer_data
 if $HELM_RELEASES; then
   collect_helm_releases
 fi
+if $ELASTICSEARCH_LOGS; then
 if $ELASTICSEARCH_LOGS; then
   collect_pod_logs_from_elasticsearch
 fi
