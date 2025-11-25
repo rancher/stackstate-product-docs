@@ -8,41 +8,63 @@
 The SUSE Rancher Prime Observability Extension uses Kubernetes RBAC to grant access to Rancher users in SUSE Observability.
 If you do not use Rancher, look at xref:/setup/security/rbac/rbac_roles.adoc[How to set up roles] in a standalone installation.
 
-NOTE: for Rancher RBAC to function, authentication for SUSE Observability must be configured with the xref:setup/security/authentication/oidc.adoc#_rancher[Rancher OIDC Provider].
+[NOTE]
+====
+For Rancher RBAC to function, 
 
-You can use two kinds of roles for accessing SUSE Observability:
-* A _scope role_ (Observer) grants access to data - either all data in a SUSE Observability instance, data coming from a cluster, or just the data for a namespace. This role is provisioned in a cluster to be observed.
-* An _instance role_ grants permissions to access or modify functionality of SUSE Observability itself.  These roles grant access to all data in SUSE Observability.
+* authentication for {stackstate-product-name} must be configured with the xref:setup/security/authentication/oidc.adoc#_rancher[Rancher OIDC Provider].
+* the {stackstate-product-name} Agent must have the RBAC Agent enabled and must authenticate using a service token.
+====
 
-Several `RoleTemplate`s are available to achieve this, with common groupings of permissions. Binding these templates to users or groups on a cluster or namespace triggers roles and role-bindings for provisioning on the target cluster. A description of the default templates is below. It is possible to define your own combinations of permissions in a custom RoleTemplate.
+Every authenticated user has the *Instance Basic Access* role that allows them to use the system.  These permissions provide access to the views, settings, metric bindings, and lets a user see system notifications.  They do NOT grant access to any {stackstate-product-name} data.  In order to see any data, a user needs to be given an additional role. Two directions for extending the *Instance Basic Access* role are provided with Rancher *Role Templates*:
 
-=== Observer role
+Instance Roles:: Enables you to configure or personalize {stacktate-product-name}.
+Scoped Roles:: Grants access to {stackstate-product-name} data from observed clusters.
 
-The observer role grants a user the permission to read topology, metrics, logs and trace data for a namespace or a cluster. There are three `RoleTemplate`s that grant access to observability data:
+== Instance roles
 
-* *Observer* - grants access to data coming from namespaces in a Project. You can use this in the "Project Membership" section of the cluster configuration.
-* *Cluster Observer* - grants access to all data coming from a Cluster. You can use this template in the "Cluster Membership" section of the cluster configuration.
-* *Instance Observer* - grants access to all data in a SUSE Observability instance. You can use this template on the Project that includes SUSE Observability itself.
+You can assign the *Role Templates* for *Instance Roles* to users or groups in the *Project* that is running {stackstate-product-name}. If no instance roles are explicitly assigned to a member of a project, then they will have the permissions of the *Instance Basic Access* role.
 
-To use these observer roles, it is recommended that the following role is granted on the Project running SUSE Observability itself:
-* *Recommended Access* - has recommended permissions for using SUSE Observability.
+=== Instance roles with access to {stackstate-product-name} data
 
-=== Instance roles
+A couple of "global" roles allow access to all {stackstate-product-name} data - in any of the observed clusters.  These roles are intended to be used for setting up the system and for troubleshooting system-level problems.  For users with any of these roles, it is not necessary to configure xref:scoped[Scoped Roles].
 
-There are two roles predefined in SUSE Observability, for configuring the system. This includes setting up views, monitors, notifications and so on.
-As these concern "global" settings of SUSE Observability, these roles include access to all data in an observability instance.
+Instance Admin:: Grants full access to all views and all permissions.
+Instance Troubleshooter:: Grants all permissions required to use SUSE Observability for troubleshooting, including the ability to enable/disable monitors, create custom views, and use the CLI.  
+Instance Observer:: Grants access to all data in a SUSE Observability instance.  
 
-* *Instance Troubleshooter* - has all permissions required to use SUSE Observability for troubleshooting, including the ability to enable/disable monitors, create custom views and use the Cli.
-* *Instance Administrator* - has full access to all views and has all permissions.
+=== Instance roles without access to {stackstate-product-name} data
+
+These roles need to be combined with the *Instance Observer* role or one of the xref:scoped[Scoped Roles] (see below).  Otherwise, no {stackstate-product-name} data is accessible and the UI will show a "No components found" message.  This applies to all Rancher users, including users, such as Project owners.
+
+Instance Recommended Access:: Grants recommended permissions to use SUSE Observability.  This role includes permissions that are not strictly necessary, but provide (limited) means of personalization {stackstate-product-name}.
+Instance Basic Access:: Grants minimal permissions to use {stackstate-product-name}. This role does not need to be explicitly assigned and there is no *Role Template* for it; every logged-in user has it. 
 
 You can find the permissions assigned to each predefined SUSE Observability role below. For details of the different permissions and how to manage them using the `sts` CLI, see xref:/setup/security/rbac/rbac_permissions.adoc[Role based access control (RBAC) permissions]
 
 [tabs]
 ====
+Basic Access::
++
+--
+Basic access grants minimal permissions for using SUSE Observability. To be combined with an Observer (Instance, Cluster or Project).
+These permissions are granted to all users.
+
+|===
+|Resource |Verbs 
+
+|metric-bindings |get
+|settings |get
+|system-notifications |get
+|views |get
+|===
+
+--
 Recommended Access::
 +
 --
-Recommended access grants permissions that are not strictly necessary, but that make SUSE Observability a lot more useful.
+Recommended access grants permissions that are not strictly necessary, but that make SUSE Observability a lot more useful. It provides a limited degree of personalization.
+To be combined with an Observer (Instance, Cluster or Project).
 
 |===
 |Resource |Verbs 
@@ -52,6 +74,20 @@ Recommended access grants permissions that are not strictly necessary, but that 
 |favorite-views |create, delete
 |stackpacks |get 
 |visualization-settings |update
+|===
+
+--
+Observer::
++
+--
+Observer grants access to all observability data in a SUSE Observability instance.  Combine with *Recommended Access* for a better experience.
+
+|===
+|Resource |Verbs 
+
+|topology |get
+|metrics |get
+|traces |get
 |===
 
 --
@@ -84,7 +120,7 @@ The Troubleshooter role has access to all data available in SUSE Observability a
 |===
 
 --
-Administrator::
+Admin::
 +
 --
 The Administrator role has all permissions assigned.
@@ -121,21 +157,27 @@ The Administrator role has all permissions assigned.
 --
 ====
 
-=== Resource details
+[#scoped]
+== Scoped roles
 
-These resources correspond to those of xref:/setup/security/rbac/rbac_permissions.adoc[RBAC Permissions].  In particular *scoped permissions* apply to data collected by the SUSE Observability agent and access should typically be limited on a cluster or a namespace level. The following resources are available in the `scope.observability.cattle.io` API Group:
+You can assign the following *Role Templates* to users or groups in an observed cluster.  They grant access to {stackstate-product-name} data coming from (a *Project* in) the *Cluster*, giving a user permission to read topology, metrics, logs and trace data.  
+
+Observer:: Grants access to data coming from namespaces in a *Project*. You can use this in the *Project Membership* section of the cluster configuration.
+Cluster Observer:: Grants access to all data coming from a *Cluster*. You can use this template in the *Cluster Membership* section of the cluster configuration.
+
+The resources in these roles correspond to xref:/setup/security/rbac/rbac_permissions.adoc#_scoped_permissions[Scoped Permissions]. They are available in the `scope.observability.cattle.io` API Group (with just verb `get` as these resources are read only):
 
 * `topology` - components (deployments, pods, etcetera) from the cluster or namespace
 * `traces` - spans from the cluster or namespace
 * `metrics` - metric data originating from the cluster or namespace
 
-These resources are read only, so the only applicable verb is `get`.
+Note that access to logs is controlled by the `topology` resource.
 
-Other permissions, those that are not *scoped*, define user capabilities and access to parts of SUSE Observability.  These "system permissions" allow, for example, executing queries or scripts and configuring SUSE Observability. Those are collected from the `instance.observability.cattle.io` API Group.
+Enable personalization for users with these observer roles by granting the *Instance Recommended Access* role on the *Project* running {stackstate-product-name}.
 
-=== Custom roles
+== Custom roles
 
-To grant additional permissions beyond Recommended Access, create a custom Project `RoleTemplate` in Rancher, inheriting from "SUSE Observability Instance Recommended Access".  Then, for example, to grant the rights to view monitors and metric charts, add rules with:
+To grant additional permissions beyond Recommended Access, create a custom Project *RoleTemplate* in Rancher, inheriting from *SUSE Observability Instance Recommended Access*.  Then, for example, to grant the rights to view monitors and metric charts, add rules with:
 
 * Verb: `get`
 * Resource: `metricbindings` and `monitors`
@@ -145,11 +187,10 @@ image::rancher-custom-role.png[Custom RoleTemplate for richer access]
 
 You can specify any resource and verb combination defined in the xref:/setup/security/rbac/rbac_permissions.adoc[RBAC Permissions].  Note that the dashes (`-`) are dropped from resource names, so the permission `get-metric-bindings` becomes the Kubernetes RBAC resource `metricbindings` with the verb `get`.
 
+
 == Troubleshooting
 
 * Verify that the Rbac Agent for the cluster is able to communicate with the platform.
-
-NOTE: the Rbac Agent must authenticate using service tokens.
 
 * xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Inspect the user subjects] (user and roles).
   ** Verify any roles configuration on the OIDC provider.
