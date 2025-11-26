@@ -183,7 +183,7 @@ To deploy SUSE Observability on Kubernetes:
  ** <<_generate_baseconfig_values_yaml_and_sizing_values_yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
 . Deploy the latest SUSE Observability version to the `suse-observability` namespace with the following command:
 
-[,text]
+[,bash]
 ----
 helm upgrade \
   --install \
@@ -218,7 +218,7 @@ helm upgrade \
   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
   --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
 suse-observability \
-suse-observability/suse-observability
+suse-observability-A.B.C.tgz
 ----
 
 --
@@ -240,14 +240,14 @@ kubectl get pods --namespace suse-observability
 
 After SUSE Observability has been deployed you can check if all pods are up and running:
 
-[,text]
+[,bash]
 ----
 kubectl get pods --namespace suse-observability
 ----
 
 When all pods are up, you can enable a port-forward:
 
-[,text]
+[,bash]
 ----
 kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
 ----
@@ -259,7 +259,7 @@ For the ingress configuration, generate the file `$VALUES_DIR/suse-observability
 Remember to set a secret for the TLS configuration. For details on how to do that, consult the kubectl documentation.
 ====
 
-[,text]
+[,yaml]
 ----
 ingress:
   enabled: true
@@ -283,10 +283,29 @@ ingress:
 
 Proceed to run an upgrade to apply ingress configuration:
 
-[,text]
+[tabs]
+====
+Upgrade::
++
+--
+
+[,bash]
 ----
 helm upgrade --namespace suse-observability --reuse-values --values suse-observability-values/templates/ingress_values.yaml suse-observability suse-observability/suse-observability
 ----
+
+--
+Air-gapped upgrade::
++
+--
+
+[,bash]
+----
+helm upgrade --namespace suse-observability --reuse-values --values suse-observability-values/templates/ingress_values.yaml suse-observability suse-observability-A.B.C.tgz
+----
+
+--
+====
 
 [NOTE]
 ====
