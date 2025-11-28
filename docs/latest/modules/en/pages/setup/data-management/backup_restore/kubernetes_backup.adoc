@@ -1,20 +1,31 @@
-= Kubernetes backup
+= Kubernetes backup (Legacy)
 :revdate: 2025-07-10
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
+[WARNING]
+====
+*This page describes the legacy backup approach using scripts. For SUSE Observability vX.Y.Z or newer, use the new xref:/setup/data-management/backup_restore/backup_enable.adoc[backup CLI] instead.*
+
+**Breaking changes in vX.Y.Z:**
+
+* `backup.enabled` is replaced with `global.backup.enabled` - Helm deployments will fail if `backup.enabled` is set to `true`
+* All backups are controlled with a single value `global.backup.enabled` instead of per-datastore enablement
+* `*.restore.enabled` values have been removed
+====
+
 == Overview
 
-The Kubernetes setup for SUSE Observability has a built-in backup and restore mechanism that can be configured to store backups to the local clusters, to AWS S3 or to Azure Blob Storage.
+The SUSE Observability has a built-in backup and restore mechanism that can be configured to store backups to the local clusters, to AWS S3 or to Azure Blob Storage.
 
 === Backup scope
 
 The following data can be automatically backed up:
 
-* *Configuration and topology data* stored in StackGraph is backed up when the Helm value `backup.stackGraph.enabled` is set to `true`.
-* *Metrics* stored in SUSE Observability's Victoria Metrics instance(s) is backed up when the Helm value `victoria-metrics-0.backup.enabled` and `victoria-metrics-1.backup.enabled` are set to `true`.
-* *Telemetry data* stored in SUSE Observability's Elasticsearch instance is backed up when the Helm value `backup.elasticsearch.enabled` is set to `true`.
-* *OpenTelemetry data* stored in SUSE Observability's ClickHouse instance is backed up when the Helm value `clickhouse.backup.enabled` is set to `true`.
+* *Configuration and topology data* stored in StackGraph
+* *Metrics* stored in SUSE Observability's Victoria Metrics instance(s)
+* *Telemetry data* stored in SUSE Observability's Elasticsearch instance
+* *OpenTelemetry data* stored in SUSE Observability's ClickHouse instance
 
 The following data will *not* be backed up:
 
@@ -54,8 +65,10 @@ To enable scheduled backups to AWS S3 buckets, add the following YAML fragment t
 
 [,yaml]
 ----
+global:
+  backup:
+    enabled: true
 backup:
-  enabled: true
   stackGraph:
     bucketName: AWS_STACKGRAPH_BUCKET
   elasticsearch:
@@ -70,7 +83,6 @@ victoria-metrics-1:
     bucketName: AWS_VICTORIA_METRICS_BUCKET
 clickhouse:
   backup:
-    enabled: true
     bucketName: AWS_CLICKHOUSE_BUCKET
 minio:
   accessKey: YOUR_ACCESS_KEY
@@ -137,8 +149,9 @@ To enable backups to an Azure Blob Storage account, add the following YAML fragm
 
 [,yaml]
 ----
-backup:
-  enabled: true
+global:
+  backup:
+    enabled: true
 minio:
   accessKey: AZURE_STORAGE_ACCOUNT_NAME
   secretKey: AZURE_STORAGE_ACCOUNT_KEY
@@ -171,8 +184,9 @@ To enable backups to cluster-local storage, enable MinIO by adding the following
 
 [,yaml]
 ----
-backup:
-  enabled: true
+global:
+  backup:
+    enabled: true
 minio:
   accessKey: YOUR_ACCESS_KEY
   secretKey: YOUR_SECRET_KEY
@@ -188,14 +202,6 @@ Replace the following values:
 
 Configuration and topology data (StackGraph) backups are full backups, stored in a single file with the extension `.graph`. Each file contains a full backup and can be moved, copied or deleted as required.
 
-=== Disable scheduled backups
-
-When `backup.enabled` is set to `true`, scheduled StackGraph backups are enabled by default. To disable scheduled StackGraph backups only, set the Helm value `backup.stackGraph.scheduled.enabled` to `false`.
-
-=== Disable restores
-
-When `backup.enabled` is set to `true`, StackGraph restores are enabled by default. To disable StackGraph restore functionality only, set the Helm value `backup.stackGraph.restore.enabled` to `false`.
-
 === Backup schedule
 
 By default, the StackGraph backups are created daily at 03:00 AM server time.
@@ -207,6 +213,18 @@ The backup schedule can be configured using the Helm value `backup.stackGraph.sc
 By default, the StackGraph backups are kept for 30 days. As StackGraph backups are full backups, this can require a lot of storage.
 
 The backup retention delta can be configured using the Helm value `backup.stackGraph.scheduled.backupRetentionTimeDelta`, specified in the format of GNU date `--date` argument. For example, the default is `30 days ago`. See https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[Relative items in date strings] for more examples.
+
+=== Disable scheduled backups
+
+To disable scheduled StackGraph backups, set the backup schedule to a date far in the past using the Helm value `backup.stackGraph.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
 
 == Metrics (Victoria Metrics)
 
@@ -234,26 +252,6 @@ The following code snippets/commands are provided for the first instance of Vict
 ====
 
 
-=== Enable scheduled backups
-
-Backups of Victoria Metrics are disabled by default. To enabled scheduled Victoria Metrics backups, set the Helm value `victoria-metrics-0.backup.enabled` to `true`.
-
-[CAUTION]
-====
-Victoria Metrics backups requires to <<_enable_backups,enable backups>>.
-====
-
-
-=== Enable restores
-
-Restore functionality of Victoria Metrics are disabled by default. To enabled restore functionality of Victoria Metrics, set the Helm value `victoria-metrics-0.restore.enabled` to `true`.
-
-[CAUTION]
-====
-Victoria Metrics restore functionality requires to <<_enable_backups,enable backups>>.
-====
-
-
 === Backup schedule
 
 By default, the Victoria Metrics backups are created every 1h:
@@ -263,29 +261,25 @@ By default, the Victoria Metrics backups are created every 1h:
 
 The backup schedule can be configured using the Helm value `victoria-metrics-0.backup.scheduled.schedule` according https://github.com/aptible/supercronic/tree/master/cronexpr[cronexpr format]
 
+=== Disable scheduled backups
+
+To disable scheduled Victoria Metrics backups, set the backup schedule for both instances to a date far in the past:
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
 == OpenTelemetry (ClickHouse)
 
 ClickHouse uses both incremental and full backups. By default, full backups are executed daily at 00:45 am, and incremental backups are performed every hour. Each backup creates a new directory and old backups (directories) are deleted automatically. All files located in a backup directory are treated as a singular group and can only be moved, copied or deleted as a group. It's recommended to use the `clickhouse-backup` tool available on the `suse-observability-clickhouse-shard0-0` Pod to manage backups.
-
-=== Enable scheduled backups
-
-Backups of the ClickHouse are disabled by default. To enabled scheduled ClickHouse backups, set the Helm value `clickhouse.backup.enabled` to `true`.
-
-[CAUTION]
-====
-ClickHouse backups requires to <<_enable_backups,enable backups>>.
-====
-
-
-=== Enable restores
-
-Restore functionality of the ClickHouse are disabled by default. To enabled restore functionality of the ClickHouse, set the Helm value `clickhouse.restore.enabled` to `true`.
-
-[CAUTION]
-====
-ClickHouse restore functionality requires to <<_enable_backups,enable backups>>.
-====
-
 
 === Backup schedule
 
@@ -308,6 +302,19 @@ By default, the tooling keeps last 308 backups (full and incremental) what is eq
 
 The backup retention can be configured using the Helm value `clickhouse.backup.config.keep_remote`.
 
+=== Disable scheduled backups
+
+To disable scheduled ClickHouse backups, set both full and incremental backup schedules to a date far in the past:
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
 == Telemetry data (Elasticsearch)
 
 The telemetry data (Elasticsearch) snapshots are incremental and stored in files with the extension `.dat`. The files in the Elasticsearch backup storage location should be treated as a single whole and can only be moved, copied or deleted as a whole.
@@ -316,11 +323,15 @@ The configuration snippets provided in the section xref:/setup/data-management/b
 
 === Disable scheduled snapshots
 
-When `backup.enabled` is set to `true`, scheduled Elasticsearch snapshots are enabled by default. To disable scheduled Elasticsearch snapshots only, set the Helm value `backup.elasticsearch.scheduled.enabled` to `false`.
+To disable scheduled Elasticsearch snapshots, set the snapshot schedule to a date far in the past using the Helm value `backup.elasticsearch.scheduled.schedule`:
 
-=== Disable restores
-
-When `backup.enabled` is set to `true`, Elasticsearch restores are enabled by default. To disable Elasticsearch restore functionality only, set the Helm value `backup.elasticsearch.restore.enabled` to `false`.
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
 
 === Snapshot schedule
 
@@ -361,11 +372,7 @@ Scripts to list and restore backups and snapshots can be downloaded from the htt
 * The `kubectl` binary is installed and configured to connect to:
  .. The Kubernetes cluster where SUSE Observability has been installed.
  .. The namespace within that cluster where SUSE Observability has been installed.
-* The following Helm values have been correctly set:
- .. `backup.enabled` is set to `true`.
- .. `backup.stackGraph.restore.enabled` isn't set to `false` (to access StackGraph backups).
- .. `backup.elasticsearch.restore.enabled` isn't set to `false` (to access Elasticsearch snapshots).
- .. `victoria-metrics-0.restore.enabled` or `victoria-metrics-1.restore.enabled` isn't set to `false` (to access Victoria Metrics snapshots).
+* The Helm value `global.backup.enabled` is set to `true`.
 ====
 
 
