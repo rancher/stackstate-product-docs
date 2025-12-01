@@ -25,7 +25,6 @@ EOF
       exit 0;;
      e) # Collect elasticsearch logs
       ELASTICSEARCH_LOGS=true;;
-      ELASTICSEARCH_LOGS=true;;
      r) # Time range for elasticsearch logs
       ELASTICSEARCH_RANGE=$OPTARG;;
     \?) # Invalid option
