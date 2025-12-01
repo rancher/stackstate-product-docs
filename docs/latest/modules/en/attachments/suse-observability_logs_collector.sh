@@ -270,7 +270,7 @@ EOF
 }
 EOF
         ts=$(jq -r '.hits.hits[-1].sort[0]' $TEMP)
-        if [ "$ts" != "null" ]; then
+        if [ "$ts" != "null" ] && [ "$ts" != "" ]; then
           from=$(($ts / 1000000))
         else
           from=""
@@ -389,7 +389,6 @@ collect_workload_observer_data
 if $HELM_RELEASES; then
   collect_helm_releases
 fi
-if $ELASTICSEARCH_LOGS; then
 if $ELASTICSEARCH_LOGS; then
   collect_pod_logs_from_elasticsearch
 fi
