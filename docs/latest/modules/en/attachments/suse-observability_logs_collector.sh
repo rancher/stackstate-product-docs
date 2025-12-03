@@ -170,7 +170,6 @@ collect_helm_releases() {
         kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data.release}' | \
           base64 --decode | base64 --decode | gzip -d | \
           jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
-          jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
     done
 }
 
