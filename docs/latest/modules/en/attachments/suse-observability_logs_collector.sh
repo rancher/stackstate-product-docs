@@ -25,7 +25,6 @@ EOF
       exit 0;;
      e) # Collect elasticsearch logs
       ELASTICSEARCH_LOGS=true;;
-      ELASTICSEARCH_LOGS=true;;
      r) # Time range for elasticsearch logs
       ELASTICSEARCH_RANGE=$OPTARG;;
     \?) # Invalid option
@@ -171,7 +170,6 @@ collect_helm_releases() {
         kubectl -n "$NAMESPACE" get secret "$release" -o jsonpath='{.data.release}' | \
           base64 --decode | base64 --decode | gzip -d | \
           jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
-          jq --argjson keys "$included_keys" '{ info: .info, metadata: .chart.metadata, config: ( .config as $input | [ .config | paths | select(.[-1] as $last | $keys | index($last)) ] | reduce .[] as $p (null; setpath($p; $input | getpath($p)))) }' > "$OUTPUT_DIR/releases/$release"
     done
 }
 
@@ -271,7 +269,7 @@ EOF
 }
 EOF
         ts=$(jq -r '.hits.hits[-1].sort[0]' $TEMP)
-        if [ "$ts" != "null" ]; then
+        if [ "$ts" != "null" ] && [ "$ts" != "" ]; then
           from=$(($ts / 1000000))
         else
           from=""
@@ -390,7 +388,6 @@ collect_workload_observer_data
 if $HELM_RELEASES; then
   collect_helm_releases
 fi
-if $ELASTICSEARCH_LOGS; then
 if $ELASTICSEARCH_LOGS; then
   collect_pod_logs_from_elasticsearch
 fi
