@@ -1,0 +1,459 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schemas for Topology Mappings
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: Open Telemetry Mappings Schemas
+
+== Overview
+
+This page describes the schemas for defining an `OtelComponentMapping` or `OtelRelationMapping`, along with detailed explanations of constructs, expression syntax and semantics.
+
+On this page you'll find:
+
+* Schemas for OTel component & relation mappings
+* Component and relation identity, merging & lifecycle
+* Input traversal model
+* Variables
+* Tag mappings
+* CEL expression explanation
+* Common patterns and best practices
+* OTel mapping examples
+
+== Schemas for OTel Component & Relation Mappings
+
+=== OtelComponentMapping
+
+[,yaml]
+----
+_type: "OtelComponentMapping"
+name: string
+input:
+  signal: ["TRACES" | "METRICS"]
+  resource:
+    condition: <cel-boolean>        # default: true
+    action: CONTINUE                # default
+    scope:
+      condition: <cel-boolean>      # default: true
+      action: CONTINUE              # default
+      span:                         # TRACES only
+        condition: <cel-boolean>    # default: true
+        action: CREATE              # default at terminal level
+      metric:                       # METRICS only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+        datapoint:                  # METRICS only
+          condition: <cel-boolean>  # default: true
+          action: CREATE            # default at terminal level
+vars:                               # Optional
+  - name: string
+    value: <cel-expression>
+output:
+  identifier: <cel-string>
+  name: <cel-string>
+  typeName: <cel-string>
+  typeIdentifier: <cel-string>      # Optional
+  domainName: <cel-string>
+  domainIdentifier: <cel-string>    # Optional
+  layerName: <cel-string>
+  layerIdentifier: <cel-string>     # Optional
+  required:                         # Optional (required means that if any expression fails, the mapping fails)
+    version: <cel-string>           # Optional
+    additionalIdentifiers:          # Optional
+      - <cel-string>
+    tags:                           # Optional
+      - source: <cel-string>
+        target: string
+      - source: <cel-string>
+        pattern: regex
+        target: string
+  optional:                         # Optional (besides being optional on the schema, optional means that if any expression under `optional` fails, the mapping will continue, but without the failed expression/field)
+    version: <cel-string>           # Optional
+    additionalIdentifiers:          # Optional
+      - <cel-string>
+    tags:                           # Optional
+      - source: <cel-string>
+        target: string
+      - source: <cel-map>
+        pattern: regex
+        target: string
+expireAfter: duration-ms
+----
+
+=== OtelRelationMapping
+
+[,yaml]
+----
+_type: "OtelRelationMapping"
+name: string
+input:
+  signal: ["TRACES" | "METRICS"]
+  resource:
+    condition: <cel-boolean>
+    scope:
+      condition: <cel-boolean>
+      span | metric:
+        condition: <cel-boolean>
+        datapoint:
+          condition: <cel-boolean>
+          action: CREATE
+vars:                               # Optional
+  - name: string
+    value: <cel-expression>
+output:
+  sourceId: <cel-string>
+  targetId: <cel-string>
+  typeName: <cel-string> 
+  typeIdentifier: <cel-string>      # Optional
+expireAfter: duration-ms
+----
+
+== Component & relation identity, merging, and lifecycle
+
+=== Component identity
+
+The `output.identifier` field defines the sole identity of a component. All components produced with the same identifier are considered the same logical entity and are merged by the platform.
+
+This makes identifier construction a critical design choice. Identifiers should:
+
+* Be stable across time
+* Reflect the intended cardinality (service, instance, database, etc.)
+* Avoid unbounded dimensions
+
+[NOTE]
+====
+Using the `output.required.additionalIdentifiers` list, you can specify additional identifiers to associate the generated component with. This could be useful to correlate a component with an external identifier in another system.
+====
+
+=== Relation identity
+
+The relation identity is a composite of the form `output.sourceId-output.targetId`, where `sourceId` and `targetId` are component identifiers (e.g., from `output.identifier`).
+
+=== Refresh and expiration
+
+Each mapping defines an expireAfter duration. This value controls how long a component or relation remains valid without being refreshed by new matching telemetry.
+
+Internally:
+
+* The OTel collector continuously refreshes components as telemetry matches - this refresh window is based on the `expireAfter` field per mapping
+* In the platform, components and relations expire if they are not refreshed in time (TODO: not sure what expiration config is used here - or if it's worth mentioning?)
+
+== Input traversal model
+
+Topology mappings traverse OpenTelemetry data hierarchically:
+
+`resource → scope → metric/span → datapoint`
+
+Each level may define:
+
+* A condition: a CEL boolean expression
+* An action: what to do if the condition matches
+
+=== Available fields per signal
+
+The selected signal determines which data structures and attributes are available for expression evaluation.
+
+**TRACES**
+
+Provides access to:
+
+* resource.attributes
+* scope.name, scope.version, scope.attributes
+* span.name, span.kind, span.statusMessage, span.statusCode, span.attributes
+
+Example:
+
+[source]
+----
+span.kind == 'SPAN_KIND_SERVER' && resource.attributes['service.name'] == 'checkout'
+----
+
+**METRICS**
+
+Provides access to:
+
+* resource.attributes
+* scope.name, scope.version, scope.attributes
+* metric.name, metric.description, metric.unit
+* datapoint.attributes
+
+Example:
+
+[source]
+----
+metric.name == 'traces_service_graph_request_total' && datapoint.attributes['connection_type'] == 'database'
+----
+
+**LOGS**
+
+Not yet supported for topology mappings.
+
+=== Conditions and actions
+
+**Conditions**
+
+Conditions determine whether processing continues at a given level. If a condition evaluates to false, the mapping is skipped for that telemetry element.
+
+Conditions may only reference fields available at that level. For example, the following snippet for the input block would be invalid:
+
+[,yaml]
+----
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: "${'service.name' in resource.attributes}" # action ommited since the default is CONTINUE
+    scope:
+      condition: "${resource.attributes['service.name'] == 'cart-svc'}" # it's not allowed to access resource-level fields at scope-level
+      action: "CREATE" # input block describes that it expects to filter until this level only
+----
+
+**Actions**
+
+Supported actions:
+
+* CONTINUE – continue evaluation to the next level
+* CREATE – create a component or relation at this level
+
+Defaults:
+
+* Conditions default to true
+* Actions default to CONTINUE
+* At terminal levels (span, datapoint), the default action is CREATE
+
+This means a component or relation is only produced when the terminal condition evaluates to true.
+
+Constraints:
+
+* When there are multiple input signals declared, data (using expression) can only be accessed from the common-ancestor-level, which in all cases are scope-level.
+* Data access from another input-signal is not allowed. For example, metric-level fields cannot be accessed from span-level.
+
+TODO: more input examples?
+
+== Variables (vars)
+
+Mappings may define variables to avoid repetition and improve readability.
+
+Variables:
+
+* Are evaluated using CEL expressions
+* May reference any fields available at the current level
+* Can be reused across output fields
+
+Example:
+
+[,yaml]
+----
+vars:
+- name: "service"
+  value: "${resource.attributes['service.name']}"
+----
+
+Variables are resolved before evaluating output expressions.
+
+== Tag mappings
+
+Component mappings may define tag mappings to enrich components with metadata.
+
+Two forms are supported:
+
+**Direct mapping**
+
+[,yaml]
+----
+- source: "value"
+  target: "key"
+----
+Result: `key:value`
+
+[,yaml]
+----
+- source: "${resource.attributes['service.name']}"
+  target: "service.name"
+----
+Given: `resource.attributes { 'service.name': 'cart-svc' }`
+
+Result: `service.name:cart-svc`
+
+The source for a direct mapping needs to be a:
+
+* string literal
+* string expression
+
+**Regex-based extraction**
+
+[,yaml]
+----
+- source: "${resource.attributes}"
+  pattern: "telemetry.sdk\.(.*)"
+  target: "telemetry.sdk.${1}"
+----
+Given: `resource.attributes: { 'telemetry.sdk.language': 'go', 'telemetry.sdk.version': '1.23.1' }`
+
+Result: `telemetry.sdk.language:go;telemetry.sdk.version:1.23.1`
+
+Regex-based mappings support multiple capture groups, which can be referenced positionally in the target expression.
+
+The source for a regex-based mapping needs to be:
+
+* map expression
+
+Example with multiple capture groups:
+
+[,yaml]
+----
+- source: "${resource.attributes}"
+  pattern: "^(os|host|cloud|azure|gcp)\.(.*)"
+  target: "${1}.${2}"
+----
+
+In regex-based mappings, capture groups are substituted into the target.
+
+== CEL expression (`<cel-*>`) explanation:
+
+* `<cel-string>` - needs to return a string; can be one of:
+** string literal (e.g., "hello")
+** string expression, wrapped in `${...}` (e.g., "${resource.attributes['service.name']}")
+** string interpolation (e.g. "urn:opentelemetry:namespace/${resource.attributes['namespace']}:service/${resource.attributes['service.name']}") - note: for string interpolation, the entire expression is not wrapped in `${...}`
+* `cel-boolean` - needs to return a boolean; can be one of:
+** boolean literal (e.g., "true")
+** boolean expression (e.g., "'namespace' in resource.attributes") - note: boolean expressions are not wrapped in `${...}`
+* `cel-map` - needs to return a map; can be one of:
+** map literal (e.g., "${{'a': 1, 'b': 'two'}}")
+** map expression (e.g., "${resource.attributes}")
+* `cel-expression` - returns "any" type, can be one of:
+** string expression
+** boolean expression
+** map expression (e.g., "${resource.attributes}" - returns the attribute map)
+** list expression (e.g., "${resource.attributes['process.command_args']}" - returns a list)
+
+=== CEL language reference
+
+Visit https://github.com/google/cel-spec/blob/master/doc/langdef.md[CEL's langdef] for a thorough reference.
+
+An online CEL playground like https://playcel.undistro.io/ is a helpful tool to do quick expression validity checks.
+
+== Common patterns and best practices
+
+* Guard mappings with conditions to avoid unintended cardinality
+* Always handle missing attributes defensively
+* Keep identifiers stable and predictable
+* Prefer variables for complex expressions and to promote readability
+* Use expireAfter values appropriate to signal frequency
+
+See the xref:/setup/otel/otelmappings/troubleshooting.adoc[troubleshooting] page for guidance on troubleshooting OTel mappings.
+
+== OTel mapping examples
+
+This section provides complete OTel mapping examples to tie all this information together.
+
+=== OtelComponentMapping example
+
+**Database component**
+[,yaml]
+----
+- _type: "OtelComponentMapping"
+  name: "Database"
+  description: "Represents a database service"
+  identifier: "urn:stackpack:open-telemetry-2:shared:otel-component-mapping:database"
+  input:
+    signal:
+      - "METRICS"
+    resource:
+      scope:
+        condition: "scope.name == 'traces_service_graph'"
+        metric:
+          condition: "metric.name == 'traces_service_graph_request_total'"
+          datapoint:
+            action: "CREATE"
+            condition: |
+              'client' in datapoint.attributes &&
+              'server' in datapoint.attributes &&
+              'client_service.namespace' in datapoint.attributes &&
+              'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
+  vars:
+    - name: "clientServiceNamespace"
+      value: "${datapoint.attributes['client_service.namespace']}"
+    - name: "client"
+      value: "${datapoint.attributes['client']}"
+    - name: "server"
+      value: "${datapoint.attributes['server']}"
+  output:
+    identifier: "urn:opentelemetry:namespace/${vars.clientServiceNamespace}:service/${vars.client}:database/${vars.server}"
+    name: "${vars.server}"
+    typeName: "database"
+    typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:database"
+    layerName: "Databases"
+    layerIdentifier: "urn:stackpack:common:layer:databases"
+    domainName: "Open Telemetry"
+    domainIdentifier: "urn:stackpack:open-telemetry:shared:domain:opentelemetry"
+    required:
+      tags:
+        - source: "open-telemetry"
+          target: "stackpack"
+        - source: "${vars.clientServiceNamespace}"
+          target: "service.namespace"
+        - source: "${vars.client}"
+          target: "service.name"
+  expireAfter: 900000
+----
+
+=== OtelRelationMapping example
+
+[,yaml]
+----
+- _type: "OtelRelationMapping"
+  name: "Database Relation"
+  description: "Adds a database connection to a service"
+  identifier: "urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database"
+  input:
+    signal:
+      - "METRICS"
+    resource:
+      scope:
+        condition: "scope.name == 'traces_service_graph'"
+        metric:
+          condition: "metric.name == 'traces_service_graph_request_total'"
+          datapoint:
+            action: "CREATE"
+            condition: |
+              'client' in datapoint.attributes &&
+              'server' in datapoint.attributes &&
+              'client_service.namespace' in datapoint.attributes &&
+              'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
+  vars:
+    - name: "clientServiceNamespace"
+      value: "${datapoint.attributes['client_service.namespace']}"
+    - name: "client"
+      value: "${datapoint.attributes['client']}"
+    - name: "server"
+      value: "${datapoint.attributes['server']}"
+    - name: "clientServiceInstanceId"
+      value: >-
+        ${
+          'client_service.instance.id' in datapoint.attributes ?
+          datapoint.attributes['client_service.instance.id'] :
+          datapoint.attributes['client']
+        }
+    - name: "targetId"
+      value: >-
+        ${
+          'client_peer.service' in datapoint.attributes ?
+          "urn:opentelemetry:namespace/" + datapoint.attributes['client_service.namespace'] + ":service/" + datapoint.attributes['client_peer.service'] :
+          "urn:opentelemetry:namespace/" + datapoint.attributes['client_service.namespace'] + ":service/" + datapoint.attributes['client'] + ":database/" + datapoint.attributes['server']
+        }
+  conditions:
+    - expression: |
+        'client' in datapoint.attributes &&
+        'server' in datapoint.attributes &&
+        'client_service.namespace' in datapoint.attributes &&
+        'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
+      action: "CREATE"
+  output:
+    sourceId: "urn:opentelemetry:namespace/${vars.clientServiceNamespace}:service/${vars.client}:serviceInstance/${vars.clientServiceInstanceId}"
+    targetId: "${vars.targetId}"
+    typeName: "database"
+    typeIdentifier: "urn:stackpack:open-telemetry:shared:relation-type:database"
+  expireAfter: 900000
+----
+
+ifdef::ss-ff-stackpacks2_enabled[]
