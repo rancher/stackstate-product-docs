@@ -17,6 +17,15 @@ This page describes how to restore backups for {stackstate-product-name} data st
 *Restoring from backup will purge or overwrite existing data. This operation cannot be undone.*
 
 Always verify the backup name and namespace before confirming a restore operation.
+
+*GitOps Workflow Impacted*
+This backup tool modifies K8s resources directly in your cluster:
+
+- Scales StatefulSets/Deployments to 0 replicas
+- Adds annotations for restore tracking
+
+These changes will conflict with your GitOps workflow as they bypass Git-based reconciliation. GitOps controllers may attempt to revert these changes during backup operations.
+*Important:* Automatic reconciliation for the SUSE Observability Helm chart deployment must be disabled during backup restore to prevent conflicts.
 ====
 
 [NOTE]
@@ -25,7 +34,6 @@ Always verify the backup name and namespace before confirming a restore operatio
 
 * You are using the latest version of the backup CLI.
 * The CLI expects a kubeconfig with a current context to the cluster where SUSE Observability is installed.
-* `backup.enabled` is set to `true`.
 ====
 
 == Download the backup CLI
