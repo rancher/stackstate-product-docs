@@ -1,27 +1,24 @@
 ifdef::ss-ff-stackpacks2_enabled[]
-= Schemas for Topology Mappings
+= Schemas
 :revdate: 2025-12-23
 :page-revdate: {revdate}
-:description: Open Telemetry Mappings Schemas
+:description: Open Telemetry Mapping Schemas
 
 == Overview
 
 This page describes the schemas for defining an `OtelComponentMapping` or `OtelRelationMapping`, along with detailed explanations of constructs, expression syntax and semantics.
 
-On this page you'll find:
-
-* Schemas for OTel component & relation mappings
-* Component and relation identity, merging & lifecycle
-* Input traversal model
-* Variables
-* Tag mappings
-* CEL expression explanation
-* Common patterns and best practices
-* OTel mapping examples
-
 == Schemas for OTel Component & Relation Mappings
 
 === OtelComponentMapping
+
+Each component mapping:
+
+* Selects telemetry using conditions
+* Extracts values using expressions
+* Produces a single logical component identified by a stable identifier
+
+Multiple telemetry records may resolve to the same component identifier; in that case, the component is merged and refreshed.
 
 [,yaml]
 ----
@@ -80,6 +77,14 @@ expireAfter: duration-ms
 ----
 
 === OtelRelationMapping
+
+Each relation mapping:
+
+* Resolves a sourceId and targetId
+* Assigns a relation type
+* Produces a directed edge between existing or future components
+
+Relations are materialised once both source and target components exist.
 
 [,yaml]
 ----
@@ -328,6 +333,14 @@ In regex-based mappings, capture groups are substituted into the target.
 
 === CEL language reference
 
+CEL is a safe, side-effect-free expression language designed for configuration and policy use cases. In the context of OpenTelemetry topology mappings, CEL is used to:
+
+* Define conditions that decide whether a mapping applies
+* Compute variables from telemetry attributes
+* Build identifiers, names, and tags dynamically
+
+Expressions are evaluated against a well-defined, typed context derived from the OpenTelemetry signal being processed (for example, resource, scope, span, metric, or datapoint).
+
 Visit https://github.com/google/cel-spec/blob/master/doc/langdef.md[CEL's langdef] for a thorough reference.
 
 An online CEL playground like https://playcel.undistro.io/ is a helpful tool to do quick expression validity checks.
@@ -341,119 +354,5 @@ An online CEL playground like https://playcel.undistro.io/ is a helpful tool to 
 * Use expireAfter values appropriate to signal frequency
 
 See the xref:/setup/otel/otelmappings/troubleshooting.adoc[troubleshooting] page for guidance on troubleshooting OTel mappings.
-
-== OTel mapping examples
-
-This section provides complete OTel mapping examples to tie all this information together.
-
-=== OtelComponentMapping example
-
-**Database component**
-[,yaml]
-----
-- _type: "OtelComponentMapping"
-  name: "Database"
-  description: "Represents a database service"
-  identifier: "urn:stackpack:open-telemetry-2:shared:otel-component-mapping:database"
-  input:
-    signal:
-      - "METRICS"
-    resource:
-      scope:
-        condition: "scope.name == 'traces_service_graph'"
-        metric:
-          condition: "metric.name == 'traces_service_graph_request_total'"
-          datapoint:
-            action: "CREATE"
-            condition: |
-              'client' in datapoint.attributes &&
-              'server' in datapoint.attributes &&
-              'client_service.namespace' in datapoint.attributes &&
-              'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
-  vars:
-    - name: "clientServiceNamespace"
-      value: "${datapoint.attributes['client_service.namespace']}"
-    - name: "client"
-      value: "${datapoint.attributes['client']}"
-    - name: "server"
-      value: "${datapoint.attributes['server']}"
-  output:
-    identifier: "urn:opentelemetry:namespace/${vars.clientServiceNamespace}:service/${vars.client}:database/${vars.server}"
-    name: "${vars.server}"
-    typeName: "database"
-    typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:database"
-    layerName: "Databases"
-    layerIdentifier: "urn:stackpack:common:layer:databases"
-    domainName: "Open Telemetry"
-    domainIdentifier: "urn:stackpack:open-telemetry:shared:domain:opentelemetry"
-    required:
-      tags:
-        - source: "open-telemetry"
-          target: "stackpack"
-        - source: "${vars.clientServiceNamespace}"
-          target: "service.namespace"
-        - source: "${vars.client}"
-          target: "service.name"
-  expireAfter: 900000
-----
-
-=== OtelRelationMapping example
-
-[,yaml]
-----
-- _type: "OtelRelationMapping"
-  name: "Database Relation"
-  description: "Adds a database connection to a service"
-  identifier: "urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database"
-  input:
-    signal:
-      - "METRICS"
-    resource:
-      scope:
-        condition: "scope.name == 'traces_service_graph'"
-        metric:
-          condition: "metric.name == 'traces_service_graph_request_total'"
-          datapoint:
-            action: "CREATE"
-            condition: |
-              'client' in datapoint.attributes &&
-              'server' in datapoint.attributes &&
-              'client_service.namespace' in datapoint.attributes &&
-              'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
-  vars:
-    - name: "clientServiceNamespace"
-      value: "${datapoint.attributes['client_service.namespace']}"
-    - name: "client"
-      value: "${datapoint.attributes['client']}"
-    - name: "server"
-      value: "${datapoint.attributes['server']}"
-    - name: "clientServiceInstanceId"
-      value: >-
-        ${
-          'client_service.instance.id' in datapoint.attributes ?
-          datapoint.attributes['client_service.instance.id'] :
-          datapoint.attributes['client']
-        }
-    - name: "targetId"
-      value: >-
-        ${
-          'client_peer.service' in datapoint.attributes ?
-          "urn:opentelemetry:namespace/" + datapoint.attributes['client_service.namespace'] + ":service/" + datapoint.attributes['client_peer.service'] :
-          "urn:opentelemetry:namespace/" + datapoint.attributes['client_service.namespace'] + ":service/" + datapoint.attributes['client'] + ":database/" + datapoint.attributes['server']
-        }
-  conditions:
-    - expression: |
-        'client' in datapoint.attributes &&
-        'server' in datapoint.attributes &&
-        'client_service.namespace' in datapoint.attributes &&
-        'connection_type' in datapoint.attributes && datapoint.attributes['connection_type'] == 'database'
-      action: "CREATE"
-  output:
-    sourceId: "urn:opentelemetry:namespace/${vars.clientServiceNamespace}:service/${vars.client}:serviceInstance/${vars.clientServiceInstanceId}"
-    targetId: "${vars.targetId}"
-    typeName: "database"
-    typeIdentifier: "urn:stackpack:open-telemetry:shared:relation-type:database"
-  expireAfter: 900000
-----
 
 ifdef::ss-ff-stackpacks2_enabled[]

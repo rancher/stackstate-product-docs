@@ -1,0 +1,336 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Topology from OpenTelemetry
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: Topology from OpenTelemetry
+
+== Overview
+
+This document provides a getting started guide for OTel component and relation mappings. It walks you through creating a service-level topology from OpenTelemetry trace data, (i.e., local span context) using component and relation mappings, packaged and tested as part of a StackPack.
+
+At the end of this guide, you will have:
+
+* Defined topology components derived from OpenTelemetry traces
+* Created relationships that represent synchronous service calls
+* Validated the resulting topology using the StackPack test workflow
+
+== Prerequisites and scope
+
+This guide assumes:
+
+* You already collect OpenTelemetry traces
+* You are creating or extending a StackPack
+* You are comfortable with YAML and basic OTel concepts (resources, spans)
+
+We will focus on:
+
+* Trace-based topology (`TRACES` signal only)
+* Service-level components
+* Synchronous HTTP calls
+
+[NOTE]
+====
+In this guide, component and relation mappings are expressed as YAML configuration that is packaged, tested, and deployed as part of a StackPack.
+====
+
+== The goal: what topology do we want?
+
+We want to visualize a simple service topology based on how services interact at runtime. Specifically, we want to model the following flow:
+
+[source]
+----
+checkout-service -> payment-service
+----
+
+Where:
+
+* Each node represents a service
+* Each edge represents a synchronous HTTP call
+* Direction indicates the caller -> callee relationship
+
+All of this topology will be derived automatically from OpenTelemetry trace data.
+
+== The trace data that we'll work with
+
+Throughout this guide, we’ll use a simplified OTLP-style JSON trace payload, aligned with the official OpenTelemetry Protocol (OTLP) https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto[trace] schema.
+
+This structure mirrors what exporters send over OTLP/JSON.
+
+[,json]
+----
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "checkout-service" } },
+          { "key": "service.namespace", "value": { "stringValue": "shop" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "io.opentelemetry.instrumentation.http",
+            "version": "1.17.0"
+          },
+          "spans": [
+            {
+              "traceId": "AEBCDEF0001",
+              "spanId": "0001",
+              "name": "GET /checkout",
+              "kind": 2,
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "http.status_code", "value": { "intValue": 200 } }
+              ]
+            },
+            {
+              "traceId": "AEBCDEF0001",
+              "spanId": "0002",
+              "parentSpanId": "0001",
+              "name": "POST /payment",
+              "kind": 3,
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "peer.service", "value": { "stringValue": "payment-service" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "payment-service" } },
+          { "key": "service.namespace", "value": { "stringValue": "shop" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "io.opentelemetry.instrumentation.http",
+            "version": "1.17.0"
+          },
+          "spans": [
+            {
+              "traceId": "AEBCDEF0001",
+              "spanId": "0003",
+              "parentSpanId": "0002",
+              "name": "POST /payment",
+              "kind": 2,
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "http.status_code", "value": { "intValue": 201 } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+----
+
+=== What matters for topology
+
+From this trace data, we’ll rely on:
+
+* Service identity: `resource.attributes['service.name']`
+* Service interactions: `peer.service` on client spans
+
+[NOTE]
+====
+`peer.service` is a contrived span attribute for the example topology we are visualizing in this guide.
+====
+
+== From traces to topology: the mental model
+
+Before writing any configuration, it’s important to understand how topology mappings work conceptually.
+
+=== Components
+
+A component mapping describes how a topology node is created from telemetry data.
+
+Each component mapping:
+
+* Selects telemetry using conditions
+* Extracts values using expressions
+* Produces a single logical component identified by a stable identifier
+
+In this guide:
+
+* Each component represents a service
+* Services are derived from trace resource attributes
+
+=== Relations
+
+A relation mapping describes how a connection between two components is created.
+
+Each relation mapping:
+
+* Resolves a sourceId and a targetId
+* Assigns a relation type
+* Produces a directed edge
+
+Relations are created once both the source and target components exist.
+
+== Creating service components from traces
+=== Defining what a "service" means
+
+Before writing the mapping, we need to make a design decision.
+
+For this guide, a service is defined as:
+
+* Identified by `service.namespace` + `service.name`
+* Stable across deployments
+* Independent of service instances
+
+This keeps topology readable and low cardinality.
+
+=== Service component mapping
+
+The following component mapping creates one topology component per service observed in trace data.
+
+[,yaml]
+----
+_type: OtelComponentMapping
+name: "Service from traces"
+identifier: "urn:stackpack:open-telemetry:shared:otel-component-mapping:service"
+input:
+  signal: ["TRACES"]
+  resource:
+    condition: "'service.name' in resource.attributes"
+    action: CREATE
+vars:
+  - name: serviceName
+    value: "${resource.attributes['service.name']}"
+  - name: serviceNamespace
+    value: "${'service.namespace' in resource.attributes ? resource.attributes['service.namespace'] : 'default')}"
+output:
+  identifier: "urn:namespace/${vars.serviceNamespace}:service/${vars.serviceName}"
+  name: "${vars.serviceName}"
+  typeName: "otel service"
+  layerName: "Services"
+  domainName: "Open Telemetry"
+  expireAfter: 600000
+----
+==== How this mapping works
+
+* We process trace data only (signal: TRACES)
+* We require that `service.name` exists at the resource level
+
+The component identifier is constructed from:
+
+* `service.namespace`
+* `service.name`
+
+== Creating synchronous call relations
+
+Now that services exist as components, we can connect them.
+
+=== Detecting a synchronous service call
+
+TODO: In OpenTelemetry traces, a synchronous HTTP call is typically represented by a span that includes:
+
+* A client service
+* A server service
+
+In our example:
+
+* `client.address` identifies the caller
+* `server.address` identifies the callee
+
+Each such span represents one directed interaction.
+
+=== Service-to-service relation mapping
+
+The following relation mapping creates a directed relation for each synchronous HTTP call.
+
+[,yaml]
+----
+_type: OtelRelationMapping
+name: service-sync-call
+input:
+  signal: ["TRACES"]
+  resource:
+    condition: "'service.name' in resource.attributes"
+    scope:
+      span:
+        condition: "'peer.service' in span.attributes"
+        action: CREATE
+vars:
+  - name: sourceService
+    value: "${span.attributes['client.address']}"
+  - name: targetService
+    value: "${span.attributes['peer.address']}"
+  - name: serviceNamespace
+    value: "${'service.namespace' in resource.attributes ? resource.attributes['service.namespace'] : 'default')}"
+output:
+  sourceId: "urn:namespace/${vars.serviceNamespace}:service/${vars.sourceService}"
+  targetId: "urn:namespace/${vars.serviceNamespace}:service/${vars.targetService}"
+  typeName: "synchronous"
+  expireAfter: 600000
+----
+==== How this mapping works
+
+* We process trace data only (signal: TRACES)
+* We require that `service.name` exists at the resource level, and `peer.service` at the span level
+
+The relation identifier is constructed (automatically) from the `sourceId` and `targetId`, and is of the form:
+
+* `sourceId-relationId`
+
+== Validating the OTel mappings
+
+Assuming both mappings live inside your StackPack, they can be tested together.
+
+Using the `sts stackpack test --yes` command, you can:
+
+* Package, upload, and install/upgrade the StackPack
+* Validate the declarative component and relation mappings residing in the StackPack (e.g., expression correctness, correct reference of input signal data based on filtering provided)
+
+[NOTE]
+====
+The `sts stackpack test` command doesn't feed example trace data through the mappings
+====
+
+== Resulting topology
+
+When these mappings are applied, the resulting topology forms a service graph derived entirely from trace data.
+
+Visually, this appears as:
+
+----
+checkout-service -> (synchronous) payment-service
+----
+
+This topology updates continuously as new traces arrive and automatically expires when traffic stops.
+
+== Summary and limitations
+
+In this guide, you:
+
+* Derived service components from trace resource attributes
+* Created synchronous service call relations using span-local context
+* Packaged and tested everything as part of a StackPack
+
+=== Known limitations
+
+* Relation mappings cannot correlate multiple spans
+* Parent/child span relationships are not directly usable
+* Service graphs are derived using heuristics, not perfect causality
+
+These trade-offs keep mappings simple, scalable, and predictable.
+
+== Next steps
+
+From here, you can:
+
+* Add service instances or infrastructure components
+* Introduce database or messaging relations
+* Explore metrics-based service graphs
+* Extend the StackPack with additional topology layers
+* Familiarize yourself with an in-depth component and relation mapping xref:/setup/otel/otelmappings/schemas.adoc[reference]
+
+ifdef::ss-ff-stackpacks2_enabled[]
