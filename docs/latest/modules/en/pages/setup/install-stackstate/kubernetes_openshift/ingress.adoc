@@ -38,7 +38,7 @@ ingress:
 
 What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller. Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
 
-The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress class] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined the ingerss class name field can be omitted.
+The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress class] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
 
 Include the `ingress_values.yaml` file when you run the `helm upgrade` command to deploy SUSE Observability:
 
@@ -56,9 +56,8 @@ suse-observability/suse-observability
 
 [NOTE]
 ====
-This step assummes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
+This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
 ====
-
 
 == Configure Ingress Rule for Open Telemetry
 
@@ -103,7 +102,7 @@ opentelemetry-collector:
 
 What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller. Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
 
-The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined the ingerss class name field can be omitted.
+The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
 
 Include the `ingress_otel_values.yaml` file when you run the `helm upgrade` command to deploy SUSE Observability:
 
@@ -122,7 +121,7 @@ suse-observability/suse-observability
 
 [NOTE]
 ====
-This step assummes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
+This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
 ====
 
 
@@ -154,6 +153,42 @@ SUSE Observability itself doesn't use TLS encrypted traffic, TLS encryption is e
 == Agents in the same cluster
 
 Agents that are deployed to the same cluster as SUSE Observability can of course use the external URL on which SUSE Observability is exposed, but it's also possible to configure the agent to directly connect to the SUSE Observability instance via the Kubernetes internal network only. To do that replace the value of the `'stackstate.url'` in the `helm install` command from the xref:/k8s-quick-start-guide.adoc[Agent Kubernetes installation] with the internal cluster URL for the router service (see also above): `http://<namespace>-suse-observability-router.<namespace>.svc.cluster.local:8080/receiver/stsAgent` (the `<namespace>` sections need to be replaced with the namespace of SUSE Observability).
+
+
+== Forwarding the {stackstate-product-name} router service port
+
+By default, the SUSE Observability Helm chart deploys a router pod and service. This service exposes port `8080`, which is the only entry point that needs to be exposed via Ingress.
+You can also access SUSE Observability via port-forwarding; when doing so, you must allow localhost as a request origin.
+
+[WARNING]
+====
+* Allowing `localhost` in `stackstate.allowedOrigins` is intended only for local development or debugging when using port-forwarding.
+* This is *not* a production setup. Remove this allowed origin when exposing {stackstate-product-name} via Ingress.
+====
+
+To access the UI without configuring Ingress, forward the router service port:
+
+[,text]
+----
+kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+When accessing {stackstate-product-name} via port-forwarding, the browser uses `http://localhost:8080` as the request origin.
+To allow requests from this origin, add it to the `stackstate.allowedOrigins` list in the Helm values, or pass it directly to the Helm command::
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --set stackstate.allowedOrigins={"http://localhost:8080"} \
+suse-observability \
+suse-observability/suse-observability
+----
+
 
 == See also
 
