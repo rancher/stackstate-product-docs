@@ -6,21 +6,15 @@ ifdef::ss-ff-stackpacks2_enabled[]
 
 == Overview
 
-This document provides a getting started guide for OTel component and relation mappings. It walks you through creating a service-level topology from OpenTelemetry trace data, (i.e., local span context) using component and relation mappings, packaged and tested as part of a StackPack.
+This document provides a getting started guide for OTel component and relation mappings. It walks you through creating a service-level topology from OpenTelemetry trace data, (local span context) using component and relation mappings, packaged and tested as part of a StackPack.
 
-At the end of this guide, you will have:
 
-* Defined topology components derived from OpenTelemetry traces
-* Created relationships that represent synchronous service calls
-* Validated the resulting topology using the StackPack test workflow
+== Prerequisites
 
-== Prerequisites and scope
 
-This guide assumes:
-
-* You already collect OpenTelemetry traces
-* You are creating or extending a StackPack
-* You are comfortable with YAML and basic OTel concepts (resources, spans)
+* You already collect OpenTelemetry traces.
+* You are creating or extending a StackPack.
+* You are comfortable with YAML and basic OTel concepts (resources, spans).
 
 We will focus on:
 
@@ -35,24 +29,26 @@ In this guide, component and relation mappings are expressed as YAML configurati
 
 == The goal: what topology do we want?
 
-We want to visualize a simple service topology based on how services interact at runtime. Specifically, we want to model the following flow:
+== Configuring topology
+
+The goal is to visualize a simple service topology based on how services interact at runtime and model the following flow:
 
 [source]
 ----
 checkout-service -> payment-service
 ----
 
-Where:
+In this flow:
 
-* Each node represents a service
-* Each edge represents a synchronous HTTP call
-* Direction indicates the caller -> callee relationship
+* Each node represents a service.
+* Each edge represents a synchronous HTTP call.
+* Direction indicates the caller -> callee relationship.
 
-All of this topology will be derived automatically from OpenTelemetry trace data.
+All of this topology is derived automatically from OpenTelemetry trace data.
 
-== The trace data that we'll work with
+== Trace data
 
-Throughout this guide, we’ll use a simplified OTLP-style JSON trace payload, aligned with the official OpenTelemetry Protocol (OTLP) https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto[trace] schema.
+Throughout this guide, a simplified OTLP-style JSON trace payload, aligned with the official OpenTelemetry Protocol (OTLP) xref:https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto[trace] schema is used.
 
 This structure mirrors what exporters send over OTLP/JSON.
 
@@ -144,7 +140,7 @@ From this trace data, we’ll rely on:
 `peer.service` is a contrived span attribute for the example topology we are visualizing in this guide.
 ====
 
-== From traces to topology: the mental model
+== Traces to topology: the mental model
 
 Before writing any configuration, it’s important to understand how topology mappings work conceptually.
 
@@ -154,14 +150,14 @@ A component mapping describes how a topology node is created from telemetry data
 
 Each component mapping:
 
-* Selects telemetry using conditions
-* Extracts values using expressions
-* Produces a single logical component identified by a stable identifier
+* Selects telemetry using conditions.
+* Extracts values using expressions.
+* Produces a single logical component identified by a stable identifier.
 
 In this guide:
 
-* Each component represents a service
-* Services are derived from trace resource attributes
+* Each component represents a service.
+* Services are derived from trace resource attributes.
 
 === Relations
 
@@ -169,9 +165,9 @@ A relation mapping describes how a connection between two components is created.
 
 Each relation mapping:
 
-* Resolves a sourceId and a targetId
-* Assigns a relation type
-* Produces a directed edge
+* Resolves a `sourceId` and a `targetId`.
+* Assigns a relation type.
+* Produces a directed edge.
 
 Relations are created once both the source and target components exist.
 
@@ -182,9 +178,9 @@ Before writing the mapping, we need to make a design decision.
 
 For this guide, a service is defined as:
 
-* Identified by `service.namespace` + `service.name`
-* Stable across deployments
-* Independent of service instances
+* Identified by `service.namespace` + `service.name`.
+* Stable across deployments.
+* Independent of service instances.
 
 This keeps topology readable and low cardinality.
 

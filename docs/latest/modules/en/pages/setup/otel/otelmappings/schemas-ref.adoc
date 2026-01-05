@@ -13,9 +13,9 @@ This page describes the schemas for defining an `OtelComponentMapping` or `OtelR
 
 Each component mapping:
 
-* Selects telemetry using conditions
-* Extracts values using expressions
-* Produces a single logical component identified by a stable identifier
+* Selects telemetry using conditions.
+* Extracts values using expressions.
+* Produces a single logical component identified by a stable identifier.
 
 Multiple telemetry records may resolve to the same component identifier; in that case, the component is merged and refreshed.
 
@@ -79,11 +79,11 @@ expireAfter: duration-ms
 
 Each relation mapping:
 
-* Resolves a sourceId and targetId
-* Assigns a relation type
-* Produces a directed edge between existing or future components
+* Resolves a `sourceId` and `targetId`.
+* Assigns a relation type.
+* Produces a directed edge between existing or future components.
 
-Relations are materialised once both source and target components exist.
+Relations are materialised when source and target components exist.
 
 [,yaml]
 ----
@@ -115,13 +115,13 @@ expireAfter: duration-ms
 
 === Component identity
 
-The `output.identifier` field defines the sole identity of a component. All components produced with the same identifier are considered the same logical entity and are merged by the platform.
+The `output.identifier` field defines the sole identity of a component. All components produced with the same identifier are considered the same logical entity and are merged by the platform. This makes identifier construction a critical design choice. 
 
-This makes identifier construction a critical design choice. Identifiers should:
+Identifiers should:
 
-* Be stable across time
-* Reflect the intended cardinality (service, instance, database, etc.)
-* Avoid unbounded dimensions
+* Be stable across time.
+* Reflect the intended cardinality (service, instance, database, and the like).
+* Avoid unbounded dimensions.
 
 [NOTE]
 ====
@@ -130,27 +130,25 @@ Using the `output.required.additionalIdentifiers` list, you can specify addition
 
 === Relation identity
 
-The relation identity is a composite of the form `output.sourceId-output.targetId`, where `sourceId` and `targetId` are component identifiers (e.g., from `output.identifier`).
+The relation identity is a composite of the form `output.sourceId-output.targetId`, where `sourceId` and `targetId` are component identifiers (for example, from `output.identifier`).
 
 === Refresh and expiration
 
-Each mapping defines an expireAfter duration. This value controls how long a component or relation remains valid without being refreshed by new matching telemetry.
+Each mapping defines an `expireAfter` duration. This value controls how long a component or relation remains valid without being refreshed by new matching telemetry.
 
 Internally:
 
-* The OTel collector continuously refreshes components as telemetry matches - this refresh window is based on the `expireAfter` field per mapping
+* The OTel collector continuously refreshes components as telemetry matches - this refresh window is based on the `expireAfter` field per mapping.
 * In the platform, components and relations expire if they are not refreshed in time (TODO: not sure what expiration config is used here - or if it's worth mentioning?)
 
 == Input traversal model
 
-Topology mappings traverse OpenTelemetry data hierarchically:
-
-`resource → scope → metric/span → datapoint`
+Topology mappings traverse OpenTelemetry data hierarchically - `resource → scope → metric/span → datapoint`
 
 Each level may define:
 
-* A condition: a CEL boolean expression
-* An action: what to do if the condition matches
+* A condition: a CEL boolean expression.
+* An action: what to do if the condition matches.
 
 === Available fields per signal
 
@@ -191,9 +189,6 @@ metric.name == 'traces_service_graph_request_total'
 datapoint.attributes['connection_type'] == 'database'
 ----
 
-**LOGS**
-
-Not yet supported for topology mappings.
 
 === Conditions and actions
 
@@ -219,16 +214,16 @@ input:
 
 Supported actions:
 
-* CONTINUE – continue evaluation to the next level
-* CREATE – create a component or relation at this level
+* CONTINUE – continue evaluation to the next level.
+* CREATE – create a component or relation at this level.
 
 Defaults:
 
-* Conditions default to true
-* Actions default to CONTINUE
-* At terminal levels (span, datapoint), the default action is CREATE
+* Conditions default to 'true'.
+* Actions default to 'CONTINUE'.
+* At terminal levels (span, datapoint), the default action is 'CREATE'.
 
-This means a component or relation is only produced when the terminal condition evaluates to true.
+This means a component or relation is only produced when the terminal condition evaluates to 'true'.
 
 Constraints:
 
@@ -243,9 +238,9 @@ Mappings may define variables to avoid repetition and improve readability.
 
 Variables:
 
-* Are evaluated using CEL expressions
-* May reference any fields available at the current level
-* Can be reused across output fields
+* Are evaluated using CEL expressions.
+* May reference any fields available at the current level.
+* Can be reused across output fields.
 
 Example:
 
