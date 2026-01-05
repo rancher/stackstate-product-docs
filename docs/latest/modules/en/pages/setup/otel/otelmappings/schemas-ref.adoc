@@ -1,3 +1,4 @@
+ifdef::ss-ff-stackpacks2_enabled[]
 = Schemas
 :revdate: 2025-12-23
 :page-revdate: {revdate}
@@ -204,7 +205,7 @@ input:
   signal:
     - "TRACES"
   resource:
-    condition: "${'service.name' in resource.attributes}" # action omitted since the default is CONTINUE
+    condition: "${'service.name' in resource.attributes}" # action omitted since the default is `CONTINUE`
     scope:
       condition: "${resource.attributes['service.name'] == 'cart-svc'}" # it's not allowed to access resource-level fields at scope-level
       action: "CREATE" # input block describes that it expects to filter until this level only
@@ -227,10 +228,45 @@ This means a component or relation is only produced when the terminal condition 
 
 Constraints:
 
-* When there are multiple input signals declared, data (using expression) can only be accessed from the common-ancestor-level, which in all cases are scope-level.
-* Data access from another input-signal is not allowed. For example, metric-level fields cannot be accessed from span-level.
+* When there are multiple input signals declared, data from within an expression can only be accessed from the common-ancestor-level, which in all cases are scope-level.
+* Data/field access from another level is not allowed. For example, scope-level fields cannot be accessed from resource-level and vice versa.
+* Data/field access from another input-signal is not allowed. For example, metric-level fields cannot be accessed from span-level and vice versa.
 
-TODO: more input examples?
+Here are a few more examples of valid input declarations:
+
+**TRACES**
+
+[,yaml]
+----
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: "${'service.name' in resource.attributes}" # action omitted since the default is `CONTINUE`
+    scope: # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+      span:
+        action: "CREATE"
+        condition: "${span.attributes['http.method'] == 'POST'}"
+----
+
+**METRICS**
+
+[,yaml]
+----
+input:
+  signal:
+    - "METRICS"
+  resource: # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+    scope:
+      condition: "scope.name == 'traces_service_graph'"
+      metric: # action omittted since the default is `CONTINUE`
+        condition: "metric.name == 'traces_service_graph_request_total'"
+        datapoint:
+          action: "CREATE"
+          condition: |
+            'client' in datapoint.attributes &&
+            'server' in datapoint.attributes
+----
 
 == Variables (vars)
 
@@ -329,6 +365,47 @@ In regex-based mappings, capture groups are substituted into the target.
 ** map expression (e.g., "${resource.attributes}" - returns the attribute map)
 ** list expression (e.g., "${resource.attributes['process.command_args']}" - returns a list)
 
+=== Interpolation
+
+String interpolation allows you to embed expressions within string literals. While not directly supported by the CEL specification, the OTel mapping configs provide interpolation syntax of the form `prefix-${expression1}/suffix-${expression2}`, which gets rewritten internally as string concatenation using the `+` operator (e.g., `"prefix-" + expression1 + "/suffix-" + expression2`).
+
+Understanding this rewriting behavior is important for two reasons:
+
+1. *Nested interpolation is not supported*: Since string expressions are demarcated with `${...}`, you cannot nest interpolation expressions. However, you can write concatenation directly using the `+` operator. For example:
++
+[source]
+----
+${
+  'service.instance.id' in resource.attributes ?
+    resource.attributes['service.name'] + " - " + resource.attributes['service.instance.id'] :
+    resource.attributes['service.name'] + " - instance"
+}
+----
+
+2. *Type casting is required for non-string values*: CEL is strongly typed and does not automatically convert types during concatenation. When interpolating values of different types, you must explicitly cast non-string types to strings.
++
+For example, if `process.pid` is an integer (e.g., `1`), this expression will fail:
++
+[source]
+----
+${resource.attributes['service.name']}/${resource.attributes['process.pid']}
+----
++
+The correct form requires casting the dynamic value to a concrete type first, then converting it to a string:
++
+[source]
+----
+${resource.attributes['service.name']}/${string(int(resource.attributes['process.pid']))}
+----
++
+The double casting (`string(int(...))`) is necessary because:
++
+* `resource.attributes['process.pid']` returns a dynamic (`dyn`) type
+* `int()` casts the dynamic value to a concrete integer type
+* `string()` converts the integer to a string for concatenation
++
+For other types, use similar patterns: `string(double(...))` for floats, `string(bool(...))` for booleans.
+
 === CEL language reference
 
 CEL is a safe, side-effect-free expression language designed for configuration and policy use cases. In the context of OpenTelemetry topology mappings, CEL is used to:
@@ -353,4 +430,4 @@ An online CEL playground like https://playcel.undistro.io/ is a helpful tool to 
 
 See the xref:/setup/otel/otelmappings/troubleshooting.adoc[troubleshooting] page for guidance on troubleshooting OTel mappings.
 
-ifdef::ss-ff-stackpacks2_enabled[]
+endif::ss-ff-stackpacks2_enabled[]
