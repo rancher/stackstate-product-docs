@@ -143,43 +143,6 @@ The storage estimates presented take into account a default of 14 days of retent
 
 For more details on the defaults used, see the page xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Configure storage].
 
-=== Ingress
-
-By default, the SUSE Observability Helm chart will deploy a router pod and service. This service's port `8080` is the only entry point that needs to be exposed via Ingress. You can access SUSE Observability without configuring Ingress by forwarding this port:
-
-[,text]
-----
-kubectl port-forward service/<helm-release-name>-stackstate-k8s-router 8080:8080 --namespace stackstate
-----
-
-When accessing {stackstate-product-name} via port-forwarding, the browser uses `http://localhost:8080` as the request origin.
-Since this origin is not allowed by default, UI requests (including WebSocket connections) will be rejected.
-
-You can fix this by adding `http://localhost:8080` to the `stackstate.allowedOrigins` list in the Helm values, or by passing it directly to the deployment command:
-
-[,bash]
-----
-helm upgrade \
-  --install \
-  --namespace suse-observability \
-  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
-  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
-  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
-  --set stackstate.allowedOrigins={"http://localhost:8080"} \
-suse-observability \
-suse-observability/suse-observability
-----
-
-[WARNING]
-====
-* Allowing `localhost` in `stackstate.allowedOrigins` is intended only for local development or debugging when using port-forwarding.
-* This is *not* a production setup. Make sure to remove this allowed origin when exposing {stackstate-product-name} via Ingress.
-====
-
-When configuring Ingress, ensure to allow large request body sizes (50MB) that may be sent occasionally by data sources like the {stackstate-product-name} Agent or the AWS integration.
-
-For more details on configuring Ingress, have a look at the page xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc[Configure Ingress docs].
-
 === Namespace resource limits
 
 It isn't recommended to set a ResourceQuota as this can interfere with resource requests. The resources required by SUSE Observability will vary according to the features used, configured resource limits and dynamic usage patterns, such as Deployment or DaemonSet scaling.
