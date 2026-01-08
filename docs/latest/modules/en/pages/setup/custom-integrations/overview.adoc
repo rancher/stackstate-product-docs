@@ -1,0 +1,59 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Custom Integrations Overview
+:revdate: 2026-01-06
+:page-revdate: {revdate}
+:description:  Custom Integrations Overview
+
+[IMPORTANT]
+====
+Custom Integrations is a pre-production, unreleased feature and therefore might see breaking changes as the feature evolves. It is not intended for production use. But can be tested in non-production environments.
+====
+
+== Overview
+
+Custom integrations leverage on Open Telemetry to collect and send telemetry data (metrics, traces, logs) from various sources to {stackstate-product-docs}. By using Open Telemetry, users can instrument their applications and services to gain insights into performance, reliability, and operational health.
+On {stackstate-product-docs} side, the xref:setup/custom-integrations/otelmappings/README.adoc[Open Telemetry Mappings] processes the incoming telemetry data, applies necessary transformations, and maps it to the appropriate entities within {stackstate-product-docs}. This enables users to visualize and analyze the telemetry data effectively.
+
+
+== How to test it?
+
+Custom Integrations should be developed against a pre-production deployment of the {stackstate-product-docs} platform. To obtain a pre-production setup to start developing your custom integration, there are two options:
+
+=== SaaS Instance (Recommended):
+For Internal SUSE teams, we recommend requesting a SaaS instance from the {stackstate-product-docs} team. These instances have Custom Integrations enabled and are updated automatically at least with every new release, in some cases would get pre releases containing important bug fixes or increments on experimental features.
+Contact us via the dedicated channel (to be announced).
+
+=== Self-Hosted:
+You can enable Custom Integrations in your own self hosted {stackstate-product-docs} installation by setting some feature flags when installing via helm:
+
+    . Generate the `custom_integrations_values.yaml`. This guide assumes that you save it in the `$VALUES_DIR`
+
++
+.$VALUES_DIR/custom_integrations_values.yaml
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
++
+
+    . Deploy the {stackstate-product-docs} helm chart with the generated values plus the `.$VALUES_DIR/custom_integrations_values.yaml`
+
++
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/custom_integrations_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
++
+
+endif::ss-ff-stackpacks2_enabled[]
