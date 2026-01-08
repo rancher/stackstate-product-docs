@@ -1,0 +1,141 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schemas
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: Component Presentation Schema
+
+== Overview
+
+This page documents the configuration schema used by the UI Presentation model.
+It is intended as a reference for authors defining UI presentation behavior.
+
+All schemas described here are part of *StackPacks 2.0* and are under active development.
+
+== ComponentPresentation
+
+A `ComponentPresentation` defines how matching components are presented in the UI
+for a given mode and context.
+
+[,yaml]
+----
+_type: ComponentPresentation
+identifier: urn:...:component-presentation:<presentation-name>
+mode: ["observability" | "security" | "all"]
+
+binding:
+  _type: ComponentPresentationQueryBinding
+  query: string                       # Primitive STQL query used to match components
+
+rank:
+  specificity: number                 # Higher values indicate more specific definitions
+
+presentation:
+  icon: string                        # Optional icon (base64-encoded)
+  name:                               # Optional naming configuration
+    plural: string
+    singular: string
+    title: string
+
+  mainMenu:                           # Optional main menu entry
+    group: string                     # Name of an existing MainMenuGroup
+    rank: number                      # Optional override within the group
+
+  overview:                           # Optional overview page configuration
+    columns:
+      - _type: string                 # ViewTypeTableCol*
+
+  highlight:                          # Optional highlight page configuration
+    summary:
+      ...
+    fields:
+      - _type: string                 # ComponentTypeField
+        fieldId: string
+        label:
+          title: string
+          helpBubbleText: string      # Optional
+        valueExtractor:
+          _type: string
+        display:
+          _type: string
+    about:
+      _type: ComponentTypeAbout
+      fields:
+        - string
+
+  filter:                             # Optional overview filters
+    - _type: FilterField
+      name: string
+      tagField: string
+----
+
+== Identifier
+
+Identifiers should follow the {stackstate-product-name} identifier (i.e., `urn:...`) format. Refer to xref:/configure/topology/identifiers.adoc[identifiers] documentation for more information.
+
+== Binding
+
+The binding determines which components a `ComponentPresentation` applies to.
+
+Bindings are evaluated against component data and must be simple and efficient, as they are used during UI evaluation.
+
+Currently supported `binding` type:
+
+* `ComponentPresentationQueryBinding`: an STQL query (refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] for more information)
+
+== Rank
+
+The `rank` section controls how multiple matching `ComponentPresentation` definitions are combined.
+
+Higher specificity values indicate more specialized definitions and take precedence over lower values when composing presentation behavior.
+
+== Presentation sections
+
+All fields under `presentation` are optional. A `ComponentPresentation` may define only a subset of presentation aspects.
+
+Presentation sections are composed when multiple definitions apply to the same component.
+
+=== Icon and name
+
+Defines iconography and naming used across the UI.
+
+=== Main menu
+
+Controls whether matching components appear in the main menu.
+
+The referenced menu group must be defined separately using `MainMenuGroup`.
+
+=== Overview
+
+Defines columns shown in overview tables.
+
+Columns may override or extend columns defined by other matching presentations.
+
+TODO: do we list all the `overview.columns` types?
+
+=== Highlight
+
+Defines fields and sections shown on highlight pages.
+
+==== Summary
+
+TBC
+
+==== Fields
+
+Currently supported `fields` type:
+
+* `ComponentTypeField`: ...
+
+TODO: do we list all the `highlights.fields.valueExtractor` and `highlights.fields.display` types?
+
+==== About
+
+Defines fields shown in the about panel on the component highlights page.
+
+=== Filter
+
+Defines filters shown for overview pages.
+
+Filters are shown when matching data exists for the bound components.
+
+endif::ss-ff-stackpacks2_enabled[]
