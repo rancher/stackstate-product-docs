@@ -1,0 +1,425 @@
+= Migrate to global configuration mode
+:description: SUSE Observability Self-hosted
+:page-toclevels: 3
+
+== Overview
+
+This guide explains how to migrate from the legacy two-step installation using the `suse-observability-values` chart to the simplified single-chart installation using `global.suseObservability` configuration.
+
+[NOTE]
+====
+The new `global.suseObservability` configuration method is now the recommended installation approach. The legacy `suse-observability-values` chart method is deprecated but will continue to work for existing installations.
+====
+
+=== Legacy installation (Deprecated)
+
+The old installation method required two steps:
+
+. Generate values files using the `suse-observability-values` chart
+. Install the `suse-observability` chart with the generated values
+
+[,text]
+----
+# Step 1: Generate values
+helm template suse-observability-values suse-observability/suse-observability-values \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="150-ha" \
+  --set adminPassword="your-password" \
+  --set pullSecret.username="registry-user" \
+  --set pullSecret.password="registry-pass" \
+  > generated-values.yaml
+
+# Step 2: Install with generated values
+helm install suse-observability suse-observability/suse-observability \
+  -f generated-values.yaml \
+  -n suse-observability
+----
+
+=== New installation (Recommended)
+
+The new method uses a single values file with `global.suseObservability` configuration:
+
+[,text]
+----
+helm install suse-observability suse-observability/suse-observability \
+  -f values.yaml \
+  -n suse-observability
+----
+
+== Before you migrate
+
+When executing a migration from the legacy installation method, be aware of the following:
+
+[CAUTION]
+====
+This migration guide is for users currently using the `suse-observability-values` chart method. If you are upgrading from StackState 6.0, follow the xref:/setup/upgrade-stackstate/migrate-from-6.adoc[migration from StackState guide] instead.
+====
+
+[NOTE]
+====
+* The migration is performed using a standard Helm upgrade command
+* Your existing data and configuration will be preserved
+* The migration can be performed during a maintenance window
+* Rolling back is possible using standard Helm rollback procedures
+====
+
+== Migration steps
+
+=== Step 1: Backup current configuration
+
+Before starting the migration, save your existing Helm values and any customizations:
+
+[,text]
+----
+# Save current Helm values
+helm get values suse-observability -n suse-observability > backup-values.yaml
+
+# Save your original suse-observability-values input (if available)
+# This is typically your values file used with helm template
+
+# Backup important resources
+kubectl get secrets -n suse-observability -o yaml > backup-secrets.yaml
+----
+
+=== Step 2: Identify your current configuration
+
+Review your existing configuration to identify the following settings:
+
+* *Sizing profile*: Check `sizing.profile` in your suse-observability-values input
+* *License key*: Your SUSE Observability license
+* *Base URL*: The URL where SUSE Observability is accessible
+* *Admin password*: The bcrypt-hashed admin password
+* *Pull secret credentials*: Registry username and password (if used)
+* *Custom affinity settings*: Any node affinity or pod anti-affinity customizations
+
+You can extract some of these from your current installation:
+
+[,text]
+----
+# Check current values
+helm get values suse-observability -n suse-observability
+
+# The sizing profile is visible in resource configurations
+# Look for patterns like replica counts, resource limits, etc.
+----
+
+=== Step 3: Create new values file
+
+Create a new `values.yaml` with the `global.suseObservability` structure:
+
+[,yaml]
+----
+global:
+  # Required: Set image registry for SUSE Observability images
+  imageRegistry: "registry.rancher.com"
+
+  suseObservability:
+    # Required: Your license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for SUSE Observability
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    # Required: Admin password (must be bcrypt hash)
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    adminPassword: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Pull secret for private registry
+    pullSecret:
+      username: "registry-user"
+      password: "registry-pass"
+
+    # Optional: Affinity configuration
+    # These settings apply to all infrastructure components (Elasticsearch,
+    # Kafka, ClickHouse, etc.) automatically - no need to configure per-component
+    affinity:
+      # Node affinity for all components
+      nodeAffinity: null
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+----
+
+=== Step 4: Configuration mapping reference
+
+Use this table to map your old configuration to the new format:
+
+[cols="1,1"]
+|===
+| Old Configuration (suse-observability-values) | New Configuration (global.suseObservability)
+
+| `license`
+| `global.suseObservability.license`
+
+| `baseUrl`
+| `global.suseObservability.baseUrl`
+
+| `sizing.profile`
+| `global.suseObservability.sizing.profile`
+
+| `adminPassword`
+| `global.suseObservability.adminPassword`
+
+| `receiverApiKey`
+| `global.suseObservability.receiverApiKey`
+
+| `imageRegistry`
+| `global.imageRegistry`
+
+| `pullSecret.username`
+| `global.suseObservability.pullSecret.username`
+
+| `pullSecret.password`
+| `global.suseObservability.pullSecret.password`
+
+| `affinity.nodeAffinity`
+| `global.suseObservability.affinity.nodeAffinity`
+
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+| `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+
+| `affinity.podAntiAffinity.topologyKey`
+| `global.suseObservability.affinity.podAntiAffinity.topologyKey`
+
+| `rancherUrl`
+| `stackstate.allowedOrigins` (manual configuration)
+|===
+
+=== Step 5: Handle custom overrides
+
+If you had custom overrides in your generated values file, you can still use them. The new global mode provides sensible defaults that can be overridden on a per-component basis:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    adminPassword: "$2a$10$..."
+    # Global affinity - applied to all components by default
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+# Custom per-component overrides still work - they take precedence over global defaults
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 16Gi  # Override default from sizing profile
+        limits:
+          memory: 20Gi
+
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 500Gi  # Override default storage size
+  # Override affinity for Elasticsearch specifically
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-type
+            operator: In
+            values:
+            - storage-optimized
+----
+
+=== Step 6: Perform the upgrade
+
+[,text]
+----
+# Dry-run first to see what will change
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml \
+  --dry-run
+
+# If everything looks good, perform the actual upgrade
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml
+----
+
+=== Step 7: Verify the upgrade
+
+[,text]
+----
+# Check all pods are running
+kubectl get pods -n suse-observability
+
+# Check for any errors in events
+kubectl get events -n suse-observability --sort-by='.lastTimestamp' | tail -20
+
+# Verify the Helm release
+helm status suse-observability -n suse-observability
+
+# Check the applied values
+helm get values suse-observability -n suse-observability
+----
+
+== Generate a bcrypt password hash
+
+The `adminPassword` must be a bcrypt hash. Generate one using:
+
+[tabs]
+====
+htpasswd (Linux/macOS)::
++
+--
+[,text]
+----
+htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+----
+--
+
+Python::
++
+--
+[,text]
+----
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(10)).decode())"
+----
+--
+
+Docker::
++
+--
+[,text]
+----
+docker run --rm httpd:alpine htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+----
+--
+====
+
+== Troubleshooting
+
+=== Pods stuck in Pending state
+
+This usually indicates a scheduling issue with anti-affinity rules. For clusters with limited nodes, use soft anti-affinity:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: false  # Use soft anti-affinity
+----
+
+=== Resources differ from previous installation
+
+Sizing profiles may have updated resource recommendations. To preserve your previous settings, add explicit overrides:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+
+# Override with your previous resource values
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 8Gi  # Your previous value
+----
+
+=== Configuration style conflicts
+
+Don't mix old and new configuration styles. Use either:
+
+* `global.suseObservability.*` (new style), OR
+* `stackstate.license.key`, `stackstate.baseUrl`, etc. (old style)
+
+[,text]
+----
+# Check for conflicting values
+helm get values suse-observability -n suse-observability | grep -E "license|baseUrl"
+----
+
+=== Rollback if needed
+
+[,text]
+----
+# List release history
+helm history suse-observability -n suse-observability
+
+# Rollback to previous revision
+helm rollback suse-observability <revision-number> -n suse-observability
+----
+
+== Key differences
+
+[cols="1,1,1"]
+|===
+| Aspect | Legacy (suse-observability-values) | New (global.suseObservability)
+
+| Installation steps
+| 2 (template + install)
+| 1 (install)
+
+| Values file management
+| Generated, must be stored
+| Single source of truth
+
+| Profile updates
+| Manual regeneration needed
+| Automatic with chart upgrades
+
+| Pull secret
+| Separate subchart
+| Built-in, auto-configured
+
+| Victoria Metrics HA
+| Manual `enabled: true/false`
+| Auto-configured per profile
+
+| Affinity configuration
+| Generated per-component (separate settings for each service)
+| Centralized global settings (can still be overridden per-component if needed)
+|===
+
+[NOTE]
+====
+The global affinity configuration provides default settings for all infrastructure components. You can still override affinity for specific components (like Elasticsearch or Kafka) when needed by setting component-level affinity values. Component-level settings take precedence over global defaults.
+====
+
+== Cleanup
+
+After successful migration, you can:
+
+. Remove the generated values files (they're no longer needed)
+. Update your deployment scripts to use the new single-step installation
+. Remove any references to `suse-observability-values` chart in your CI/CD pipelines
+
+== See also
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes installation guide]
+* xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc[Steps to upgrade SUSE Observability]
+* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[Version-specific upgrade instructions]
