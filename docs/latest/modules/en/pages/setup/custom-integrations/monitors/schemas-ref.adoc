@@ -1,0 +1,129 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schema and reference for Monitors
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+This page describes the schemas for a `Monitor`, along with detailed explanations of constructs, expression syntax and semantics.
+
+=== Schema for Monitor
+
+A monitor specifies how often a monitor function should run and with which arguments.
+
+[,yaml]
+----
+_type: "Monitor"
+name: string
+description?: string
+function: string
+arguments:
+  <dependent on monitor function>
+intervalSeconds: integer
+remediationHint?: string
+status?: "ENABLED" | "DISABLED"       # defaults to "DISABLED"
+tags:
+  <key>: <value>
+identifier?: string
+----
+
+* `_type`: SUSE Observability needs to know this is a monitor so, value always needs to be `Monitor`
+* `description`: A description of the monitor.
+* `function`: A reference to the monitor function that will execute the monitor.
+* `identifier`: An identifier of the form `+urn:custom:monitor:....+` which uniquely identifies the monitor when updating its configuration.
+* `intervalSeconds`: The interval at which the monitor executes. For regular real-time metric 30 seconds is advised. For longer-running analytical metric queries a bigger interval is recommended.
+* `name`: The name of the monitor
+* `remediationHint`: A description of what the user can do when the monitor fails. The format is markdown, with optionally use of handlebars variables to customize the hint based on time series or other data (xref:/setup/custom-integrations/monitors/index.adoc#_write_the_remediation_hint[more explanation below]).
+* `status`: Either `"DISABLED"` or `"ENABLED"`. Determines whether the monitor will run or not.
+* `tags`: Add tags to the monitor to help organize them in the monitors overview of your SUSE Observability instance, http://your-SUSE Observability-instance/#/monitors
+
+== Threshold Monitor Function
+
+[,yaml]
+----
+arguments:
+  metric:
+    query: string
+    unit: string
+    aliasTemplate: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  urnTemplate: string
+  titleTemplate: string
+----
+
+* `query`: A PromQL query. Use the xref:/use/metrics/k8sTs-explore-metrics.adoc[metric explorer] of your SUSE Observability instance, http://your-instance/#/metrics, and use it to construct query for the metric of interest.
+* `unit`: The unit of the values in the time series returned by the query or queries, used to render the Y-axis of the chart. See the xref:/develop/reference/k8sTs-chart-units.adoc[supported units] reference for all units.
+* `aliasTemplate`: An alias for time series in the metric chart. This is a template that can substitute labels from the time series using the `+${my_label}+` placeholder.
+* `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
+* `threshold`: A numeric threshold to compare against.
+* `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in SUSE Observability and "DEVIATING" as orange, to denote different severity.
+* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be xref:/setup/custom-integrations/monitors/index.adoc#_bind_the_results_of_the_monitor_to_the_correct_components[bound to].
+* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
+
+== Derived State Monitor Function
+
+[,yaml]
+----
+arguments:
+  componentTypes: string
+----
+
+* `componentTypes`: The component types that contribute to derived states.  Specified as a single string of `,` (comma) separated values
+
+== Dynamic Threshold Monitor Function
+
+[,yaml]
+----
+arguments:
+  telemetryQuery:
+    query: string
+    unit: string
+    aliasTemplate: string
+  topologyQuery: string
+  falsePositiveRate: float
+  checkWindowMinutes: integer
+  historicWindowMinutes: integer
+  historySizeWeeks: 1 | 2 | 3 (integer)
+  includePreviousDay: boolean
+  removeTrend: boolean
+----
+
+* `topologyQuery`: STQL query to select components
+* `unit`: The unit of the values in the time series returned by the query or queries, used to render the Y-axis of the chart. See the xref:/develop/reference/k8sTs-chart-units.adoc[supported units] reference for all units.
+* `aliasTemplate`: An alias for time series in the metric chart. This is a template that can substitute labels from the time series using the `+${my_label}+` placeholder.
+* `falsePositiveRate`: say `!!float 1e-8` - the sensitivity of the monitor to deviating behavior.  A lower value suppresses more (false) positives but may also lead to false negatives (unnoticed anomalies).
+* `checkWindowMinutes`: say `10` minutes - the check window needs to be balanced between quick alerting (small values) and correctly identified anomalies (high values).  A handful of data points works well in practice.
+* `historicWindowMinutes`: say `120` (2 hours) - bracketed around the current time, but then one or more weeks ago - so from 1 hour before the current time to 1 hour after.  Also the 2 hours before the check window are used.  The dynamic threshold monitor compares the distribution of this historic data with the data points in the check window.
+* `historySizeWeeks`: say `2` - the number of weeks that data is taken from for historic context.  Can be `1`, `2` or `3`.
+* `removeTrend`: for metrics that have trend behavior (say, number of requests), such that the absolute value differs from week to week, this trend (the average value) can be accounted for.
+* `includePreviousDay`: typically `false` - for metrics that do not have a weekly but only a daily pattern, this allows the use of more recent data
+
+== Topological Threshold Monitor Function
+
+[,yaml]
+----
+arguments:
+  queries:
+    topologyQuery: string
+    promqlQuery: string
+    aliasTemplate: string
+    unit: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  titleTemplate: string
+----
+
+* `topologyQuery`: STQL query to select components
+* `promqlQuery`: PromQL query that can use labels and properties of components to select time series
+* `unit`: The unit of the values in the time series returned by the query or queries, used to render the Y-axis of the chart. See the xref:/develop/reference/k8sTs-chart-units.adoc[supported units] reference for all units.
+* `aliasTemplate`: An alias for time series in the metric chart. This is a template that can substitute labels from the time series using the `+${my_label}+` placeholder.
+* `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
+* `threshold`: A numeric threshold to compare against.
+* `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in SUSE Observability and "DEVIATING" as orange, to denote different severity.
+* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
+
+#endif::[]
