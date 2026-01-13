@@ -252,7 +252,7 @@ EOF
 }
 EOF
         ts=$(jq -r '.hits.hits[-1].sort[0]' $TEMP)
-        if [ "$ts" != "null" ]; then
+        if [ "$ts" != "null" ] && [ "$ts" != "" ]; then
           from=$(($ts / 1000000))
         else
           from=""
