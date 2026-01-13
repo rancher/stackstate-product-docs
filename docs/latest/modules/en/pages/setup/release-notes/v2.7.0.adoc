@@ -1,0 +1,42 @@
+= v2.7.0 - 14/Jan/2026
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: {stackstate-product-name} Helm Chart v2.7.0
+
+WARNING:  This release has a *BREAKING CHANGE*: The `backup.enabled` Helm value has been replaced by `global.backup.enabled`. Using the old `backup.enabled=true` value will now cause the deployment to **fail**.
+
+== New Features & Enhancements
+
+* *SUSE Observability Dashboards:* A major new feature allowing the visualization of data from business processes, user flows, and data pipelines in a central location. This provides a familiar environment for users migrating from tools like Grafana and Prometheus to recreate visualizations and define custom metrics.
+** *Integrated RBAC:* Dashboards respect existing platform permissions and can be toggled between private and public visibility.
+** *Versatile Widgets:* Includes time-series charts, bar charts, gauges, and Markdown fields with support for manual resizing and drag-and-drop layout.
+** *Customization:* Supports query variables, custom thresholds, and visualization styling. Dashboards can be bundled in StackPacks or created ad-hoc from existing metric widgets.
+* *CLI Management:* The `sts` CLI now supports the `dashboard` command to manage SUSE Observability Dashboards programmatically.
+* *Quorum Observation Daemon:* Introduced a small logging daemon that monitors the quorum of redundant services within the platform to ensure high availability.
+* *Improved Error Handling:* Enhanced error messages and handling across all platform perspectives.
+* *Storage Metric Visualization:* Improved PV and PVC metric charts to simplify data by showing only a single time-series for usage and capacity.
+* *Agent: Splunk Integration:* Disabled saved searches in Splunk are now automatically ignored by the Splunk check.
+
+== Bug Fixes
+
+* *Platform: SLES 16 OOM Fix:* Resolved an issue where several pods (HBase, Tephra) would encounter Out-Of-Memory (OOM) errors on SLES 16 due to cgroups v2 resource management.
+* *Backup Configuration Redesign:*
+** *BREAKING CHANGE:* The `backup.enabled` Helm value has been replaced by `global.backup.enabled`. Using the old `backup.enabled=true` value will now cause the deployment to **fail**.
+** *Global Management:* Backups are now managed globally via `global.backup.enabled` and can no longer be toggled per individual datastore (Settings backups remain always enabled).
+** *Simplified Restore:* The `*.backup.restore.enable` Helm values have been removed in favor of the global setting.
+** *New Tool:* Introduced `sts-backup`, a dedicated CLI tool for managing and restoring backups. Refer to the documentation for xref:setup/data-management/backup_restore/backup_enable.adoc[Enabling Backups] and  xref:setup/data-management/backup_restore/backup_restore.adoc[Restore Procedures]
+* *Platform: Kafka Init Container:* Fixed a bug where the Kafka init container would occasionally get stuck during a fresh installation.
+* *StackGraph: Long-Running Scans:* Resolved a StackGraph corruption issue that could occur during long-running data scans.
+* *Platform: RBAC Agent Token Refresh:* Fixed an issue where the `rbac-agent` failed to refresh its ServiceAccount token, leading to a loss of authentication.
+* *UI Performance:* Resolved an issue where the user interface would occasionally become unresponsive when viewing complex metric charts.
+* *OpenShift StackPack Fix:* Corrected the StackPack page URL for integration with the OpenShift `ClusterLogForwarder`.
+* *Slack Notification Improvement:* Users can now manually enter a Slack Channel ID, resolving issues when workspaces contain a large number of channels.
+* *YAML Variable Parsing:* Fixed a bug in YAML parsing when a value is a variable reference (e.g., `alias: ${cluster-name}`).
+* *Security and Dependencies:* Updated base OS packages and runtime dependencies for `jmx-exporter`, `kafkaup-operator`, `clickhouse-backup`, and `kafka` images.
+
+=== Agent Bug Fixes
+
+* *Agent: Credential Masking:* Fixed an issue to ensure credentials from the Splunk integration are not logged when debug mode is enabled.
+* *Agent: Resource Definition:* Resolved an issue where the Kubernetes `rbac-agent` would ignore custom resource limits defined in the `values.yaml` file.
