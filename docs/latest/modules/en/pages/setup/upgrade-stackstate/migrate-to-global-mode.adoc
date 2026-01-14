@@ -47,6 +47,98 @@ helm install suse-observability suse-observability/suse-observability \
   -n suse-observability
 ----
 
+== Convert before installation
+
+If you have prepared parameters for the legacy `suse-observability-values` chart but haven't installed yet, you can convert directly to the new method without creating intermediate values files.
+
+=== Direct parameter conversion
+
+Convert your `helm template` command to a `helm upgrade --install` command by mapping the parameters:
+
+[cols="1,1"]
+|===
+| Old Parameter | New Parameter
+
+| `--set license="..."`
+| `--set global.suseObservability.license="..."`
+
+| `--set baseUrl="..."`
+| `--set global.suseObservability.baseUrl="..."`
+
+| `--set sizing.profile="..."`
+| `--set global.suseObservability.sizing.profile="..."`
+
+| `--set receiverApiKey="..."`
+| `--set global.suseObservability.receiverApiKey="..."`
+
+| `--set adminPassword="..."`
+| `--set global.suseObservability.adminPassword="..."` (must be bcrypt hash)
+
+| `--set imageRegistry="..."`
+| `--set global.imageRegistry="..."`
+
+| `--set pullSecret.username="..."`
+| `--set global.suseObservability.pullSecret.username="..."`
+
+| `--set pullSecret.password="..."`
+| `--set global.suseObservability.pullSecret.password="..."`
+|===
+
+=== Example: Before and after
+
+.Legacy command (do not use)
+[,bash]
+----
+export VALUES_DIR=.
+helm template \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="10-nonha" \
+  --set receiverApiKey="YOUR-API-KEY" \
+  --set imageRegistry="quay.io" \
+  --set pullSecret.username="stackstate+k8snodes" \
+  --set pullSecret.password="YOUR-PASSWORD" \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+
+# Then: helm install with generated files...
+----
+
+.New command (recommended)
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+  --set global.suseObservability.baseUrl="https://observability.example.com" \
+  --set global.suseObservability.sizing.profile="10-nonha" \
+  --set global.suseObservability.receiverApiKey="YOUR-API-KEY" \
+  --set global.suseObservability.adminPassword='$2a$10$...' \
+  --set global.suseObservability.pullSecret.username="stackstate+k8snodes" \
+  --set global.suseObservability.pullSecret.password="YOUR-PASSWORD" \
+  --set global.imageRegistry="quay.io" \
+  suse-observability suse-observability/suse-observability
+----
+
+[NOTE]
+====
+The `adminPassword` must be a bcrypt hash in the new method. See <<_generate_a_bcrypt_password_hash>> for how to generate one.
+====
+
+=== Using a values file instead
+
+If you prefer using a values file, create `values.yaml` with the configuration shown in <<_step_3_create_new_values_file>>, then run:
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability suse-observability/suse-observability
+----
+
 == Before you migrate
 
 When executing a migration from the legacy installation method, be aware of the following:
@@ -103,6 +195,87 @@ helm get values suse-observability -n suse-observability
 # The sizing profile is visible in resource configurations
 # Look for patterns like replica counts, resource limits, etc.
 ----
+
+=== Understanding auto-generated vs custom values
+
+When you run `helm get values`, you may see hundreds of lines of configuration. However, most of these are *auto-generated* by the sizing profile and do *not* need to be manually preserved in your migration values file.
+
+==== What the sizing profile provides automatically
+
+When you set `global.suseObservability.sizing.profile`, the chart automatically configures:
+
+* Resource requests and limits for all components (Elasticsearch, Kafka, ClickHouse, server, receiver, etc.)
+* Replica counts for stateful services
+* Storage sizes for persistent volumes
+* HBase deployment mode (Mono for non-HA, Distributed for HA)
+* Server and receiver split configuration
+* Victoria Metrics HA settings
+* Environment variables (`extraEnv`) including `CONFIG_FORCE_*` settings for performance tuning
+
+==== What you need to preserve
+
+Only preserve values that are *truly custom* - configurations you added or modified beyond what the sizing profile provides:
+
+[cols="1,1"]
+|===
+| Preserve (Custom) | Don't Preserve (Auto-generated)
+
+| Core settings (license, baseUrl, adminPassword, receiverApiKey)
+| Resource limits and requests
+
+| Ingress configuration (hosts, TLS, annotations)
+| Replica counts
+
+| Custom environment variables you added
+| Storage sizes
+
+| Authentication settings (LDAP, OIDC)
+| `CONFIG_FORCE_*` environment variables
+
+| Custom `allowedOrigins`
+| Kafka/Zookeeper replication factors
+
+| OpenTelemetry collector custom ingress
+| HBase deployment mode
+|===
+
+==== Example: Minimal migration values file
+
+Your migration values file should be *much smaller* than `helm get values` output:
+
+[,yaml]
+----
+global:
+  imageRegistry: "quay.io"
+  suseObservability:
+    license: "YOUR-LICENSE"
+    baseUrl: "https://your-url.example.com"
+    sizing:
+      profile: "10-nonha"  # This handles all resource configuration!
+    adminPassword: "$2a$10$..."
+    receiverApiKey: "your-api-key"
+    pullSecret:
+      username: "..."
+      password: "..."
+
+# Only include truly custom configurations below
+ingress:
+  enabled: true
+  ingressClassName: your-ingress-class
+  annotations:
+    # your custom annotations
+  hosts:
+  - host: your-url.example.com
+  tls:
+  - hosts:
+    - your-url.example.com
+    secretName: your-tls-secret
+----
+
+[TIP]
+====
+If you're unsure whether a value is custom or auto-generated, compare it against the sizing profile defaults. Values like `elasticsearch.resources`, `kafka.resources`, `stackstate.components.server.resources`, and `CONFIG_FORCE_*` environment variables are all generated by the profile and can be safely omitted.
+====
 
 === Step 3: Create new values file
 

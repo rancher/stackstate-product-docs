@@ -1,9 +1,9 @@
 = Affinity Values Configuration
 :revdate: 2025-07-10
 :page-revdate: {revdate}
-:description: SUSE Observability Affinity Configuration
+:description: {ss-rancher-product-short-name} Affinity Configuration
 
-The SUSE Observability Values chart generates affinity configurations you can use with the main SUSE Observability chart to control pod scheduling behavior. The affinity values help optimize resource utilization and ensure high availability by controlling where pods are scheduled.
+Affinity configurations control pod scheduling behavior in {ss-rancher-product-short-name}. The affinity values help optimize resource utilization and ensure high availability by controlling where pods are scheduled.
 
 == Available Configuration Options
 
@@ -55,7 +55,7 @@ affinity:
 
 === Basic Node Affinity (same Availability Zone) + hard PodAntiAffinity for HA Deployment
 
-Assume you set `sizing.profile` to one of the HA profiles. The values below configure nodeAffinity to schedule components of SUSE Observability to the `us-west-2a` zone and enforce scheduling the replicas of the same data services to different hosts (`affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true` by default).
+Assume you set `sizing.profile` to one of the HA profiles. The values below configure nodeAffinity to schedule components of {ss-rancher-product-short-name} to the `us-west-2a` zone and enforce scheduling the replicas of the same data services to different hosts (`affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true` by default).
 [,yaml]
 ----
 affinity:
@@ -81,7 +81,68 @@ affinity:
 
 == Usage
 
-=== Step 1: Create Your Affinity Values file
+[tabs]
+====
+Recommended method::
++
+--
+Add affinity configuration directly to your `values.yaml` file under `global.suseObservability.affinity`:
+
+[source,yaml]
+----
+global:
+  suseObservability:
+    # Your existing configuration
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    sizing:
+      profile: "150-ha"
+    adminPassword: "$2a$10$..."
+
+    # Affinity configuration
+    affinity:
+      # Node affinity - schedule all pods to nodes in the same AZ
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        # true = hard anti-affinity, false = soft anti-affinity
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+----
+
+Then install or upgrade with a single command:
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+TIP: For HA profiles, pod anti-affinity is automatically applied to all stateful data services. You only need to configure it if you want to change the default behavior.
+
+For more details on migration from the legacy method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide].
+--
+Legacy method (Deprecated)::
++
+--
+[WARNING]
+=====
+This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
+=====
+
+==== Step 1: Create Your Affinity Values file
 
 Create a separate values file with your desired affinity configuration. For example, save the following as `suse-observability-values-values.yaml`:
 
@@ -100,7 +161,7 @@ affinity:
     requiredDuringSchedulingIgnoredDuringExecution: true
 ----
 
-=== Step 2: Generate Affinity template values
+==== Step 2: Generate Affinity template values
 
 Run the following command to generate the affinity values template:
 
@@ -116,7 +177,7 @@ helm template \
   suse-observability/suse-observability-values --output-dir $VALUES_DIR
 ----
 
-=== Step 3: Use generated values in Helm installation
+==== Step 3: Use generated values in Helm installation
 
 Include the generated affinity values in your Helm installation:
 
@@ -131,3 +192,5 @@ helm upgrade \
   suse-observability \
   suse-observability/suse-observability
 ----
+--
+====
