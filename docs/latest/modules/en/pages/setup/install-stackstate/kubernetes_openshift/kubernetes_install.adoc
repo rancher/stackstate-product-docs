@@ -39,7 +39,7 @@ Also, make sure to follow the air-gapped installation instructions whenever thos
 
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where SUSE Observability will be installed]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#create-values-yaml[Create `values.yaml` configuration file]
-. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_set_up_a_storage_class[Set up a storage class]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_configure_storage_class_optional[Configure storage class (Optional)]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Deploy SUSE Observability with Helm]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_access_the_suse_observability_ui[Access the SUSE Observability UI]
 
@@ -73,11 +73,12 @@ Create a `values.yaml` file with the `global.suseObservability` configuration st
 [source,yaml]
 ----
 global:
-  # Required: Set image registry for SUSE Observability images
-  imageRegistry: "registry.rancher.com"
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
 
-  # Required: Storage class for persistent volumes
-  storageClass: "local-path"  # Rancher's local-path recommended if available
+  # Optional: Override storage class (uses cluster default if not set)
+  # storageClass: "your-storage-class"
 
   suseObservability:
     # Required: Your SUSE Observability license key
@@ -208,22 +209,21 @@ The {ss-rancher-product-short-name} Values chart generates affinity configuratio
 --
 ====
 
-=== Set up a storage class
+=== Configure storage class (Optional)
 
-You need to set up a storage class. Rancher's `local-path` is recommended if available, but SUSE Storage is also supported.
+{ss-rancher-product-short-name} uses the cluster's default storage class if not specified. You can optionally override this by setting `global.storageClass` in your `values.yaml` file.
 
 [tabs]
 ====
 Recommended method::
 +
 --
-Add the storage class to your `values.yaml` file under `global.storageClass`:
+If you need to use a specific storage class, add it to your `values.yaml` file under `global.storageClass`:
 
 [source,yaml]
 ----
 global:
-  imageRegistry: "registry.rancher.com"
-  storageClass: "local-path"  # Your storage class name
+  storageClass: "your-storage-class"  # e.g., "local-path" for Rancher local-path provisioner
   suseObservability:
     # ... other configuration
 ----
@@ -237,8 +237,7 @@ Edit the file `$VALUES_DIR/suse-observability-values/templates/baseConfig_values
 ----
 # Source suse-observability-values/templates/baseConfig_values.yaml
 global:
-  imageRegistry: "registry.rancher.com"
-  storageClass: "local-path" # New configuration line, the rest remains the same
+  storageClass: "your-storage-class" # Optional: override default storage class
 ----
 --
 ====

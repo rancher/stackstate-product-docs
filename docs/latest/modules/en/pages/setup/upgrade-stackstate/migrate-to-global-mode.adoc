@@ -284,8 +284,9 @@ Create a new `values.yaml` with the `global.suseObservability` structure:
 [,yaml]
 ----
 global:
-  # Required: Set image registry for SUSE Observability images
-  imageRegistry: "registry.rancher.com"
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
 
   suseObservability:
     # Required: Your license key
@@ -456,36 +457,18 @@ helm get values suse-observability -n suse-observability
 
 == Generate a bcrypt password hash
 
-The `adminPassword` must be a bcrypt hash. Generate one using:
+If migrating from the legacy method, your existing `adminPassword` is already a bcrypt hash and can be used directly.
 
-[tabs]
-====
-htpasswd (Linux/macOS)::
-+
---
-[,text]
+If you need to generate a new bcrypt hash:
+
+[,bash]
 ----
 htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
 ----
---
 
-Python::
-+
---
-[,text]
-----
-python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(10)).decode())"
-----
---
-
-Docker::
-+
---
-[,text]
-----
-docker run --rm httpd:alpine htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
-----
---
+[NOTE]
+====
+Future versions will also support plain text passwords.
 ====
 
 == Troubleshooting
