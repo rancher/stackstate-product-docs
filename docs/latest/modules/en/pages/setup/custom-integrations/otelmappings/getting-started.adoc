@@ -1,0 +1,325 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Getting Started
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: Getting Started with deriving Topology from OpenTelemetry
+
+== Overview
+
+This document provides a getting started guide for building topology from OpenTelemetry (OTel) trace data using component and relation mappings packaged as part of a StackPack.
+
+This guide focuses on topology that can be visualized immediately in the product using telemetry data that is already present. The example topology that will be generated models how a service instance executes a process, derived from OpenTelemetry resource attributes.
+
+
+== Prerequisites
+
+
+* You already collect OpenTelemetry traces.
+* You are creating or extending a StackPack.
+* You are comfortable with YAML and basic OTel concepts (resources, spans).
+
+The guide will focus on:
+
+* Trace-based topology (`TRACES` signal only)
+* Service instances (not logical services)
+* Runtime process visibility
+
+[NOTE]
+====
+In this guide, component and relation mappings are expressed as YAML configuration that is packaged, tested, and deployed as part of a StackPack.
+====
+
+== The goal: what topology do we want?
+
+== Configuring topology
+
+The goal is to visualize runtime execution topology that is immediately available without additional user configuration.
+
+Specifically, we want to model:
+
+[source]
+----
+service instance (component) -> executes (relation) -> process (component)
+----
+
+Where:
+
+* A `service instance` represents a running instance of an instrumented service.
+* A `process` represents the operating system process executing that service.
+* The `executes` relation indicates that the service instance is backed by, and running within, a specific process.
+
+All of this topology is derived automatically from OpenTelemetry trace data.
+
+== Trace data
+
+In addition to service identity, the trace resource includes process-level attributes, such as:
+
+* `process.pid`
+* `process.executable.name`
+* `process.executable.path`
+* `process.command_args`
+* `process.runtime.name`
+* `process.runtime.version`
+
+These attributes allow us to model process-level topology without span correlation or heuristics.
+
+== Traces to topology: the mental model
+
+Before writing any configuration, it’s important to understand how topology mappings work conceptually.
+
+=== Components
+
+A component mapping describes how a topology node is created from telemetry data.
+
+Each component mapping:
+
+* Selects telemetry using conditions.
+* Extracts values using expressions.
+* Produces a single logical component identified by a stable identifier.
+
+In this guide:
+
+* Service instances are provided by the OpenTelemetry StackPack.
+* Processes are derived from OpenTelemetry resource attributes.
+
+=== Relations
+
+A relation mapping describes how a connection between two components is created.
+
+Each relation mapping:
+
+* Resolves a `sourceId` and a `targetId`.
+* Assigns a relation type.
+* Produces a directed edge.
+
+Relations are created once both the source and target components exist.
+
+== Creating service components from traces
+=== Defining what a "service" means
+
+Before writing the mapping, we need to make a design decision.
+
+For this guide, a service is defined as:
+
+* Identified by `service.namespace` + `service.name`.
+* Stable across deployments.
+* Independent of service instances.
+
+This keeps topology readable and low cardinality.
+
+== Service instance components
+
+Service instance components are already defined and provided by the OpenTelemetry StackPack.
+
+Each service instance:
+
+* Is derived from `service.name`, `service.namespace`, and `service.instance.id`.
+* Represents a concrete running instance of a service.
+* Is stable across signals (traces and metrics).
+
+Because this mapping already exists, it is not redefined in this guide. Instead, we build on top of it.
+
+== Creating process components from traces
+
+=== Defining what a "process" means
+
+For this guide, a process is defined as:
+
+* Identified by `host.name`, `process.pid` and executable metadata.
+* Scoped to a single runtime environment.
+* Derived exclusively from OpenTelemetry resource attributes.
+
+This keeps the topology low-cardinality while still exposing useful runtime detail.
+
+=== Process component mapping
+
+The following component mapping creates one topology component per observed process.
+
+[,yaml]
+----
+_type: "OtelComponentMapping"
+name: "OTel Process"
+description: "Represents an operating system process derived from OpenTelemetry"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "executableName"
+    value: >-
+      ${
+        'process.executable.name' in resource.attributes ?
+         resource.attributes['process.executable.name'] :
+          'process.command' in resource.attributes ?
+           resource.attributes['process.command'] :
+            'process.command_args' in resource.attributes ?
+             resource.attributes['process.command_args'] :
+                resource.attributes['process.executable.path']
+      }
+output:
+  identifier: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  name: "${vars.hostname}/${vars.executableName}:${vars.pid}"
+  typeName: "process"
+  typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:process"
+  layerName: "Applications"
+  domainName: "Open Telemetry"
+  required:
+    tags:
+      - source: "process-component"
+        target: "custom"
+      - source: "${resource.attributes}"
+        pattern: "process.(.*)"
+        target: "process.${1}"
+expireAfter: 900000
+----
+
+==== How this mapping works
+
+* We process trace data only (TRACES signal).
+* A process component is created whenever `host.name` and `process.pid` is present.
+* The identifier is stable for the lifetime of the process.
+* A custom tag is added to aid filtering (for the verification stage).
+
+Substitute `<stackpack-name>` with the name of your StackPack.
+
+== Creating executes relations
+
+Now that service instances and processes exist as components, we can connect them.
+
+=== Service instance executes process
+
+The following relation mapping creates an executes relation from a service instance to a process.
+
+This mapping is adapted from the existing "host executes service instance" relation provided by the OpenTelemetry StackPack.
+
+[,yaml]
+----
+_type: "OtelRelationMapping"
+name: "Executes Relation (Service Instance -> Process)"
+description: "Service instance executes a process"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'service.name' in resource.attributes &&
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "namespace"
+    value: "${'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ? resource.attributes['service.namespace'] : 'default'}"
+  - name: "service"
+    value: "${resource.attributes['service.name']}"
+  - name: "instanceId"
+    value: >-
+      ${
+        'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
+        resource.attributes['service.instance.id'] :
+        resource.attributes['service.name']
+      }
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+output:
+  sourceId: "urn:opentelemetry:namespace/${vars.namespace}:service/${vars.service}:serviceInstance/${vars.instanceId}"
+  targetId: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  typeName: "executes"
+expireAfter: 900000
+----
+
+==== How this mapping works
+
+* We process trace data only (`TRACES` signal).
+* The relation is created whenever both service instance and process data are present.
+* No span correlation is required.
+* The `targetId` expression needs to be the same as the process component mapping's `output.identifier` expression.
+
+The relation identifier is constructed (automatically) from the `sourceId` and `targetId`, and is of the form: `sourceId-relationId`
+
+Substitute `<stackpack-name>` with the name of your StackPack.
+
+== Validating the OTel mappings
+
+Assuming both mappings live inside your StackPack, they can be tested together. Refer to xref:/setup/cli/cli-sts.adoc[StackPack CLI] documentation for more information.
+
+Using the `sts stackpack test --yes` command, you can:
+
+* Package, upload, and install/upgrade the StackPack
+* Validate the declarative component and relation mappings residing in the StackPack (e.g., expression correctness, correct reference of input signal data based on filtering provided)
+
+[NOTE]
+====
+The `sts stackpack test` command doesn't feed example trace data through the mappings. To verify that the mappings produce the correct topology, ensure Open Telemetry trace data is sent to SUSE Observability. Refer to the xref:/setup/custom-integrations/develop.adoc[Develop a Custom Integration (StackPack)] for more details on how to use `sts stackpack test`.
+====
+
+== Resulting topology
+
+When these mappings are applied, the resulting topology forms a service-process graph derived entirely from trace data.
+
+For example, using the `checkoutservice` from the OTel demo app, visually, the topology should appear as:
+
+----
+checkoutservice (instance) ─> executes ─> checkoutservice (process)
+----
+
+This topology updates continuously as new traces arrive and automatically expires when traffic stops.
+
+=== View the resulting topology in {stackstate-product-name}
+
+Use the {stackstate-product-name} UI to get visual confirmation that the mappings materialize into the expected topology.
+
+1. Open the {stackstate-product-name} UI at the configured `baseUrl` Helm value
+2. In the left-hand sidebar, click on `Open Telemetry > Services Instances`
+3. Find the `checkoutservice` in the list of service instances and click on the service instance name to open the Component Overview/Highlights page
+4. In the sub navigation-bar at the top, select `Topology`
+5. In the `Outgoing` layer, an `od-checkoutservice-<hostId>/checkoutservice:1 (process)` node should be visible
+6. Select the process node, and click `Explore component`
+7. A smaller topology visualizing `checkoutservice -> executes -> checkoutservice (process)` should be visible
+
+See the xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[Troubleshooting] guide for tips to debug if the topology is not materializing as expected.
+
+image:custom-integrations/otel-mappings/topology_from_otel_guide_topology_result.png[Topology result]
+
+To see all the process components created as a result of the process component mapping being applied:
+
+1. Open the {stackstate-product-name} UI at the configured `baseUrl` Helm value
+2. In the left-hand sidebar, click on `Open Telemetry > Services Instances`
+3. In the sub navigation-bar at the top, click on `Save view as...` and give it a name (e.g., `Custom process components`)
+4. In the left-hand sidebar, click on `Views`, and open the view created in step 3
+5. In the sub navigation-bar at the top, on the far right, click on `Filters`
+6. Remove `otel service instance` from the `Component Types` field, and type `process`
+7. Remove `stackpack:opentelemetry` from the `Component Labels` field, and type `custom:process-component`
+
+image:custom-integrations/otel-mappings/topology_from_otel_guide_process_custom_view.png[Custom view]
+
+== Summary
+
+In this guide, you:
+
+* Built on existing service instance components.
+* Derived process components from OpenTelemetry resource attributes.
+
+== Next steps
+
+From here, you can:
+
+* Attach processes to hosts or containers.
+* Introduce database or messaging relations.
+* Introduce runtime-specific layers (JVM, Go, Node.js).
+* Explore metrics-based service graphs.
+* Extend the StackPack with additional topology layers.
+* Familiarize yourself with an in-depth component and relation mapping xref:/setup/custom-integrations/otelmappings/schemas-ref.adoc[reference].
+
+endif::ss-ff-stackpacks2_enabled[]
