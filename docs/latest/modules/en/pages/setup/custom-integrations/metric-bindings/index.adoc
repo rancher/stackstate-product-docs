@@ -6,14 +6,14 @@ ifdef::ss-ff-stackpacks2_enabled[]
 
 == Overview
 
-SUSE Observability provides already many metric charts by default on most types of components that represent Kubernetes resources. Extra metric charts can be added to any set of components whenever needed. When adding metrics to components there are 2 options:
+{stackstate-product-name} provides already many metric charts by default on most types of components that represent Kubernetes resources. Extra metric charts can be added to any set of components whenever needed. When adding metrics to components there are two options:
 
-. The metrics are already collected by SUSE Observability but aren't visualized on a component by default
-. The metrics aren't yet collected by SUSE Observability at all and therefore aren't available yet
+. The metrics are already collected by {stackstate-product-name} but aren't visualized on a component, by default
+. The metrics aren't yet collected by {stackstate-product-name} at all and therefore aren't available yet
 
-For option 1 the steps below will instruct you how to create a metric binding which will configure SUSE Observability to add a specific metric to a specific set of components.
+For option 1, the steps below will instruct you on how to create a metric binding which will configure {stackstate-product-name} to add a specific metric to a specific set of components.
 
-In case of option 2, first make sure that the metrics are available in SUSE Observability, by sending them to SUSE Observability using the xref:/use/metrics/k8s-prometheus-remote-write.adoc[Prometheus remote write protocol]. Only after that continue by adding charts for the metrics to the components.
+For option 2, ensure the metrics are available in {stackstate-product-name} by sending them to {stackstate-product-name} using the xref:/use/metrics/k8s-prometheus-remote-write.adoc[Prometheus remote write protocol]. Continue by adding charts for the metrics to the components ONLY after ensuring the metrics are available.
 
 == Steps
 
@@ -25,11 +25,11 @@ Steps to create a metric binding:
 . <<_bind_the_correct_time_series_to_each_component,Bind the correct time series to each component>>
 . <<_create_or_update_the_metric_binding_in_suse_observability,Create or update the metric binding in SUSE Observability>>
 
-As an example the steps will add a metric binding for the `Replica counts`  of Kubernetes deployments. This is just an example, this metric binding already exists in SUSE Observability by default.
+For example, the steps will add a metric binding for the `Replica counts`  of Kubernetes deployments. This metric binding already exists in {stackstate-product-name}, by default.
 
 == Create an outline of the metric binding
 
-Create a new YAML file called `metricbindings.yaml` and add this YAML template to it to create your own metric binding. If you used the `sts stackpack` command, this file will already be present.  Open it in your favorite code editor to change it throughout this guide. At the end the SUSE Observability CLI will be used to create and update the metric bindings in SUSE Observability.
+Create a new YAML file called `metricbindings.yaml` and add this YAML template to it to create your own metric binding. If you used the `sts stackpack` command, this file will already be present.  Open it in your favorite code editor to change it throughout this guide. At the end, the {stackstate-product-name} CLI will be used to create and update the metric bindings in {stackstate-product-name}.
 
 ----
 - _type: MetricBinding
@@ -65,27 +65,27 @@ Switch to the advanced mode to copy the resulting topology query and put it in t
 
 [NOTE]
 ====
-Metric bindings only support the query filters, query functions like `withNeighborsOf` aren't supported and can't be used.
+Metric bindings only support the query filters. Query functions like `withNeighborsOf` are not supported and cannot be used.
 ====
 
 
 == Write the PromQL query
 
-Go to the xref:/use/metrics/k8sTs-explore-metrics.adoc[metric explorer] of your SUSE Observability instance, http://your-instance/#/metrics, and use it to query for the metric of interest. The explorer has auto-completion for metrics, labels, label values but also PromQL functions, and operators to help you out. Start with a short time range of, for example, an hour to get the best results.
+Go to the xref:/use/metrics/k8sTs-explore-metrics.adoc[metric explorer] of your {stackstate-product-name} instance, http://your-instance/#/metrics, and use it to query for the metric of interest. The explorer has auto-completion for metrics, labels, label values but also PromQL functions, and operators to help you out. Start with a short time range of, for example, an hour to get the best results.
 
-For the total number of replicas use the `kubernetes_state_deployment_replicas` metric. To make the charts shown for this metric representative for the time series data extend the query to do an aggregation using the `+${__interval}+` parameter:
+For the total number of replicas, use the `kubernetes_state_deployment_replicas` metric. To show the metrics charts of the time series data, extend the query to do an aggregation using the `+${__interval}+` parameter:
 
 ----
 max_over_time(kubernetes_state_deployment_replicas[${__interval}])
 ----
 
-In this specific case use `max_over_time` to make sure the chart always shows the highest number of replicas at any given time. For longer time ranges this means that a short dip in replicas won't be shown, to emphasize the lowest number of replicas use `min_over_time` instead.
+In this specific case, use `max_over_time` to make sure the chart always shows the highest number of replicas at any given time. For longer time ranges, a short dip in replicas are not shown. To emphasize the lowest number of replicas, use `min_over_time` instead.
 
-Copy the query into the `expression` property of the first entry in the `queries` field of the metric binding. Use `Total replicas` as an alias. This is the name that will show in the chart legend.
+Copy the query into the `expression` property of the first entry in the `queries` field of the metric binding. Use `Total replicas` as an alias. for it to show up in the chart legend.
 
 [NOTE]
 ====
-In SUSE Observability the size of the metric chart automatically determines the granularity of the metric shown in the chart. PromQL queries can adjusted to make optimal use of this behavior to get a representative chart for the metric. xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[Writing PromQL for charts] explains this in detail.
+In {stackstate-product-name}, the size of the metric chart automatically determines the granularity of the metric shown in the chart. PromQL queries can adjusted to make optimal use of this behavior to get a representative chart for the metric. xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[Writing PromQL for charts] explains this in detail.
 ====
 
 
@@ -108,7 +108,7 @@ queries:
 scope: type = "deployment" and label = "stackpack:kubernetes"
 ----
 
-Creating it in SUSE Observability and viewing the "Replica count" chart on a deployment component gives an unexpected result. The chart shows the replica counts for all deployments. Logically one would expect only 1 time series: the replica count for this specific deployment.
+Creating it in {stackstate-product-name} and viewing the "Replica count" chart on a deployment component gives an unexpected result. The chart shows the replica counts for all deployments. Logically one would expect only 1 time series: the replica count for this specific deployment.
 
 image::k8s/k8s-replica-counts-without-binding.png[The incorrect chart for a single deployment, it shows the replica count for all deployments]
 
@@ -137,7 +137,7 @@ The cluster name, namespace and a combination of the component type and name are
 
 == Create or update the metric binding in SUSE Observability
 
-Use the SUSE Observability CLI to create the metric binding in SUSE Observability. Make sure the `metric-bindings.yaml` is saved and looks like this:
+Use the {stackstate-product-name} CLI to create the metric binding in {stackstate-product-name}. Make sure the `metric-bindings.yaml` is saved and looks like this:
 
 ----
 nodes:
