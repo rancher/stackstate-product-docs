@@ -1,0 +1,120 @@
+= Using the CLI for metric bindings
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+You can use the {stackstate-product-name} CLI to inspect and modify metric bindings.  These are handled like other settings using the `sts settings` command.
+
+== Inspecting Metric Bindings
+
+=== Listing Metric Bindings
+
+The `sts settings` command can list all metric bindings:
+
+[,bash]
+----
+sts settings list --type MetricBinding
+TYPE          | ID              | IDENTIFIER         | NAME               | OWNED BY           | LAST UPDATED        
+MetricBinding | 190567588459765 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET        
+              |                 | etric-binding:pod: |                    |                    |                   
+              |                 | dotnet-gc-allocate |                    |                    |                   
+              |                 | d                  |                    |                    |                   
+MetricBinding | 247972504900226 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET        
+              |                 | etric-binding:depl |                    |                    |                   
+              |                 | oyment:dotnet-gc-a |                    |                    |                   
+              |                 | llocated           |                    |                    |                   
+MetricBinding | 109239589408271 | urn:stackpack:open | .NET GC Allocated  | urn:stackpack:open | Wed Jan 7 00:20:48
+              |                 | -telemetry:shared: |                    | -telemetry:shared  |  2026 CET         
+              |                 | metric-binding:ser |                    |                    |                   
+              |                 | vice:dotnet-gc-all |                    |                    |                   
+              |                 | ocated             |                    |                    |                   
+...
+----
+
+=== Describing Metric Bindings
+
+You can get the definition of an existing metric binding by using the `describe` command:
+
+[,bash]
+----
+sts settings describe --ids 190567588459765
+_version: 1.0.93                                                                                                     
+nodes:
+- _type: MetricBinding
+  chartType: line
+  description: Bytes allocated to GC Heap
+  enabled: true
+  id: -1
+  identifier: urn:stackpack:kubernetes-v2:shared:metric-binding:pod:dotnet-gc-allocated
+  layout:
+    metricPerspective:
+      section: GC
+      tab: .NET
+      weight: 3
+  name: .NET GC Allocated
+  priority: high
+  queries:
+  - alias: allocated
+    expression: rate(process_runtime_dotnet_gc_allocations_size_bytes_total{k8s_cluster_name="${tags.cluster-name}", k8s_namespace_name="${tags.namespace}", k8s_pod_name="${name}"}[${__rate_interval}])
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+  unit: bytes(IEC)
+timestamp: 2026-01-14T13:11:07.575662922Z[Etc/UTC]
+----
+
+== Modifying Metric Bindings
+
+
+=== Create/update a Metric Binding
+Create a file `metric-bindings.yaml` that looks like this:
+
+[source,bash]
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:stackpack:my-stackpack:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Use the xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] to create the metric binding:
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+Verify the results in SUSE Observability by opening the metrics perspective for a deployment. If you're not happy with the result simply change the metric binding in the YAML file and run the command again to update it. The list of nodes supports adding many metric bindings. Simply add another metric binding entry to the YAML array using the same steps as before.
+
+[CAUTION]
+====
+The identifier is used as the unique key of a metric binding. Changing the identifier will create a new metric binding instead of updating the existing one.
+====
+
+=== Delete a Metric Binding
+
+Finally to delete a metric binding use
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+The `<id>` in this command isn't the identifier but the number in the `Id` column of the `sts settings list` output.
+
+[NOTE]
+====
+The recommended way of working is to store metric bindings (and any other custom resources created in {stackstate-product-name}) as YAML files in xref:/setup/custom-integrations/overview.adoc[a StackPack]. From there changes can be manually applied or it can be fully automated by using the SUSE Observability CLI in a CI/CD system like GitHub actions or GitLab pipelines.
+====
+
