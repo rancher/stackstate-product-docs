@@ -15,21 +15,18 @@ For option 1, the steps below will instruct you on how to create a metric bindin
 
 For option 2, ensure the metrics are available in {stackstate-product-name} by sending them to {stackstate-product-name} using the xref:/use/metrics/k8s-prometheus-remote-write.adoc[Prometheus remote write protocol]. Continue by adding charts for the metrics to the components ONLY after ensuring the metrics are available.
 
-== Steps
-
-Steps to create a metric binding:
+== Creating a metric binding
 
 . <<_create_an_outline_of_the_metric_binding,Create an outline of the metric binding>>
 . <<_select_the_components_to_bind_to,Select the components to bind to>>
 . <<_write_the_promql_query,Write the PromQL query for the desired metric>>
 . <<_bind_the_correct_time_series_to_each_component,Bind the correct time series to each component>>
-. <<_create_or_update_the_metric_binding_in_suse_observability,Create or update the metric binding in SUSE Observability>>
 
 For example, the steps will add a metric binding for the `Replica counts`  of Kubernetes deployments. This metric binding already exists in {stackstate-product-name}, by default.
 
-== Create an outline of the metric binding
+=== Create an outline of the metric binding
 
-Create a new YAML file called `metricbindings.yaml` and add this YAML template to it to create your own metric binding. If you used the `sts stackpack` command, this file will already be present.  Open it in your favorite code editor to change it throughout this guide. At the end, the {stackstate-product-name} CLI will be used to create and update the metric bindings in {stackstate-product-name}.
+Open the `metricbindings.yaml` YAML file in your favorite code editor to change it throughout this guide.  You can use the CLI to xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[Test Your StackPack].
 
 ----
 - _type: MetricBinding
@@ -51,7 +48,7 @@ Create a new YAML file called `metricbindings.yaml` and add this YAML template t
 
 The queries and scope section will be filled in the next steps. Note that the unit used is `short`, which will simply render a numeric value. In case you're not sure yet about the unit of the metric, you can leave it open and decide on the correct unit when writing the PromQL query.
 
-== Select the components to bind to
+=== Select the components to bind to
 
 Save a view of the xref:/use/views/k8s-topology-perspective.adoc[Topology perspective] and use the filters (Filters -> Topology -> Switch to STQL) to query the components that need to show the new metric. The most common fields to select topology on for metric bindings are `type` for the component type and `label` for selecting all the labels. For example for the deployments:
 
@@ -69,7 +66,7 @@ Metric bindings only support the query filters. Query functions like `withNeighb
 ====
 
 
-== Write the PromQL query
+=== Write the PromQL query
 
 Go to the xref:/use/metrics/k8sTs-explore-metrics.adoc[metric explorer] of your {stackstate-product-name} instance, http://your-instance/#/metrics, and use it to query for the metric of interest. The explorer has auto-completion for metrics, labels, label values but also PromQL functions, and operators to help you out. Start with a short time range of, for example, an hour to get the best results.
 
@@ -89,7 +86,7 @@ In {stackstate-product-name}, the size of the metric chart automatically determi
 ====
 
 
-== Bind the correct time series to each component
+=== Bind the correct time series to each component
 
 The metric binding with all fields filled in:
 
@@ -108,7 +105,7 @@ queries:
 scope: type = "deployment" and label = "stackpack:kubernetes"
 ----
 
-Creating it in {stackstate-product-name} and viewing the "Replica count" chart on a deployment component gives an unexpected result. The chart shows the replica counts for all deployments. Logically one would expect only 1 time series: the replica count for this specific deployment.
+Creating it in {stackstate-product-name} and viewing the "Replica count" chart on a deployment component gives an unexpected result. The chart shows the replica counts for all deployments. Logically one would expect only one time series: the replica count for this specific deployment.
 
 image::k8s/k8s-replica-counts-without-binding.png[The incorrect chart for a single deployment, it shows the replica count for all deployments]
 
@@ -118,9 +115,9 @@ To fix this make the PromQL query specific for a component using information fro
 max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
 ----
 
-image::k8s/k8s-replica-counts-with-binding.png[After adding the parameterized filters the resulting chart looks as expected, only 1 time series for this component]
+image::k8s/k8s-replica-counts-with-binding.png[After adding the parameterized filters the resulting chart looks as expected, only one time series for this component]
 
-The PromQL query now filters on 3 labels, `cluster_name`, `namespace` and `deployment`. Instead of specifying an actual value for these labels a variable reference to fields of the component is used. In this case the labels `cluster-name` and `namespace` are used, referenced using `${tags.cluster-name}` and `${tags.namespace}`. Further the component name is referenced with `+${name}+`.
+The PromQL query now filters on three labels, `cluster_name`, `namespace` and `deployment`. Instead of specifying an actual value for these labels a variable reference to fields of the component is used. In this case the labels `cluster-name` and `namespace` are used, referenced using `${tags.cluster-name}` and `${tags.namespace}`. Further the component name is referenced with `+${name}+`.
 
 Supported variable references are:
 
@@ -135,74 +132,17 @@ The cluster name, namespace and a combination of the component type and name are
 ====
 
 
-== Create or update the metric binding in SUSE Observability
+== Advanced
 
-Use the {stackstate-product-name} CLI to create the metric binding in {stackstate-product-name}. Make sure the `metric-bindings.yaml` is saved and looks like this:
-
-----
-nodes:
-- _type: MetricBinding
-  chartType: line
-  enabled: true
-  tags: {}
-  unit: short
-  name: Replica counts
-  priority: MEDIUM
-  identifier: urn:stackpack:my-stackpack:metric-binding:my-deployment-replica-counts
-  queries:
-    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
-      alias: Total replicas
-  scope: type = "deployment" and label = "stackpack:kubernetes"
-----
-
-Use the xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] to create the metric binding:
-
-[,bash]
-----
-sts settings apply -f metric-bindings.yaml
-----
-
-Verify the results in SUSE Observability by opening the metrics perspective for a deployment. If you're not happy with the result simply change the metric binding in the YAML file and run the command again to update it. The list of nodes supports adding many metric bindings. Simply add another metric binding entry to the YAML array using the same steps as before.
-
-[CAUTION]
-====
-The identifier is used as the unique key of a metric binding. Changing the identifier will create a new metric binding instead of updating the existing one.
-====
-
-
-The `sts settings` command has more options, for example it can list all metric bindings:
-
-[,bash]
-----
-sts settings list --type MetricBinding
-----
-
-Finally to delete a metric binding use
-
-[,bash]
-----
-sts settings delete --ids <id>
-----
-
-The `<id>` in this command isn't the identifier but the number in the `Id` column of the `sts settings list` output.
+=== More than one time series in a chart
 
 [NOTE]
 ====
-The recommended way of working is to store metric bindings (and any other custom resources created in SUSE Observability) as YAML files in a Git repository. From there changes can be manually applied or it can be fully automated by using the SUSE Observability CLI in a CI/CD system like GitHub actions or GitLab pipelines.
+There is only one unit for a metric binding (it gets plotted on the y-axis of the chart). As a result you should only combine queries that produce time series with the same unit in one metric binding. Sometimes it might be possible to convert the unit. For example, CPU usage might be reported in milli-cores or cores, milli-cores can be converted to cores by multiplying by 1000 like this  `(<original-query>) * 1000`.
 ====
 
 
-== Other options
-
-=== More than 1 time series in a chart
-
-[NOTE]
-====
-There is only 1 unit for a metric binding (it gets plotted on the y-axis of the chart). As a result you should only combine queries that produce time series with the same unit in 1 metric binding. Sometimes it might be possible to convert the unit. For example, CPU usage might be reported in milli-cores or cores, milli-cores can be converted to cores by multiplying by 1000 like this  `(<original-query>) * 1000`.
-====
-
-
-There are 2 ways to get more than 1 time series in a single metric binding and therefore in a single chart:
+There are two ways to get more than one time series in a single metric binding and therefore in a single chart:
 
 . Write a PromQL query that returns multiple time series for a single component
 . Add more PromQL queries to the metric binding
@@ -261,7 +201,7 @@ Note that the `alias` references the `container` label of the metric. Make sure 
 === Layouts
 
 Each component can be associated with various technologies or protocols such as k8s, networking, runtime environments (e.g., JVM), protocols (HTTP, AMQP), etc.
-Consequently, a multitude of different metrics can be displayed for each component. For easier readability, SUSE Observability can organize these charts into tabs and sections.
+Consequently, a multitude of different metrics can be displayed for each component. For easier readability, {stackstate-product-name} can organize these charts into tabs and sections.
 To display a chart (`MetricBinding`) within a specific tab or section, you need to configure the layout property.
 Any MetricsBinding without a specified layout will be displayed in a tab and section named `Other`.
 

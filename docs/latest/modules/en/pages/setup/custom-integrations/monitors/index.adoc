@@ -1,33 +1,29 @@
-= Add a threshold monitor to components using the CLI
+= Add a monitor to components
 :revdate: 2025-07-10
 :page-revdate: {revdate}
 :description: SUSE Observability
 
 == Overview
 
-SUSE Observability provides xref:/use/alerting/k8s-monitors.adoc[monitors out of the box], which provide monitoring on common issues that can occur in a Kubernetes cluster. It's also possible to configure custom monitors for the metrics collected by SUSE Observability or application metrics ingested xref:/use/metrics/k8s-prometheus-remote-write.adoc[from Prometheus].
+{stackstate-product-name} provides xref:/use/alerting/k8s-monitors.adoc[monitors out of the box], which provide monitoring on common issues that can occur in a Kubernetes cluster. It's also possible to configure custom monitors for the metrics collected by {stackstate-product-name} or application metrics ingested xref:/use/metrics/k8s-prometheus-remote-write.adoc[from Prometheus].
 
-== Steps
+== Creating a monitor
 
 Steps to create a monitor:
 
 . <<_write_the_outline_of_the_monitor,Write the outline of the monitor>>
 . <<_bind_the_results_of_the_monitor_to_the_correct_components,Bind the results of the monitor to the correct component>>
 . <<_write_the_remediation_hint,Write the remediation hint>>
-. <<_create_or_update_the_monitor_in_suse_observability,Create or update the metric binding in SUSE Observability>>
-. <<_verifying_the_results_of_a_monitor,Verify the monitor produces the expected result>>
-. <<_common_issues,Common issues>>
 
 As an example the steps will add a monitor for the `Replica counts` of Kubernetes deployments.
 
-== Write the outline of the monitor
+=== Write the outline of the monitor
 
-Create a new YAML file called `monitor.yaml` and add this YAML template to it to create your own monitor. Open it in your favorite code editor to change it throughout this guide. At the end the SUSE Observability CLI will be used to create and update the monitor in SUSE Observability.
+Open the `monitors.yaml` YAML file of your StackPack in your favorite code editor to change it throughout this guide. You can use the CLI to xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[Test Your StackPack].
 
 For example, this could be the start for a monitor which monitors the available replicas of a deployment:
 
 ----
-nodes:
 - _type: Monitor
   arguments:
     metric:
@@ -51,9 +47,9 @@ nodes:
 
 The `urnTemplate` and `remediationHint` will be filled in the next steps.
 
-== Bind the results of the monitor to the correct components
+=== Bind the results of the monitor to the correct components
 
-The results of a monitor need to be bound to components in SUSE Observability, to be visible and usable. The result of a monitor is bound to a component using the component `identifiers`. Each component in SUSE Observability has one or more identifiers that uniquely identify the component. To bind a result of a monitor to a component, it's required to provide the `urnTemplate`. The `urnTemplate` substitutes the labels in the time series of the monitor result into the template, producing an identifier matching a component. This is best illustrated with the example:
+The results of a monitor need to be bound to components in {stackstate-product-name}, to be visible and usable. The result of a monitor is bound to a component using the component `identifiers`. Each component in {stackstate-product-name} has one or more identifiers that uniquely identify the component. To bind a result of a monitor to a component, it's required to provide the `urnTemplate`. The `urnTemplate` substitutes the labels in the time series of the monitor result into the template, producing an identifier matching a component. This is best illustrated with the example:
 
 The metric that's used in this example is the `kubernetes_state_deployment_replicas_available` metric. Run the metric in the metric explorer to observe what labels are available on the time series:
 
@@ -79,7 +75,7 @@ The identifier is shown as `urn:kubernetes:/preprod-dev.preprod.stackstate.io:ca
 
 <<_verifying_the_results_of_a_monitor,To verify>> whether the `urnTemplate` is correct, is explained further below.
 
-== Write the remediation hint
+=== Write the remediation hint
 
 The remediation hint is there to help users find the cause of an issue when a monitor fires. The remediation hint is written in https://en.wikipedia.org/wiki/Markdown[markdown]. It's also possible to use the labels that are on the time series of the monitor result using a handlebars template, as in the following example:
 
@@ -92,90 +88,33 @@ The remediation hint is there to help users find the cause of an issue when a mo
   ...
 ----
 
-== Create or update the monitor in SUSE Observability
+To offer a remediation experience that conforms to that offered by the standard {stackstate-product-name} monitors, follow the xref:/setup/custom-integrations/monitors/remediation-guide.adoc#_guidelines[Remediation guide guidelines].
 
-After completing the `monitor.yaml`, use the xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] to create or update the monitor:
+== Testing the monitor
 
-[,bash]
+After you have made a monitor, validate whether it produces the expected results. The following steps can be taken:
+
+. <<_create_or_update_the_monitor_in_suse_observability,Create or update the monitor in {stackstate-product-name}>>
+. <<_verifying_the_results_of_a_monitor,Verify the monitor produces the expected result>>
+
+=== Create or update the monitor in {stackstate-product-name}
+
+- Use the xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[Test Your StackPack] command to deploy the StackPack.
++
+[source,bash]
 ----
-sts monitor apply -f monitor.yaml
-----
-
-Verify whether the monitor produces the expected results, using the steps <<_verifying_the_results_of_a_monitor,below>>.
-
-[CAUTION]
-====
-The identifier is used as the unique key of a monitor. Changing the identifier will create a new monitor instead of updating the existing one.
-====
-
-
-The `sts monitor` command has more options, for example it can list all monitors:
-
-[,bash]
-----
-sts monitor list
+sts stackpack test -d ./my-stackpack --yes
 ----
 
-To delete a monitor use
+=== Verifying the results of a monitor
 
-[,bash]
-----
-sts monitor delete --id <id>
-----
-
-To edit a monitor, edit the original of the monitor that was applied, and apply again. Or there is a `sts monitor edit` command to edit the configured monitor in the SUSE Observability instance directly:
-
-[,bash]
-----
-sts monitor edit --id <id>
-----
-
-The `<id>` in this command isn't the identifier but the number in the `Id` column of the `sts monitor list` output.
-
-== Enable or disable the monitor
-
-A monitor can be enabled or disabled. Enabled means the monitor will produce results, disabled means it will suppress all output. Use the following commands to enable/disable:
-
-[,bash]
-----
-sts monitor enable/disable --id <id>
-----
-
-== Verifying the results of a monitor
-
-It's good practice to, after a monitor is made, validate whether it produces the expected result. The following steps can be taken:
-
-=== Verify the execution of the monitor
+==== Verify the execution of the monitor
 
 Go to the monitor overview page (http://your-instance/#/monitors) and find your monitor.
 
-. Verify the `Status` column is in `Enabled` state. If the monitor is in `Disabled` state, <<_enable_or_disable_the_monitor,enable it>>. If the status is in `Error` state, follow the steps below <<_the_monitor_is_showing_an_error_in_the_monitor_status_overview,to debug>>.
+. Verify the `Status` column is in `Enabled` state. If the monitor is in `Disabled` state, xref:/setup/custom-integrations/monitors/cli.adoc#_enable_or_disable_the_monitor[enable it]. If the status is in `Error` state, you can xref:/setup/custom-integrations/monitors/troubleshooting.adoc#_the_monitor_is_showing_an_error_in_the_monitor_status_overview[troubleshoot the error] using the CLI.
 . Verify you see the expected number of states in the `Clear`/`Deviating`/`Critical` column. If this number is significantly lower or higher than the number of components you meant to monitor, the PromQL query might be giving too many results.
 
-=== Verify the binding of the monitor
+==== Verify the binding of the monitor
 
-Observe whether the monitor is producing a result on one of the components that it's meant to monitor for. If the monitor doesn't show up, follow <<_the_result_of_the_monitor_isnt_showing_on_a_component,these steps>> to remedy.
-
-== Common issues
-
-=== The result of the monitor isn't showing on a component
-
-First check if the monitor is actually <<_verify_the_execution_of_the_monitor,producing results>>. If this is the case but the monitor results do not show up on the components, there might be a problem with the binding. First use the following command to verify:
-
-[,bash]
-----
-sts monitor status --id <id>
-----
-
-If the output has `+Monitor health states with identifier which has no matching topology element (<nr>): ....+`, this shows that the `urnTemplate` may not generate an identifier matching the topology. To remedy this <<_bind_the_results_of_the_monitor_to_the_correct_components,revisit your urnTemplate>>.
-
-=== The monitor is showing an error in the monitor status overview
-
-Get the status of the monitor through the CLI
-
-[,bash]
-----
-sts monitor status --id <id>
-----
-
-The section `Monitor Stream errors:` will show the errors happening on the monitor and offer further help.
+Observe whether the monitor is producing a result on one of the components that it's meant to monitor for. If the monitor doesn't show up, follow xref:/setup/custom-integrations/monitors/troubleshooting.adoc#_the_result_of_the_monitor_isnt_showing_on_a_component[these steps] to remedy.
