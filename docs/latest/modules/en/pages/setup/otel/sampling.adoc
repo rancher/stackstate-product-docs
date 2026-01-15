@@ -11,7 +11,7 @@ There are 2 main types of sampling, head sampling and tail sampling.
 
 == Head sampling
 
-Head sampling makes the sampling decision (whether to export the data or not) as early as possible. Therefore the decision cannot be based on the entire trace but only on the, very limited, information that is available. The otel collector has the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[probabalistic sampling processor] which implements Consistent Probabality Sampling. The sampler is configurable and makes a sampling decision based of the trace id (useful for traces) or of a hash of an attribute (useful for logs). This ensures that all spans for a trace are always sampled or not and you will have complete traces in SUSE Observability.
+Head sampling makes the sampling decision (whether to export the data or not) as early as possible. Therefore the decision cannot be based on the entire trace but only on the, very limited, information that is available. The otel collector has the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[probabilistic sampling processor] which implements Consistent Probability Sampling. The sampler is configurable and makes a sampling decision based of the trace id (useful for traces) or of a hash of an attribute (useful for logs). This ensures that all spans for a trace are always sampled or not and you will have complete traces in SUSE Observability.
 
 The advantages of head sampling are:
 
@@ -33,14 +33,22 @@ processors:
 
 == Tail sampling
 
-Tail sampling postpones the sampling decision until a trace is (almost) complete. This allows the tail sampler to make  based on the entire traces, for example to always sample failed traces and/or slow traces. There are many more possibilities of course. The Open Telemetry collector has a https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[tail sampling processor] to apply tail sampling.
+Tail sampling postpones the sampling decision until a trace is (almost) complete. This allows the tail sampler to make sampling decisions based on the entire trace, for example to always sample failed traces and/or slow traces. There are many more possibilities, such as sampling based on specific attributes or service participation.
 
-So the main advantage of tail sampling is the much bigger flexibility it provides in making sampling . But it comes at a price:
+The OpenTelemetry Collector provides a https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[tail sampling processor] that can be used to apply tail sampling policies.
 
-* Harder to configure properly and understand
-* Must be stateful to store the spans for traces until a sampling decision is made
+The main advantage of tail sampling is the additional flexibility it provides in making sampling decisions based on complete trace data, rather than on partial information available when individual spans are created.
+
+
+[WARNING]
+====
+Although advantageous, tail sampling has the following downsides:
+
+* Harder to configure and understand.
+* Must be stateful to store the spans for traces until a sampling decision is made.
 * Therefore also (a lot) more resource usage
 * The sampler might not keep up and needs extra monitoring and scaling for that
+====
 
 To enable tail sampling configure the processor and include in the pipelines.
 
@@ -84,7 +92,7 @@ The example samples:
 
 For more details on the configuration options and different policies use the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[tail sampling readme].
 
-It his however not completely set-it-and-forget-it, if its resource usage starts growing you might want to scale out to use multiple collectors to handle the tail sampling which will then also require https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[routing] to route traffic based on trace id.
+It is, however, not completely set-it-and-forget-it. If its resource usage starts growing you need to scale out to use multiple collectors to handle the tail sampling which will then also require link:https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[routing] to route traffic based on trace ID.
 
 == Sampling traces in combination with span metrics
 
