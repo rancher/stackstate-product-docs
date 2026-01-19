@@ -95,9 +95,6 @@ helm template \
   --set baseUrl="https://observability.example.com" \
   --set sizing.profile="10-nonha" \
   --set receiverApiKey="YOUR-API-KEY" \
-  --set imageRegistry="quay.io" \
-  --set pullSecret.username="stackstate+k8snodes" \
-  --set pullSecret.password="YOUR-PASSWORD" \
   suse-observability-values \
   suse-observability/suse-observability-values --output-dir $VALUES_DIR
 
@@ -115,15 +112,13 @@ helm upgrade --install \
   --set global.suseObservability.sizing.profile="10-nonha" \
   --set global.suseObservability.receiverApiKey="YOUR-API-KEY" \
   --set global.suseObservability.adminPassword='$2a$10$...' \
-  --set global.suseObservability.pullSecret.username="stackstate+k8snodes" \
-  --set global.suseObservability.pullSecret.password="YOUR-PASSWORD" \
-  --set global.imageRegistry="quay.io" \
   suse-observability suse-observability/suse-observability
 ----
 
 [NOTE]
 ====
-The `adminPassword` must be a bcrypt hash in the new method. See <<_generate_a_bcrypt_password_hash>> for how to generate one.
+* The `adminPassword` must be a bcrypt hash in the new method. See <<_generate_a_bcrypt_password_hash>> for how to generate one.
+* For air-gapped environments or custom registries, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing SUSE Observability in Air-Gapped Mode] for additional configuration including `imageRegistry` and `pullSecret` settings.
 ====
 
 === Using a values file instead
@@ -246,7 +241,6 @@ Your migration values file should be *much smaller* than `helm get values` outpu
 [,yaml]
 ----
 global:
-  imageRegistry: "quay.io"
   suseObservability:
     license: "YOUR-LICENSE"
     baseUrl: "https://your-url.example.com"
@@ -254,9 +248,6 @@ global:
       profile: "10-nonha"  # This handles all resource configuration!
     adminPassword: "$2a$10$..."
     receiverApiKey: "your-api-key"
-    pullSecret:
-      username: "..."
-      password: "..."
 
 # Only include truly custom configurations below
 ingress:
@@ -284,10 +275,6 @@ Create a new `values.yaml` with the `global.suseObservability` structure:
 [,yaml]
 ----
 global:
-  # Optional: Override image registry (defaults to registry.rancher.com)
-  # Only needed for air-gapped environments or custom registries
-  # imageRegistry: "your-private-registry.example.com"
-
   suseObservability:
     # Required: Your license key
     license: "YOUR-LICENSE-KEY"
@@ -308,11 +295,6 @@ global:
     # Optional: Receiver API key (auto-generated if not provided)
     receiverApiKey: "your-receiver-api-key"
 
-    # Optional: Pull secret for private registry
-    pullSecret:
-      username: "registry-user"
-      password: "registry-pass"
-
     # Optional: Affinity configuration
     # These settings apply to all infrastructure components (Elasticsearch,
     # Kafka, ClickHouse, etc.) automatically - no need to configure per-component
@@ -324,6 +306,9 @@ global:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution: true
         topologyKey: "kubernetes.io/hostname"
+
+  # For air-gapped or custom registry configurations, see:
+  # xref:/k8s-suse-rancher-prime-air-gapped.adoc[Air-Gapped Installation Guide]
 ----
 
 === Step 4: Configuration mapping reference
@@ -349,15 +334,6 @@ Use this table to map your old configuration to the new format:
 | `receiverApiKey`
 | `global.suseObservability.receiverApiKey`
 
-| `imageRegistry`
-| `global.imageRegistry`
-
-| `pullSecret.username`
-| `global.suseObservability.pullSecret.username`
-
-| `pullSecret.password`
-| `global.suseObservability.pullSecret.password`
-
 | `affinity.nodeAffinity`
 | `global.suseObservability.affinity.nodeAffinity`
 
@@ -369,7 +345,21 @@ Use this table to map your old configuration to the new format:
 
 | `rancherUrl`
 | `stackstate.allowedOrigins` (manual configuration)
+
+| `imageRegistry` (air-gapped only)
+| `global.imageRegistry`
+
+| `pullSecret.username` (air-gapped only)
+| `global.suseObservability.pullSecret.username`
+
+| `pullSecret.password` (air-gapped only)
+| `global.suseObservability.pullSecret.password`
 |===
+
+[NOTE]
+====
+For air-gapped environments or custom registries requiring `imageRegistry` and `pullSecret` configuration, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing SUSE Observability in Air-Gapped Mode].
+====
 
 === Step 5: Handle custom overrides
 
