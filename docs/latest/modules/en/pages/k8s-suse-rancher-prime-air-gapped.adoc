@@ -1,9 +1,9 @@
-= Installing SUSE Observability in Air-Gapped Mode
+= Installing {stackstate-product-name} in Air-Gapped Mode
 :revdate: 2025-07-10
 :page-revdate: {revdate}
-:description: SUSE Observability
+:description: {stackstate-product-name}
 
-This document provides a step-by-step guide for installing SUSE Observability using Helm charts in an air-gapped environment. The process involves preparing the necessary Docker images and Helm charts on a host with internet access, transferring them to a host within a private network, copying Docker images to a private registry, and then deploying the Helm charts.
+This document provides a step-by-step guide for installing {stackstate-product-name} using Helm charts in an air-gapped environment. The process involves preparing the necessary Docker images and Helm charts on a host with internet access, transferring them to a host within a private network, copying Docker images to a private registry, and then deploying the Helm charts.
 
 == Prerequisites
 
@@ -34,7 +34,7 @@ Run the following commands on the local host to obtain the required Docker image
 
 [,bash]
 ----
-# Adding the Helm repository for SUSE Observability
+# Adding the Helm repository for {stackstate-product-name}
 helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
 helm repo update
 ----
@@ -43,11 +43,11 @@ helm repo update
 
 [,bash]
 ----
-# Downloading the chart for SUSE Observability
+# Downloading the chart for {stackstate-product-name}
 # The file will be named suse-observability-k8s-A.B.C.tgz
 helm fetch suse-observability/suse-observability
 
-# Downloading the helper chart that generates values for SUSE Observability
+# Downloading the helper chart that generates values for {stackstate-product-name}
 # The file will be named suse-observability-values-L.M.N.tgz
 helm fetch suse-observability/suse-observability-values
 ----
@@ -82,7 +82,7 @@ Replace `suse-observability-A.B.C.tgz` with the actual filename of the chart arc
 [,bash]
 ----
 # Save Docker images to an archive.
-# The script expects the file o11y-images.txt to contain the list of images used by SUSE Observability.
+# The script expects the file o11y-images.txt to contain the list of images used by {stackstate-product-name}.
 # The Docker images will be saved to o11y-images.tar.gz.
 ./o11y-save-images.sh -i o11y-images.txt -f o11y-images.tar.gz
 ----
@@ -91,8 +91,8 @@ Replace `suse-observability-A.B.C.tgz` with the actual filename of the chart arc
 
 Copy the following files from the local host to the host in the private network:
 
-* o11y-images.txt (List of images required by the SUSE Observability chart)
-* o11y-images.tar.gz (An archive with the SUSE Observability's Docker images)
+* o11y-images.txt (List of images required by the {stackstate-product-name} chart)
+* o11y-images.tar.gz (An archive with the {stackstate-product-name}'s Docker images)
 * https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability/installation/o11y-load-images.sh[o11y-load-images.sh] (Bash script to upload Docker images to a registry)
 * Helm charts downloaded earlier:
  ** suse-observability-A.B.C.tgz
@@ -117,11 +117,75 @@ If the destination registry doesn't use authentication the environment variables
 ====
 
 
-== Installing SUSE Observability
+== Installing {stackstate-product-name}
 
-*Custom Helm values*
+Installing {stackstate-product-name} Helm charts in an air-gapped environment requires overriding the registries used in Docker image URLs. This guide follows the xref:/k8s-suse-rancher-prime#_installation[Installation] setup, but uses pre-downloaded Helm archives and private Docker registries.
 
-Installing SUSE Observability Helm charts in an air-gapped environment requires overriding the registries used in Docker image URLs. This can be achieved by customizing Helm values.
+[tabs]
+====
+Recommended method::
++
+--
+[NOTE]
+=====
+The `global.suseObservability` configuration method is available starting from version `2.8.0`. For earlier versions, use the legacy method.
+=====
+
+Create a `values.yaml` file with your configuration, including the private registry:
+
+[source,yaml]
+----
+global:
+  # Required: Your private registry URL
+  imageRegistry: "registry.example.com:5043"
+
+  suseObservability:
+    # Required: Your {stackstate-product-name} license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    sizing:
+      profile: "150-ha"
+
+    # Required: Admin password (must be bcrypt hash)
+    adminPassword: "$2a$10$..."
+
+    # Optional: Pull secret for private registry authentication
+    pullSecret:
+      username: "registry-user"
+      password: "registry-pass"
+----
+
+TIP: To generate a bcrypt password hash, use: `htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'`
+
+Deploy using the downloaded chart archive:
+
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values values.yaml \
+    suse-observability \
+    suse-observability-A.B.C.tgz
+----
+
+[NOTE]
+=====
+With the recommended method, you only need to download the `suse-observability` chart (not `suse-observability-values`). The image list is extracted from the main chart.
+=====
+--
+Legacy method (Deprecated)::
++
+--
+[WARNING]
+=====
+This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
+=====
 
 Create a private-registry.yaml file with the following content:
 
@@ -130,8 +194,6 @@ Create a private-registry.yaml file with the following content:
 global:
   imageRegistry: registry.example.com:5043
 ----
-
-This guide follows the xref:/k8s-suse-rancher-prime#_installation[Installation] setup, but instead of using publicly available Helm and Docker repositories/registries, it uses pre-downloaded Helm archives and private Docker registries.
 
 *Command to Generate Helm Chart Values File:*
 
@@ -148,8 +210,7 @@ helm template \
     --output-dir $VALUES_DIR
 ----
 
-
-If the private registry requires authentication include the pull secret username and password like this:
+If the private registry requires authentication, include the pull secret username and password:
 
 .helm_template.sh
 [,text]
@@ -160,14 +221,13 @@ helm template \
     --set baseUrl='<baseURL>' \
     --set rancherUrl='<rancherURL>' \
     --set sizing.profile='<sizing.profile>' \
-    --set pullSecret.username='trial' \
-    --set pullSecret.password='trial' \
+    --set pullSecret.username='registry-user' \
+    --set pullSecret.password='registry-pass' \
     suse-observability-values suse-observability-values-L.M.N.tgz \
     --output-dir $VALUES_DIR
 ----
 
-
-*Deploying the SUSE Observability Helm Chart:*
+*Deploying the {stackstate-product-name} Helm Chart:*
 
 .helm_deploy.sh
 [,text]
@@ -182,7 +242,8 @@ helm upgrade --install \
     suse-observability \
     suse-observability-A.B.C.tgz
 ----
-
+--
+====
 
 *Validating the Deployment:*
 
