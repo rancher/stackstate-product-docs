@@ -38,8 +38,8 @@ Also, make sure to follow the air-gapped installation instructions whenever thos
 
 
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where SUSE Observability will be installed]
-. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values_yaml_and_sizing_values_yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]
-. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_set_up_a_storage_class[Set up a storage class]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#create-values-yaml[Create `values.yaml` configuration file]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_configure_storage_class_optional[Configure storage class (Optional)]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Deploy SUSE Observability with Helm]
 . xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_access_the_suse_observability_ui[Access the SUSE Observability UI]
 
@@ -53,19 +53,74 @@ Start by creating the namespace where you want to install SUSE Observability and
 kubectl create namespace suse-observability
 ----
 
-=== Generate `baseConfig_values.yaml` and `sizing_values.yaml`
+[#create-values-yaml]
+=== Create `values.yaml` configuration file
 
-The `baseConfig_values.yaml` file is required to deploy StackState with Helm. It contains your StackState license key, StackState Receiver API key and other important information.
-The `sizing_values.yaml` file is recommended to deploy StackState with Helm as it contains information about the resources that StackState will be provisioned with according to the size on the landscape you want to observe.
-The `affinity_values.yaml` file contains Kubernetes affinities to deploy SUSE Observability with different scheduling options.
+The `values.yaml` file contains all configuration required to deploy {stackstate-product-name} including your license key, base URL, admin password, and sizing profile.
 
 [NOTE]
 ====
 *Before you continue:* Make sure you have the latest version of the Helm charts with `helm repo update`.
 ====
 
+[tabs]
+====
+Recommended method::
++
+--
+Create a `values.yaml` file with the `global.suseObservability` configuration structure:
 
-You can generate the SUSE Observability `baseConfig_values.yaml`, `sizing_values.yaml`, and `affinity_values.yaml` files by running a separate Helm Chart. This is the `suse-observability/suse-observability-values` chart. A sample command line is:
+[source,yaml]
+----
+global:
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
+
+  # Optional: Override storage class (uses cluster default if not set)
+  # storageClass: "your-storage-class"
+
+  suseObservability:
+    # Required: Your SUSE Observability license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for SUSE Observability
+    # Use http://localhost:8080 if ingress is not configured yet
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    # Required: Admin password (must be bcrypt hash)
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    adminPassword: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    # receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Pull secret for private registry
+    # pullSecret:
+    #   username: "registry-user"
+    #   password: "registry-pass"
+----
+
+TIP: To generate a bcrypt password hash, use: `htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'`
+
+For more configuration options including affinity settings, see xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes Affinities].
+
+--
+Legacy method (Deprecated)::
++
+--
+[WARNING]
+=====
+This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
+=====
+
+You can generate the SUSE Observability configuration files by running a separate Helm Chart. This is the `suse-observability/suse-observability-values` chart:
 
 [,text]
 ----
@@ -78,16 +133,16 @@ helm template \
   suse-observability/suse-observability-values --output-dir $VALUES_DIR
 ----
 
-This command generates the files `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`, `$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml`, and `$VALUES_DIR/suse-observability-values/templates/affinity_values.yaml`. These contain the necessary configuration for installing the SUSE Observability Helm Chart.
+This command generates the files `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`, `$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml`, and `$VALUES_DIR/suse-observability-values/templates/affinity_values.yaml`.
 
 [NOTE]
-====
-The SUSE Observability administrator passwords will be autogenerated by the above command and are output as comments in the generated `basicConfig.yaml` file. The actual values contain the `bcrypt` hashes of those passwords so that they're securely stored in the Helm release in the cluster.
-====
-
+=====
+The {stackstate-product-name} administrator passwords will be autogenerated by the above command and are output as comments in the generated `basicConfig.yaml` file. The actual values contain the `bcrypt` hashes of those passwords so that they're securely stored in the Helm release in the cluster.
+=====
 
 The values that can be passed to this chart are:
 
+[cols="1,1,2"]
 |===
 | Configuration | Value | Description
 
@@ -141,30 +196,54 @@ The values that can be passed to this chart are:
 |===
 
 [NOTE]
-====
-Store the generated `basicConfig.yaml` and `sizing_values.yaml` files safely. You can reuse these files for upgrades, saving time and ensuring that SUSE Observability continues to use the same API key. This is desirable as it means Agents and other data providers for SUSE Observability won't need updating.
+=====
+Store the generated `basicConfig.yaml` and `sizing_values.yaml` files safely. You can reuse these files for upgrades, saving time and ensuring that {stackstate-product-name} continues to use the same API key. This is desirable as it means Agents and other data providers for {stackstate-product-name} won't need updating.
 You can regenerate the files independently using the switches `basicConfig.generate=false` and `sizing.generate=false` to disable any of them while still keeping the previously generated version of the file in the `output-dir`.
-====
+=====
 
 [NOTE]
-====
-The SUSE Observability Values chart generates affinity configurations that you can use with the main SUSE Observability chart to control pod scheduling behavior. Refer to xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes Affinities] documentation for more information.
+=====
+The {stackstate-product-name} Values chart generates affinity configurations that you can use with the main {stackstate-product-name} chart to control pod scheduling behavior. Refer to xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes Affinities] documentation for more information.
+=====
+
+--
 ====
 
-=== Set up a storage class
+=== Configure storage class (Optional)
 
-You need to set up a storage class. Rancher's `local-path` is recommended if available, but SUSE Storage is also supported. Edit the file `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml` to add the "storageClass" configuration:
+{stackstate-product-name} uses the cluster's default storage class if not specified. You can optionally override this by setting `global.storageClass` in your `values.yaml` file.
+
+[tabs]
+====
+Recommended method::
++
+--
+If you need to use a specific storage class, add it to your `values.yaml` file under `global.storageClass`:
+
+[source,yaml]
+----
+global:
+  storageClass: "your-storage-class"  # e.g., "local-path" for Rancher local-path provisioner
+  suseObservability:
+    # ... other configuration
+----
+--
+Legacy method (Deprecated)::
++
+--
+Edit the file `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml` to add the "storageClass" configuration:
 
 [,text]
 ----
 # Source suse-observability-values/templates/baseConfig_values.yaml
 global:
-  imageRegistry: "registry.rancher.com"
-  storageClass: "local-path" # New configuration line, the rest remains the same
+  storageClass: "your-storage-class" # Optional: override default storage class
 ----
+--
+====
 
 
-=== Deploy SUSE Observability with Helm
+=== Deploy {stackstate-product-name} with Helm
 
 The recommended deployment of SUSE Observability is a production ready, high availability setup with many services running redundantly. If required, it's also possible to run SUSE Observability in a non-redundant setup, where each service has only a single replica. This setup is only recommended for a test environment.
 
@@ -172,16 +251,82 @@ For air-gapped environments follow the instructions for the air-gapped installat
 
 [tabs]
 ====
-Setup::
+Recommended method::
 +
 --
 
-To deploy SUSE Observability on Kubernetes:
+To deploy {stackstate-product-name} on Kubernetes:
 
 . Before you deploy:
- ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where SUSE Observability will be installed]
- ** <<_generate_baseconfig_values_yaml_and_sizing_values_yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
-. Deploy the latest SUSE Observability version to the `suse-observability` namespace with the following command:
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where {stackstate-product-name} will be installed]
+ ** <<create-values-yaml,Create `values.yaml` configuration file>>
+. Deploy the latest {stackstate-product-name} version to the `suse-observability` namespace with the following command:
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+Alternatively, deploy directly using `--set` flags without a values file:
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+  --set global.suseObservability.baseUrl="https://observability.example.com" \
+  --set global.suseObservability.sizing.profile="150-ha" \
+  --set global.suseObservability.adminPassword='$2a$10$...' \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+Recommended method (Air-gapped)::
++
+--
+
+To deploy {stackstate-product-name} in an air-gapped setup on Kubernetes:
+
+. Before you deploy:
+ ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[Follow these extra instructions for air-gapped installations].
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where {stackstate-product-name} will be installed]
+ ** <<create-values-yaml,Create `values.yaml` configuration file>>
+. Deploy the latest {stackstate-product-name} version to the `suse-observability` namespace with the following command:
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values local-docker-registry.yaml \
+  --values values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+Legacy method (Deprecated)::
++
+--
+
+[WARNING]
+=====
+This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
+=====
+
+To deploy {stackstate-product-name} on Kubernetes:
+
+. Before you deploy:
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where {stackstate-product-name} will be installed]
+ ** <<create-values-yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
+. Deploy the latest {stackstate-product-name} version to the `suse-observability` namespace with the following command:
 
 [,bash]
 ----
@@ -196,17 +341,22 @@ suse-observability/suse-observability
 ----
 
 --
-Air-gapped setup::
+Legacy method (Air-gapped)::
 +
 --
 
-To deploy SUSE Observability in an air-gapped setup on Kubernetes:
+[WARNING]
+=====
+This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
+=====
+
+To deploy {stackstate-product-name} in an air-gapped setup on Kubernetes:
 
 . Before you deploy:
  ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[Follow these extra instructions for air-gapped installations].
- ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where SUSE Observability will be installed]
- ** <<_generate_baseconfig_values_yaml_and_sizing_values_yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
-. Deploy the latest SUSE Observability version to the `suse-observability` namespace with the following command:
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[Create the namespace where {stackstate-product-name} will be installed]
+ ** <<create-values-yaml,Generate `baseConfig_values.yaml` and `sizing_values.yaml`>>
+. Deploy the latest {stackstate-product-name} version to the `suse-observability` namespace with the following command:
 
 [,bash]
 ----
@@ -252,7 +402,7 @@ When all pods are up, you can enable a port-forward:
 kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
 ----
 
-For the ingress configuration, generate the file `$VALUES_DIR/suse-observability-values/templates/ingress_values.yaml` and add the below code. 
+For the ingress configuration, create an `ingress_values.yaml` file and add the below code.
 
 [NOTE]
 ====
@@ -291,7 +441,7 @@ Upgrade::
 
 [,bash]
 ----
-helm upgrade --namespace suse-observability --reuse-values --values suse-observability-values/templates/ingress_values.yaml suse-observability suse-observability/suse-observability
+helm upgrade --namespace suse-observability --reuse-values --values ingress_values.yaml suse-observability suse-observability/suse-observability
 ----
 
 --
