@@ -8,6 +8,14 @@ local:
 		ss-local-playbook.yml \
 		2>&1 | tee tmp/local-build.log
 
+.PHONY: local-stackpacks2
+local-stackpacks2:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --attribute ss-ff-stackpacks2_enabled --stacktrace --log-format=pretty --log-level=info \
+		ss-local-playbook.yml \
+		2>&1 | tee tmp/local-build.log
+
 .PHONY: remote
 remote:
 	mkdir -p tmp
