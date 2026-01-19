@@ -1,0 +1,201 @@
+= Using the CLI for monitors
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+You can use the {stackstate-product-name} CLI to inspect, run and modify monitors:
+
+[source,bash]
+----
+sts monitor
+Manage, test and develop monitors.
+
+Usage:
+  sts monitor [command]
+
+Available Commands:
+  apply       Create or edit a monitor from STY
+  clone       Clone a monitor
+  delete      Delete a monitor
+  describe    Describe a monitor in STY format
+  disable     Disable a monitor
+  edit        Edit a monitor
+  enable      Enable a monitor
+  list        List all monitors
+  run         Run a monitor
+  status      Get the status of a monitor
+
+Use "sts monitor [command] --help" for more information about a command.
+----
+
+== Debugging Monitors
+
+You can use various {stackstate-product-name} CLI commands to debug a monitor.  
+
+=== Listing Monitors
+
+The `sts monitor` command can list all monitors:
+
+[,bash]
+----
+sts monitor list
+ID              | STATUS   | IDENTIFIER                                    | NAME                                          | FUNCTION ID     | TAGS                                            
+68172545000282  | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx error rate (req/s)              | 208329585629344 | []                                           
+                |          | 4xx-error-rate                                |                                               |                 |                                              
+129505918833814 | DISABLED | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx response time (s) (95th percent | 208329585629344 | []                                           
+                |          | 4xx-response-time-95th-percentile             | ile)                                          |                 |                                              
+214616421668585 | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 5xx error rate (req/s)              | 208329585629344 | []                                           
+                |          | 5xx-error-rate                                |                                               |                 |                    
+----
+
+=== Describing Monitors
+
+You can get the definition of an existing monitor by using the `describe` command:
+
+[,bash]
+----
+sts monitor describe --id 68172545000282
+_version: 1.0.93                                                                                                                                                                               
+nodes:
+- _type: Monitor
+  arguments:
+    telemetryQuery: sum(rate(podparty_http_requests_count{code='4xx', direction='incoming', intra_pod!='true', local_pod_ns='${tags.namespace}', __multi__="${properties.local_pod_metric_selector__+}"}[${__rate_interval}]))
+    topologyQuery: (label = "stackpack:kubernetes" and type = "service")
+  description: Consumes health states from the AAD.
+  function: urn:stackpack:aad-v2:shared:monitor-function:aad
+  id: -6
+  identifier: urn:stackpack:aad-v2:shared:monitor:aad-http-4xx-error-rate
+  intervalSeconds: 60
+  name: 'AAD: HTTP 4xx error rate (req/s)'
+  remediationHint: It's complicated.
+  status: ENABLED
+  tags: []
+timestamp: 2026-01-14T11:30:40.470998684Z[Etc/UTC]
+----
+
+=== Running Monitors
+
+Running a monitor gives you insight in the checkstates that are produced:
+
+[,bash]
+----
+sts monitor run --id <id>
+appliedLimit: 100                                                                                                                                                                              
+checkStates:
+  CheckStates:
+    checkStates:
+      - checkStateId: 91116839897294-preprod%1dev.preprod.stackstate.io-stackstate%1nightly-suse%1observability%1clickhouse%1shard0
+        data: '{"displayTimeSeries":[{"name":"Metric and threshold","queries":[{"query":"sum by (cluster_name, namespace, statefulset) (increase(stackstate_clickhouse_backup_successful_uploads{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}[12h]))  or  sum by (cluster_name, namespace, statefulset) (stackstate_clickhouse_backup_number_backups_remote_expected{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}) * 0","alias":"Number of backups execution in 12h window","_type":"MonitorDisplayQuery"},{"query":"0.0","alias":"Threshold","_type":"MonitorDisplayQuery"}],"unit":"short","_type":"MonitorDisplayTimeSeries"}],"remediationHintTemplateData":{"componentUrnForUrl":"urn:kubernetes:%2Fpreprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset%2Fsuse-observability-clickhouse-shard0","labels":{"cluster_name":"preprod-dev.preprod.stackstate.io","namespace":"stackstate-nightly","statefulset":"suse-observability-clickhouse-shard0"},"threshold":0.0},"_type":"MonitorSyncedCheckStateData"}'
+        health: CLEAR
+        name: Backup performed in the last 12 hours
+        topologyElementIdentifier: urn:kubernetes:/preprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset/suse-observability-clickhouse-shard0
+...
+----
+
+
+=== Enabling/disabling Monitors
+
+A monitor can be enabled or disabled. Enabled means the monitor will produce results, disabled means it will suppress all output. Use the following commands to enable/disable:
+
+[,bash]
+----
+sts monitor disable --id 68172545000282
+✅ Monitor 68172545000282 has been disabled                                                                                                                                                    
+
+sts monitor enable --id 68172545000282
+✅ Monitor 68172545000282 has been enabled                                                                                                                                                     
+----
+
+
+=== Monitor execution details
+
+Statistics of monitor runs and the latency in the processing of the resulting checkstates can be obtained with the `status` command.
+
+[,bash]
+----
+sts monitor status --id 68172545000282
+                                                                                                                                                                                               
+Monitor Health State count: 650
+Monitor Status: ENABLED
+Monitor last run: 2026-01-14 12:16:25.979 +0000 UTC
+
+Monitor Stream errors:
+No data to display.
+
+Monitor health states mapped to topology:
+HEALTHSTATE | COUNT
+CLEAR       | 522  
+DEVIATING   | 0    
+CRITICAL    | 0    
+UNKNOWN     | 128  
+
+Monitor Stream metrics:
+METRIC                                     | VALUE BETWEEN NOW AND 300 SECONDS AGO | VALUE BETWEEN 300 AND 600 SECONDS AGO | VALUE BETWEEN 600 AND 900 SECONDS AGO
+latency (Seconds)                          | 42.345412844036574                    | 44.53073394495415                     | 46.725688073394615                   
+messages processed (per second)            | 10.833333333333                       | 10.833333333333                       | 10.833333333333                      
+monitor health states created (per second) |                                       |                                       |                                      
+monitor health states updated (per second) | 0.0033333333333333                    | 0.0033333333333333                    | 0.02                                 
+monitor health states deleted (per second) |                                       |                                       |                                      
+
+Monitor health states with identifier matching exactly 1 topology element: 650
+----
+
+== Modifying Monitors
+
+[NOTE]
+====
+The recommended way of working is to store monitors (and any other custom resources created in {stackstate-product-name}) as YAML files in xref:/setup/custom-integrations/overview.adoc[a StackPack]. From there changes can be manually applied or it can be fully automated by using the SUSE Observability CLI in a CI/CD system like GitHub actions or GitLab pipelines.
+====
+
+=== Create a Monitor
+
+You can create a monitor by applying a YAML file, say `monitor.yaml`.  It must have the following outline:
+
+[source,bash]
+----
+nodes:
+- _type: "Monitor"
+  ...
+----
+
+[NOTE]
+====
+Note the entrypoint `nodes:` on the first line.  That's not needed for files in a stackpack but it must be there when using the `apply` command.
+====
+
+Use the xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] to create or update the monitor:
+
+[,bash]
+----
+sts monitor apply -f monitor.yaml
+----
+
+You can xref:/setup/custom-integrations/monitors/index.adoc#_verifying_the_results_of_a_monitor[verify if the monitor produces the expected results] on the monitor overview page.
+
+[CAUTION]
+====
+The identifier is used as the unique key of a monitor. Changing the identifier will create a new monitor instead of updating the existing one.
+====
+
+=== Delete a Monitor
+
+To delete a monitor use
+
+[,bash]
+----
+sts monitor delete --id <id>
+----
+
+=== Live Edit a Monitor
+
+To edit a monitor, edit the original of the monitor that was applied, and apply again. Or there is a `sts monitor edit` command to edit the configured monitor in the {stackstate-product-name} instance directly:
+
+[,bash]
+----
+sts monitor edit --id <id>
+----
+
+The `<id>` in this command isn't the identifier but the number in the `Id` column of the `sts monitor list` output.
+
