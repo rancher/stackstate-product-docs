@@ -42,4 +42,4 @@ checkmake:
 
 .PHONY: preview
 preview:
-	npx http-server build/remote-site -c-1
+	npx http-server build/site -c-1
