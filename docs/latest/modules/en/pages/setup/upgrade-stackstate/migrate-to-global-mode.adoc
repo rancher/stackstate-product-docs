@@ -1,5 +1,5 @@
 = Migrate to global configuration mode
-:description: SUSE Observability Self-hosted
+:description: {stackstate-product-name} Self-hosted
 :page-toclevels: 3
 
 == Overview
@@ -72,7 +72,7 @@ Convert your `helm template` command to a `helm upgrade --install` command by ma
 | `--set global.suseObservability.receiverApiKey="..."`
 
 | `--set adminPassword="..."`
-| `--set global.suseObservability.adminPassword="..."` (must be bcrypt hash)
+| `--set global.suseObservability.adminPassword="..."`
 
 | `--set imageRegistry="..."`
 | `--set global.imageRegistry="..."`
@@ -121,14 +121,14 @@ helm upgrade --install \
   --set global.suseObservability.baseUrl="https://observability.example.com" \
   --set global.suseObservability.sizing.profile="10-nonha" \
   --set global.suseObservability.receiverApiKey="YOUR-API-KEY" \
-  --set global.suseObservability.adminPassword='$2a$10$...' \
+  --set global.suseObservability.adminPassword='your-password' \
   suse-observability suse-observability/suse-observability
 ----
 
 [NOTE]
 ====
 * The `adminPassword` must be a bcrypt hash in the new method. See <<_generate_a_bcrypt_password_hash>> for how to generate one.
-* For air-gapped environments or custom registries, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing SUSE Observability in Air-Gapped Mode] for additional configuration including `imageRegistry` and `pullSecret` settings.
+* For air-gapped environments or custom registries, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing {stackstate-product-name} in Air-Gapped Mode] for additional configuration including `imageRegistry` and `pullSecret` settings.
 ====
 
 === Using a values file instead
@@ -184,9 +184,9 @@ kubectl get secrets -n suse-observability -o yaml > backup-secrets.yaml
 Review your existing configuration to identify the following settings:
 
 * *Sizing profile*: Check `sizing.profile` in your suse-observability-values input
-* *License key*: Your SUSE Observability license
-* *Base URL*: The URL where SUSE Observability is accessible
-* *Admin password*: The bcrypt-hashed admin password
+* *License key*: Your {stackstate-product-name} license
+* *Base URL*: The URL where {stackstate-product-name} is accessible
+* *Admin password*: The admin password (you can also use the bcrypt hash of the password, the value for that is `adminPasswordBcrypt`)
 * *Pull secret credentials*: Registry username and password (if used)
 * *Custom affinity settings*: Any node affinity or pod anti-affinity customizations
 
@@ -256,7 +256,7 @@ global:
     baseUrl: "https://your-url.example.com"
     sizing:
       profile: "10-nonha"  # This handles all resource configuration!
-    adminPassword: "$2a$10$..."
+    adminPassword: "your-password"
     receiverApiKey: "your-api-key"
 
 # Only include truly custom configurations below
@@ -289,7 +289,7 @@ global:
     # Required: Your license key
     license: "YOUR-LICENSE-KEY"
 
-    # Required: Base URL for SUSE Observability
+    # Required: Base URL for {stackstate-product-name}
     baseUrl: "https://observability.example.com"
 
     # Required: Sizing profile
@@ -298,9 +298,10 @@ global:
     sizing:
       profile: "150-ha"
 
-    # Required: Admin password (must be bcrypt hash)
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password
     # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
-    adminPassword: "$2a$10$..."
+    # adminPasswordBcrypt: "$2a$10$..."
 
     # Optional: Receiver API key (auto-generated if not provided)
     receiverApiKey: "your-receiver-api-key"
@@ -368,7 +369,7 @@ Use this table to map your old configuration to the new format:
 
 [NOTE]
 ====
-For air-gapped environments or custom registries requiring `imageRegistry` and `pullSecret` configuration, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing SUSE Observability in Air-Gapped Mode].
+For air-gapped environments or custom registries requiring `imageRegistry` and `pullSecret` configuration, see xref:/k8s-suse-rancher-prime-air-gapped.adoc[Installing {stackstate-product-name} in Air-Gapped Mode].
 ====
 
 === Step 5: Handle custom overrides
@@ -383,7 +384,7 @@ global:
       profile: "150-ha"
     license: "YOUR-LICENSE-KEY"
     baseUrl: "https://observability.example.com"
-    adminPassword: "$2a$10$..."
+    adminPassword: "your-password"
     # Global affinity - applied to all components by default
     affinity:
       nodeAffinity:
@@ -464,9 +465,9 @@ helm status suse-observability -n suse-observability
 helm get values suse-observability -n suse-observability
 ----
 
-== Generate a bcrypt password hash
+== Admin password
 
-If migrating from the legacy method, your existing `adminPassword` is already a bcrypt hash and can be used directly.
+For the legacy method, the `adminPassword` was provided as plain text to the suse-observability-values chart, which hashed it to a bcrypt hash. In the new method, you can provide the plain text `adminPassword` to the suse-observability chart, or provide the bcrypt hash directly to the suse-observability chart using `adminPasswordBcrypt`.
 
 If you need to generate a new bcrypt hash:
 
@@ -474,11 +475,6 @@ If you need to generate a new bcrypt hash:
 ----
 htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
 ----
-
-[NOTE]
-====
-Future versions will also support plain text passwords.
-====
 
 == Troubleshooting
 
@@ -586,5 +582,5 @@ After successful migration, you can:
 == See also
 
 * xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes installation guide]
-* xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc[Steps to upgrade SUSE Observability]
+* xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc[Steps to upgrade {stackstate-product-name}]
 * xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[Version-specific upgrade instructions]
