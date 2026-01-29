@@ -1,29 +1,55 @@
-= API Keys
+= API Keys (deprecated)
 :revdate: 2025-07-22
 :page-revdate: {revdate}
 :description: SUSE Observability
 
-An API key is primarily used to authenticate against {stackstate-product-name} for sending telemetry data to {stackstate-product-name}. In a helm agent install, this is done by setting the `stackstate.apiKey` helm variable.
+An API key was used to authenticate against {stackstate-product-name} for sending telemetry data to {stackstate-product-name}. In a Helm agent install, this was done by setting the `stackstate.apiKey` helm variable.
 
-You can obtain an API key by following the xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[StackPack install flow], which uses a Service Token from the platform. 
+API Keys, and Ingestion API keys, are deprecated and will be removed in Q4 of 2026. Service tokens are now the preferred authentication mechanism, also for sending telemetry data. 
 
-You can also obtain an API Key in the following ways from the platform:
+The flow for adding new clusters to {stackstate-product-name} in xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[StackPack install flow] includes the creation of a cluster specific token that is compatible with the RBAC Agent for Rancher RBAC.
 
-* **Service Token** - Use this key to scope the data to be ingested. A service token is required when installing with xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC support]. It also offers expiration dates. For more information, see xref:/use/security/k8s-service-tokens.adoc#_authenticate_using_service_tokens_for_data_ingestion[Service Tokens].
-* **Bootstrap Service Token** - Use this API key to set up a service token for data ingestion and RBAC. This is the preferred method to create a key before installation. For more information, see xref:/setup/security/authentication/service_tokens.adoc#_set_up_a_bootstrap_service_token[Bootstrap Service Tokens].
-* **Receiver API Key** - This key is generated during the initial installation of your {stackstate-product-name} instance and it never expires. As it is not scoped, it can be used for all agents. 
+== Migrating from API key to service token
 
-[NOTE]
-====
-This method will be replaced in the long run as the RBAC data cannot be ingested with the receiver API Key.
-====
-* **Ingestion API Key** (Deprecated) - You can create Ingestion API Keys using the {stackstate-product-name} CLI (STS). These keys offer expiration dates, requiring periodic rotation for continued functionality.
+There are 2 options to migrate from using the single API Key to using Service Tokens for telemetry data. 
 
-== Ingestion API Keys (`Deprecated`)
+1. Migrate to a Service Token per cluster. This is a bit more work to set up but it supports Rancher RBAC.
+2. Migrate to a single Service Token that you use from all Kubernetes clusters and OTel collectors. This does not support Rancher RBAC.
+
+After migrating all agents and Open Telemetry collectors to service tokens you can now remove the `global.receiverApiKey` or `stackstate.apiKey` from the Helm values for installing {stackstate-product-name} and run a `helm upgrade` to apply the changes.
+
+=== Migrate to a service token per cluster
+
+1. Open the Kubernetes Stackpack in the UI
+2. Expand the cluster you are migrating
+3. Click the "Create new service token" button to get the cluster specific service token and copy the token
+4. Follow the agent installation/upgrade instructions in the stackpack to re-deploy the agent to the cluster with the service token as the API key.
+
+Instead of using the UI you can also generate the token with the CLI as xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documented here]. Make sure to also assign the `update-scoped-permissions` scoped to the cluster you are migrating. The other steps remain the same as for the UI.
+
+=== Migrate to a single service token
+
+Generate a service token with the CLI as xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documented here].:
+
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+Do not add an `update-scoped-permissions` permission as it will not work for a token that is used from multiple clusters.
+
+Re-deploy your agents and Open Telemetry collectors by following the instructions available in the UI for the Kubernetes StackPack and the xref:setup/otel/getting-started/getting-started-k8s.adoc[Open Telemetry collector documentation]. Use the generated Service Token as the API key by following.
+
+== Migrate from Ingestion API Keys
 
 Ingestion API Keys were used by external tools to ingest data (such as metrics, events and traces) to the SUSE Observability cluster.
-These tools include the STS Agent or/and OTel Collector. The recommended authentication mechanism is through xref:/use/security/k8s-service-tokens.adoc#_authenticate_using_service_tokens_for_data_ingestion[Service Tokens].
+These tools include the STS Agent or/and OTel Collector. Service tokens have the same, and more, capabilities. Follow the same steps as for the API key (in the previous setion) to migrate to <<_migrate_to_a_service_token_per_cluster, a service token per cluster>> or <<_migrate_to_a_single_service_token, a single service token>>.
 
 == More info
 
-* xref:/use/security/k8s-service-tokens.adoc[Service tokens]
+* xref:use/security/k8s-service-tokens.adoc[Service tokens]
