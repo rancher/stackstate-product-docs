@@ -1,119 +1,86 @@
 = CLI: sts
 :revdate: 2025-07-29
 :page-revdate: {revdate}
-:description: SUSE Observability
+:description: {stackstate-product-name}
 
 == Overview
 
-The SUSE Observability `sts` CLI provides easy access to the functionality provided by the SUSE Observability APIs. It can be used for automation using SUSE Observability data, to configure SUSE Observability and to develop StackPacks.
+The {stackstate-product-name} `sts` CLI provides easy access to the functionality provided by the {stackstate-product-name} APIs. It can be used for automation using {stackstate-product-name} data, to configure {stackstate-product-name} and to develop StackPacks.
 
-== Install the `sts` CLI
+== Prerequisites
 
-=== Windows
+* **{stackstate-product-name} URL** - The URL of your {stackstate-product-name} instance (the same URL used to access the web interface).
+* **API Token** - A valid API token for authentication, which can be retrieved from the *CLI* page in your {stackstate-product-name} instance.
 
-Follow the steps below to install the SUSE Observability `sts` CLI on Windows.
+To obtain your API token:
+
+. Log into your {stackstate-product-name} instance.
+. Navigate to *Main menu* > *CLI*.
+. Copy the API token displayed on the page.
+
+== Quick start
+
+The fastest way to install and configure the `sts` CLI is to use the pre-filled commands available in your {stackstate-product-name} instance:
+
+. Log into your {stackstate-product-name} instance.
+. Navigate to *Main menu* > *CLI*.
+. Copy the command for your OS and run it in a terminal.
+
+These commands are pre-filled with the correct URL and API token for your specific {stackstate-product-name} instance, making installation and configuration a single step.
+
+== Download the CLI
 
 [tabs]
 ====
-Installer::
+Windows::
 +
 --
-
-Open a *Powershell* terminal (version 5.1 or later), change the `<URL>` and `<API-TOKEN>` and run the command below. After installation, the `sts` command will be available for the current user on both the Powershell terminal and the command prompt (cmd.exe).
-
-[,powershell]
-----
-. { iwr -useb https://dl.stackstate.com/stackstate-cli/install.ps1 } | iex; install -StsUrl "<URL>" -StsApiToken "<API-TOKEN>"
-----
-
-For servers using self-signed certificates, you can optionally specify custom certificate configuration using `-StsCaCertPath` (path to PEM-encoded CA certificate file) or `-StsCaBase64Data` (base64-encoded CA certificate data). Alternatively, use `-StsSkipSsl true` to disable SSL certificate validation entirely (use with caution).
-
-Alternatively, go to the *CLI* page in the SUSE Observability UI and copy the *Quick installation* command for *Windows* - this is pre-filled with the correct `<URL>` and `<API-TOKEN>` for your SUSE Observability instance.
-
---
-Manual install steps::
-+
---
-
 Open a *Powershell* terminal (version 5.1 or later) and run the steps below. This can be done one step at a time, or joined together as a single script. After installation, the `sts` command will be available for the current user on both the Powershell terminal and the command prompt (cmd.exe).
 
 . Set the source version and target path for the CLI:
 +
 [,powershell]
 ----
- $CLI_PATH = $env:USERPROFILE +"\stackstate-cli"
- If (!(test-path $CLI_PATH)) { md $CLI_PATH }
- Invoke-WebRequest https://dl.stackstate.com/stackstate-cli/LATEST_VERSION -OutFile $CLI_PATH\VERSION
- $VERSION=type $CLI_PATH\VERSION
- $VERSION=$VERSION -replace "[v]"
- $CLI_DL = "https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.windows-x86_64.zip"
- echo "Installing SUSE Observability CLI v$VERSION to: $CLI_PATH"
+$CLI_PATH = $env:USERPROFILE +"\stackstate-cli"
+If (!(test-path $CLI_PATH)) { md $CLI_PATH }
+Invoke-WebRequest https://dl.stackstate.com/stackstate-cli/LATEST_VERSION -OutFile $CLI_PATH\VERSION
+$VERSION=type $CLI_PATH\VERSION
+$VERSION=$VERSION -replace "[v]"
+$CLI_DL = "https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.windows-x86_64.zip"
+echo "Installing {stackstate-product-name} CLI v$VERSION to: $CLI_PATH"
 ----
 
 . Download and unpack the CLI to the target CLI path. Remove remaining artifacts:
 +
 [,powershell]
 ----
- Invoke-WebRequest $CLI_DL -OutFile $CLI_PATH\stackstate-cli.zip
- Expand-Archive -Path "$CLI_PATH\stackstate-cli.zip" -DestinationPath $CLI_PATH -Force
- rm $CLI_PATH\stackstate-cli.zip, $CLI_PATH\VERSION
+Invoke-WebRequest $CLI_DL -OutFile $CLI_PATH\stackstate-cli.zip
+Expand-Archive -Path "$CLI_PATH\stackstate-cli.zip" -DestinationPath $CLI_PATH -Force
+rm $CLI_PATH\stackstate-cli.zip, $CLI_PATH\VERSION
 ----
 
 . Register the CLI path to the current user's PATH. This will make the `sts` command available everywhere:
 +
 [,powershell]
 ----
- $PATH = (Get-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH).Path
- if ( $PATH -notlike "*$CLI_PATH*" ) {
-   $PATH = "$PATH;$CLI_PATH"
-   (Set-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH –Value $PATH)
-   $MACHINE_PATH = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH).path
-   $env:Path = "$PATH;$MACHINE_PATH"
- }
+$PATH = (Get-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH).Path
+if ( $PATH -notlike "*$CLI_PATH*" ) {
+  $PATH = "$PATH;$CLI_PATH"
+  (Set-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH –Value $PATH)
+  $MACHINE_PATH = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH).path
+  $env:Path = "$PATH;$MACHINE_PATH"
+}
 ----
 
 . Verify that the CLI works:
 +
 [,powershell]
 ----
- sts version
+sts version
 ----
-
---
-====
-
-=== macOS
-
-Follow the steps below to install the SUSE Observability `sts` CLI on macOS.
-
-[tabs]
-====
-Installer::
-+
---
-Open a terminal, change the `<URL>` and `<API-TOKEN>` and run the command below.
-
-* The default install location is `/usr/local/bin`,  which might require sudo permissions depending on the version of your machine.
-* You can specify an install location by adding `STS_CLI_LOCATION` to the command, as shown below. Note that the path provided must be available in your OS Path or the script might fail to complete.
-
-After installation, the `sts` command will be available for the current user.
-
-[,bash]
-----
-# Install in default location `/usr/local/bin`
-curl -o- https://dl.stackstate.com/stackstate-cli/install.sh | STS_URL="<URL>" STS_API_TOKEN="<API-TOKEN>" bash
-
-# Install in a specified location
-curl -o- https://dl.stackstate.com/stackstate-cli/install.sh | STS_URL="<URL>" STS_API_TOKEN="<API-TOKEN>" STS_CLI_LOCATION="<INSTALL-PATH>" bash
-----
-
-For servers using self-signed certificates, you can optionally specify custom certificate configuration using `STS_CA_CERT_PATH` (path to PEM-encoded CA certificate file) or `STS_CA_CERT_BASE64_DATA` (base64-encoded CA certificate data) environment variables. Alternatively, use `STS_SKIP_SSL="true"` to disable SSL certificate validation entirely (use with caution).
-
-Alternatively, go to the *CLI* page in the SUSE Observability UI and copy the *Quick installation* command for *MacOS* - this is pre-filled with the correct `<URL>` and `<API-TOKEN>` for your SUSE Observability instance and will install the CLI at the default location.
-
 --
 
-Manual install steps::
+macOS::
 +
 --
 Open a terminal and run the steps below. This can be done one step at a time, or all together as a single script. After installation, the `sts` command will be available for the current user.
@@ -132,35 +99,11 @@ Open a terminal and run the steps below. This can be done one step at a time, or
 +
 [,bash]
 ----
- sts version
+sts version
 ----
-
---
-====
-
-=== Linux
-
-Follow the steps below to install the SUSE Observability `sts` CLI on Linux.
-
-[tabs]
-====
-Installer::
-+
---
-Open a terminal, change the `<URL>` and `<API-TOKEN>` and run the command below. After installation, the `sts` command will be available for the current user.
-
-[,bash]
-----
-curl -o- https://dl.stackstate.com/stackstate-cli/install.sh | STS_URL="<URL>" STS_API_TOKEN="<API-TOKEN>" bash
-----
-
-For servers using self-signed certificates, you can optionally specify custom certificate configuration using `STS_CA_CERT_PATH` (path to PEM-encoded CA certificate file) or `STS_CA_CERT_BASE64_DATA` (base64-encoded CA certificate data) environment variables. Alternatively, use `STS_SKIP_SSL` to disable SSL certificate validation entirely (use with caution).
-
-Alternatively, go to the *CLI* page in the SUSE Observability UI and copy the *Quick installation* command for *Linux* - this is pre-filled with the correct `<URL>` and `<API-TOKEN>` for your SUSE Observability instance.
-
 --
 
-Manual install steps::
+Linux::
 +
 --
 Open a terminal and run the steps below. This can be done one step at a time, or all together as a single script. After installation, the `sts` command will be available for the current user.
@@ -177,14 +120,13 @@ curl https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.
 +
 [,bash]
 ----
- sts version
+sts version
 ----
-
 --
-====
 
-=== Docker
-
+Docker::
++
+--
 To run the latest version of the CLI using Docker execute:
 
 [,bash]
@@ -192,44 +134,55 @@ To run the latest version of the CLI using Docker execute:
 docker run stackstate/stackstate-cli2
 ----
 
-Alternatively, go to the *CLI* page in the SUSE Observability UI and copy the *Quick installation* command for *Docker* - this is pre-filled with the correct `<URL>` and `<API-TOKEN>` required to configure the CLI for your SUSE Observability instance.
+Alternatively, go to the *CLI* page in the {stackstate-product-name} UI and copy the *Quick installation* command for *Docker* - this is pre-filled with the correct `<URL>` and `<API-TOKEN>` required to configure the CLI for your {stackstate-product-name} instance.
 
-You can now run CLI commands by adding appending them to the end of the `docker run` command (for example, `docker run stackstate/stackstate-cli2 version`).
+You can now run CLI commands by appending them to the end of the `docker run` command (for example, `docker run stackstate/stackstate-cli2 version`).
+--
+====
 
-== Configure the `sts` CLI
+== Configure the CLI
 
-=== Quick start
+=== Authentication
+
+==== API token
+
+By default, the CLI will authenticate using the API token that you provided when the CLI configuration was saved.
 
 [CAUTION]
 ====
 The most secure way to use your API token is through an environment variable. You can store the API token with a secrets manager and inject it as an environment variable into your shell.
 ====
 
-
-==== Linux, macOS and Windows
-
-. In the SUSE Observability UI, go to *Main menu* > *CLI* and copy your API token.
-. Run the command below, where `<URL>` is the URL to your SUSE Observability instance and `<API-TOKEN>` is the API token you copied from the CLI page in the SUSE Observability UI:
+[tabs]
+====
+Windows / macOS / Linux::
++
+--
+. In the {stackstate-product-name} UI, go to *Main menu* > *CLI* and copy your API token.
+. Run the command below, where `<URL>` is the URL to your {stackstate-product-name} instance and `<API-TOKEN>` is the API token you copied from the CLI page in the {stackstate-product-name} UI:
 +
 [,bash]
 ----
 sts context save --name <NAME> --url <URL> --api-token <API-TOKEN>
 ----
 
-. The connection to your SUSE Observability instance will be tested and a configuration file stored at `~/.config/stackstate-cli/config.yaml`.
+. The connection to your {stackstate-product-name} instance will be tested and a configuration file stored at `~/.config/stackstate-cli/config.yaml`.
+--
 
-==== Docker
+Docker::
++
+--
+The Docker version of the CLI can't be configured with a config file. Specify the configuration of your {stackstate-product-name} instance using environment variables and pass these to Docker:
 
-The Docker version of the CLI can't be configured with a config file. Specify the configuration of your SUSE Observability instance using environment variables and pass these to Docker:
-
-* `STS_CLI_URL` - the URL to your SUSE Observability instance.
-* `STS_CLI_API_TOKEN` - the API token taken from the SUSE Observability UI *Main menu* > *CLI* page.
+* `STS_CLI_URL` - the URL to your {stackstate-product-name} instance.
+* `STS_CLI_API_TOKEN` - the API token taken from the {stackstate-product-name} UI *Main menu* > *CLI* page.
 * `STS_CA_CERT_PATH` - path to a PEM-encoded CA certificate file for servers using self-signed certificates. The directory containing the certificate must be mounted into the Docker container.
 * `STS_CA_CERT_BASE64_DATA` - base64-encoded CA certificate data for servers using self-signed certificates (ignored if `STS_CA_CERT_PATH` is specified).
 * `STS_SKIP_SSL` - disables SSL certificate validation (ignores certificate configurations, use with caution).
 
 For example:
 
+[,bash]
 ----
 docker run \
    -v /path/to/certs:/certs \
@@ -238,16 +191,12 @@ docker run \
    -e STS_CA_CERT_PATH=/certs/ca.crt \
    stackstate/stackstate-cli2 settings list --type Layer
 ----
-
-=== Authentication
-
-==== API token
-
-By default, the CLI will authenticate using the API token that you provided when the CLI configuration was saved.
+--
+====
 
 ==== Service tokens
 
-You can optionally use the CLI to create one or more service tokens to authenticate with the SUSE Observability Base and Admin APIs. For example, a service token can be used to authenticate in CI (Continuous Integration) scenarios where no real user is doing the operations on the SUSE Observability instance.
+You can optionally use the CLI to create one or more service tokens to authenticate with the {stackstate-product-name} Base and Admin APIs. For example, a service token can be used to authenticate in CI (Continuous Integration) scenarios where no real user is doing the operations on the {stackstate-product-name} instance.
 
 To create a service token, run the command below:
 
@@ -267,7 +216,7 @@ sts context save --name <NAME> --service-token <TOKEN> --url <URL>
 
 === Manage multiple contexts
 
-The `sts` CLI supports configuration and management of different (authentication) contexts. This enables you to easily switch between an administrative and regular user, or to switch between different SUSE Observability instances. For example, you could use a different context for a test and production instance of SUSE Observability. You can list, save, delete, set and validate contexts in the `sts` CLI. Run `sts context -h` for details of the available commands and their usage.
+The `sts` CLI supports configuration and management of different (authentication) contexts. This enables you to easily switch between an administrative and regular user, or to switch between different {stackstate-product-name} instances. For example, you could use a different context for a test and production instance of {stackstate-product-name}. You can list, save, delete, set and validate contexts in the `sts` CLI. Run `sts context -h` for details of the available commands and their usage.
 
 === Configuration options
 
@@ -284,15 +233,15 @@ If multiple types of configuration are presented to the CLI the order of process
 
 | `STS_CLI_URL`
 | `--url`
-| URL to your SUSE Observability instance.
+| URL to your {stackstate-product-name} instance.
 
 | `STS_CLI_API_TOKEN`
 | `--api-token`
-| API token to your SUSE Observability instance. The most secure way to use your API token is through an environment variable. You can store the API token with a secrets manager and inject it as an environment variable into your shell.
+| API token to your {stackstate-product-name} instance. The most secure way to use your API token is through an environment variable. You can store the API token with a secrets manager and inject it as an environment variable into your shell.
 
 | `STS_CLI_SERVICE_TOKEN`
 | `--service-token`
-| A service token to your SUSE Observability instance. The most secure way to use your service token is through an environment variable. You can store the service token with a secrets manager and inject it as an environment variable into your shell.
+| A service token to your {stackstate-product-name} instance. The most secure way to use your service token is through an environment variable. You can store the service token with a secrets manager and inject it as an environment variable into your shell.
 
 | `STS_CA_CERT_PATH`
 | `--ca-cert-path`
@@ -317,23 +266,103 @@ If multiple types of configuration are presented to the CLI the order of process
 
 Next to overriding specific parts of the config file, it's also possible to override the default config file location. This is done through the `--config <PATH>` flag.
 
+== Available Commands
+
+The `sts` CLI provides the following top-level commands:
+
+|===
+| Command | Description
+
+| agent
+| Manage {stackstate-product-name} agents
+
+| completion
+| Generate autocompletion scripts for shells
+
+| context
+| Manage the CLI contexts and configurations
+
+| dashboard
+| Manage dashboards
+
+| health
+| Health synchronization related commands
+
+| license
+| Manage {stackstate-product-name} license information
+
+| monitor
+| Manage monitors and monitoring configurations
+
+ifdef::ss-ff-stackpacks2_enabled[]
+| otel-component-mapping*
+| Manage OpenTelemetry component mappings
+
+| otel-relation-mapping*
+| Manage OpenTelemetry relation mappings
+endif::ss-ff-stackpacks2_enabled[]
+
+| rbac
+| Manage RBAC
+
+| service-token
+| Manage service tokens.
+
+| settings
+| Manage instance settings and configurations
+
+| stackpack
+| Manage and upload StackPacks
+
+| topic
+| Manage Kafka topics
+
+| topology-sync
+| Manage topology synchronization
+
+| user-session
+| Inspect user sessions
+
+| version
+| Display version information
+|===
+
+ifdef::ss-ff-stackpacks2_enabled[]
+{empty}* Experimental commands that require the `STS_EXPERIMENTAL_OTEL_MAPPING=true` environment variable to be enabled.
+
+Example usage:
+
+[,bash]
+----
+STS_EXPERIMENTAL_OTEL_MAPPING=true sts otel-component-mapping --help
+----
+endif::ss-ff-stackpacks2_enabled[]
+
+All commands accept the `--help` flag, which documents each command's usage.
+
+For detailed information about any command and its subcommands, run:
+
+[,bash]
+----
+sts [command] --help
+----
+
 == Upgrade
 
-To upgrade to the latest version of the `sts` CLI, <<_install_the_sts_cli,run the install command again>>.
+To upgrade to the latest version of the `sts` CLI, <<_quick_start, run the install command again>>.
 
 You can check the version of the `sts` CLI that you are currently running with the command `sts version`.
 
 == Uninstall
 
-Follow the instructions below to uninstall the SUSE Observability CLI.
-
-### Windows
-
 [tabs]
 ====
-Uninstaller::
+Windows::
 +
 --
+[discrete]
+=== Quick uninstall
+
 Open a *Powershell* terminal and run:
 
 [,powershell]
@@ -342,11 +371,10 @@ Open a *Powershell* terminal and run:
 ----
 
 The `sts` CLI and all associated configuration are now removed for the current user.
---
 
-Manual::
-+
---
+[discrete]
+=== Manual uninstall
+
 Open a *Powershell* terminal and run each step one-by-one or all at once. The `sts` CLI and all associated configuration will be removed for the current user.
 
 . Remove binary:
@@ -366,26 +394,23 @@ rm -R $env:USERPROFILE+"\.config\stackstate-cli" 2>1  > $null
 
 . Remove the CLI from the environment path:
 +
+[,powershell]
 ----
-$PATH = (Get-ItemProperty -Path ‘Registry::HKEY_CURRENT_USER\Environment’ -Name PATH).Path
+$PATH = (Get-ItemProperty -Path 'Registry::HKEY_CURRENT_USER\Environment' -Name PATH).Path
 $i = $PATH.IndexOf(";$CLI_PATH")
 if ($i -ne -1) {
   $PATH = $PATH.Remove($i, $CLI_PATH.Length+1)
   (Set-ItemProperty -Path 'Registry::HKEY_CURRENT_USER\Environment' -Name PATH –Value $PATH)
 }
 ----
-
 --
-====
 
-
-### macOS
-
-[tabs]
-====
-Uninstaller::
+macOS::
 +
 --
+[discrete]
+=== Quick uninstall
+
 Open a terminal and run:
 
 [,bash]
@@ -394,12 +419,9 @@ curl -o- https://dl.stackstate.com/stackstate-cli/uninstall.sh | bash
 ----
 
 The `sts` CLI and all associated configuration are now removed for the current user.
---
 
-Manual::
-+
---
-To manually uninstall the `sts` CLI, follow the steps below.
+[discrete]
+=== Manual uninstall
 
 . Open a terminal.
 . To remove the `sts` CLI, run the command:
@@ -418,15 +440,13 @@ rm -r ~/.config/stackstate-cli
 
 The `sts` CLI and all associated configuration are now removed for the current user.
 --
-====
 
-### Linux
-
-[tabs]
-====
-Uninstaller::
+Linux::
 +
 --
+[discrete]
+=== Quick uninstall
+
 Open a terminal and run:
 
 [,bash]
@@ -435,12 +455,9 @@ curl -o- https://dl.stackstate.com/stackstate-cli/uninstall.sh | bash
 ----
 
 The `sts` CLI and all associated configuration are now removed for the current user.
---
 
-Manual::
-+
---
-To manually uninstall the `sts` CLI, follow the steps below.
+[discrete]
+=== Manual uninstall
 
 . Open a terminal.
 . To remove the `sts` CLI, run the command:
@@ -459,19 +476,21 @@ rm -r ~/.config/stackstate-cli
 
 The `sts` CLI and all associated configuration are now removed for the current user.
 --
-====
 
-### Docker
-
+Docker::
++
+--
 To remove the CLI image and containers run:
 
 [,bash]
 ----
 docker rmi -f stackstate/stackstate-cli2
 ----
+--
+====
 
 == Open source
 
-The SUSE Observability `sts` CLI is open source and can be found on GitHub at:
+The {stackstate-product-name} `sts` CLI is open source and can be found on GitHub at:
 
 * https://github.com/stackvista/stackstate-cli
