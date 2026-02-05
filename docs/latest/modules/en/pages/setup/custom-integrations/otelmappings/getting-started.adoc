@@ -8,11 +8,10 @@ ifdef::ss-ff-stackpacks2_enabled[]
 
 This document provides a getting started guide for building topology from OpenTelemetry (OTel) trace data using component and relation mappings packaged as part of a StackPack.
 
-This guide focuses on topology that can be visualized immediately in the product using telemetry data that is already present. The example topology that will be generated models how a service instance executes a process, derived from OpenTelemetry resource attributes.
-
+This guide focuses on topology that can be visualized immediately in the product using telemetry data that is already present.
+The example topology that will be generated models how a service instance executes a process, derived from OpenTelemetry resource attributes.
 
 == Prerequisites
-
 
 * You already collect OpenTelemetry traces.
 * You are creating or extending a StackPack.
@@ -93,6 +92,7 @@ Each relation mapping:
 Relations are created once both the source and target components exist.
 
 == Creating service components from traces
+
 === Defining what a "service" means
 
 Before writing the mapping, we need to make a design decision.
@@ -115,7 +115,8 @@ Each service instance:
 * Represents a concrete running instance of a service.
 * Is stable across signals (traces and metrics).
 
-Because this mapping already exists, it is not redefined in this guide. Instead, we build on top of it.
+Because this mapping already exists, it is not redefined in this guide.
+Instead, we build on top of it.
 
 == Creating process components from traces
 
@@ -187,7 +188,7 @@ expireAfter: 900000
 * The identifier is stable for the lifetime of the process.
 * A custom tag is added to aid filtering (for the verification stage).
 
-Substitute `<stackpack-name>` with the name of your StackPack.
+Substitute `<stackpack-name>` with the name of your StackPack (if you don't have one yet, use any name you like, like `mystackpack`).
 
 == Creating executes relations
 
@@ -195,7 +196,7 @@ Now that service instances and processes exist as components, we can connect the
 
 === Service instance executes process
 
-The following relation mapping creates an executes relation from a service instance to a process.
+The following relation mapping creates an `executes` relation from a service instance to a process.
 
 This mapping is adapted from the existing "host executes service instance" relation provided by the OpenTelemetry StackPack.
 
@@ -246,25 +247,49 @@ expireAfter: 900000
 
 The relation identifier is constructed (automatically) from the `sourceId` and `targetId`, and is of the form: `sourceId-relationId`
 
-Substitute `<stackpack-name>` with the name of your StackPack.
+Substitute `<stackpack-name>` with the name of your StackPack (if you don't have one yet, use any name you like, like `mystackpack`).
 
 == Validating the OTel mappings
 
+There are two options to validate the correctness of the mappings before deploying them to production.
+
+1. Using the `sts stackpack test-deploy` command to package, upload and install/upgrade a StackPack containing the mappings to a running {stackstate-product-name} instance.
+2. Using the `sts otel-component-mapping apply` and `sts otel-relation-mapping apply` commands to create/update the mappings individually to a running {stackstate-product-name} instance.
+
+=== Testing the mappings together in a StackPack
+
 Assuming both mappings live inside your StackPack, they can be tested together. Refer to xref:/setup/cli/cli-sts.adoc[StackPack CLI] documentation for more information.
 
-Using the `sts stackpack test --yes` command, you can:
+Using the `sts stackpack test-deploy --yes` command, you can:
 
 * Package, upload, and install/upgrade the StackPack
 * Validate the declarative component and relation mappings residing in the StackPack (e.g., expression correctness, correct reference of input signal data based on filtering provided)
 
 [NOTE]
 ====
-The `sts stackpack test` command doesn't feed example trace data through the mappings. To verify that the mappings produce the correct topology, ensure Open Telemetry trace data is sent to SUSE Observability. Refer to the xref:/setup/custom-integrations/develop.adoc[Develop a Custom Integration (StackPack)] for more details on how to use `sts stackpack test`.
+The `sts stackpack test` command doesn't feed example trace data through the mappings.
+To verify that the mappings produce the correct topology, ensure Open Telemetry trace data is sent to SUSE Observability.
+Refer to the xref:/setup/custom-integrations/develop.adoc[Develop a Custom Integration (StackPack)] for more details on how to use `sts stackpack test`.
 ====
+
+=== Testing the mappings individually
+
+Assuming the above component and relation mappings are defined in YAML files, they can be applied individually.
+
+Substitute `<stackpack-name>` with the name of your StackPack (if you don't have one yet, use any name you like, like `mystackpack`).
+
+[,sh]
+----
+$ sts otel-component-mapping apply -f process-component-mapping.yaml
+✅ OTel component mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-component-mapping:process, Name: OTel Process
+
+$ sts otel-relation-mapping apply -f process-relation-mapping.yaml
+✅ OTel Relation Mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance, Name: Executes Relation (Service Instance -> Process)
+----
 
 == Resulting topology
 
-When these mappings are applied, the resulting topology forms a service-process graph derived entirely from trace data.
+When these mappings are applied, the resulting topology forms a service-process topology graph derived entirely from trace data.
 
 For example, using the `checkoutservice` from the OTel demo app, visually, the topology should appear as:
 
@@ -290,17 +315,36 @@ See the xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[Troubl
 
 image:custom-integrations/otel-mappings/topology_from_otel_guide_topology_result.png[Topology result]
 
-To see all the process components created as a result of the process component mapping being applied:
+To see all the process components created as a result of the process component mapping being applied, use the `sts topology inspect` command with a type filter.
 
-1. Open the {stackstate-product-name} UI at the configured `baseUrl` Helm value
-2. In the left-hand sidebar, click on `Open Telemetry > Services Instances`
-3. In the sub navigation-bar at the top, click on `Save view as...` and give it a name (e.g., `Custom process components`)
-4. In the left-hand sidebar, click on `Views`, and open the view created in step 3
-5. In the sub navigation-bar at the top, on the far right, click on `Filters`
-6. Remove `otel service instance` from the `Component Types` field, and type `process`
-7. Remove `stackpack:opentelemetry` from the `Component Labels` field, and type `custom:process-component`
+[,sh]
+----
+$ sts topology inspect --type process
+NAME                                                             | TYPE    | IDENTIFIERS
+od-productcatalogservice-cf9d7b456-rlmp5/productcatalogservice:1 | process | urn:opentelemetry:process/od-productcatalogservice-cf9d7b456-rlmp5:1
+od-adservice-6c9dfcfdbf-5pdqr//opt/java/openjdk/bin/java:1       | process | urn:opentelemetry:process/od-adservice-6c9dfcfdbf-5pdqr:1
+od-frontend-685db864d9-6sh4d/node:17                             | process | urn:opentelemetry:process/od-frontend-685db864d9-6sh4d:17
+od-paymentservice-bf8f84b5d-n8k77/node:17                        | process | urn:opentelemetry:process/od-paymentservice-bf8f84b5d-n8k77:17
+od-quoteservice-859b8c5c4c-nkmgq/public/index.php:7              | process | urn:opentelemetry:process/od-quoteservice-859b8c5c4c-nkmgq:7
+od-checkoutservice-78885bf588-59p9d/checkoutservice:1            | process | urn:opentelemetry:process/od-checkoutservice-78885bf588-59p9d:1
+od-accountingservice-7c546cb977-xjp2c/accountingservice:1        | process | urn:opentelemetry:process/od-accountingservice-7c546cb977-xjp2c:1
+----
 
-image:custom-integrations/otel-mappings/topology_from_otel_guide_process_custom_view.png[Custom view]
+== Cleaning up
+
+To remove the mappings created in this guide, use the following commands:
+
+Substitute `<stackpack-name>` with the name of your StackPack.
+
+[,sh]
+----
+$ sts otel-component-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process
+✅ OTel Component Mapping deleted: urn:stackpack:mystackpack:shared:otel-component-mapping:process
+
+$ sts otel-relation-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance
+✅ OTel Relation Mapping deleted: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance
+----
+
 
 == Summary
 
