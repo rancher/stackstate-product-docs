@@ -161,6 +161,93 @@ Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-st
 sts stackpack package -d ./my-stackpack -f my-custom-archive.zip
 ----
 
+=== Validate Your StackPack
+
+Before uploading and installing your StackPack, you can validate it to ensure it's properly configured (for a tighter feedback loop). There are two approaches depending on your workflow:
+
+==== Local Validation with Live Backend
+
+The `validate` subcommand validates a StackPack against a running {stackstate-product-name} instance. This is useful for validating your StackPack during development.
+
+- Validate a StackPack directory (automatically packaged and uploaded):
++
+[source,bash]
+----
+sts stackpack validate -d ./my-stackpack
+✅ Stackpack validation successful!
+----
+
+- Validate a pre-packaged `.sts` file:
++
+[source,bash]
+----
+sts stackpack validate -f ./my-stackpack-0.0.1.sts
+✅ Stackpack validation successful!
+----
+
+[NOTE]
+====
+The `sts stackpack validate` command requires a running {stackstate-product-name} instance configured in your CLI context. If you don't have a live instance available, use CI validation instead.
+====
+
+==== Validation in CI/CD Pipelines
+
+For CI/CD pipelines where you may not have a running {stackstate-product-name} instance, use the `stack-pack-validator` tool from the StackState Server Docker image. This performs validation without requiring a live backend connection.
+
+===== GitLab CI Example
+
+Use the StackState Server Docker image directly in your GitLab CI pipeline:
+
+[source,yaml]
+----
+.validate-stackpack: &validate-stackpack
+  stage: validate
+  image: registry.rancher.com/stackstate/stackstate-server:<latest-tag>
+  script:
+    - |
+      echo "Validating stackpack source: stackpacks/$STACKPACK"
+      /opt/docker/bin/stack-pack-validator -directory "$CI_PROJECT_DIR/stackpacks/$STACKPACK" || {
+        echo "ERROR: Stackpack validation failed for stackpacks/$STACKPACK"
+        exit 1
+      }
+      echo "Stackpack validation passed for stackpacks/$STACKPACK"
+  dependencies: []
+
+validate-my-stackpack:
+  <<: *validate-stackpack
+  variables:
+    STACKPACK: my-stackpack
+----
+
+===== Docker Command Line
+
+If running validation locally or in other CI/CD systems, use the `docker run` command:
+
+- Validate a packaged `.sts` file:
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack-0.0.1.sts:/stackpack.sts \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -file /stackpack.sts
+----
+
+- Validate a stackpack directory:
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack:/stackpack \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -directory /stackpack
+----
+
+[TIP]
+====
+Use the `stack-pack-validator` script in the `stackstate-server` image in your CI/CD pipeline to validate StackPacks before publishing them. This ensures your StackPack meets all requirements without needing a running {stackstate-product-name} instance.
+====
+
 === Upload your StackPack
 
 The `upload` subcommand pushes the zip archive to a running {stackstate-product-name} instance.
