@@ -78,7 +78,7 @@ collect_kafka_disk_performance() {
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka//testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
     done
 }
 
