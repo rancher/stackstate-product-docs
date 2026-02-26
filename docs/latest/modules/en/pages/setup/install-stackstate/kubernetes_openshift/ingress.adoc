@@ -5,13 +5,13 @@
 
 == Overview
 
-SUSE Observability can be exposed with a Kubernetes Ingress resource. The example on this page shows how to configure an nginx-ingress controller using xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm for SUSE Observability running on Kubernetes]. This page also documents which service/port combination to expose when using a different method of configuring ingress traffic.
+SUSE Observability can be exposed with a Kubernetes Ingress resource. The examples on this page show how to configure an Nginx Ingress or Traefik ingress controller using xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm for SUSE Observability running on Kubernetes]. This page also documents which service/port combination to expose when using a different method of configuring ingress traffic.
 
 When observing the cluster that also hosts SUSE Observability, the agent traffic can be kept entirely within the cluster itself by xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_agents_in_the_same_cluster[changing the agent configuration] during agent installation.
 
 == Configure ingress via the SUSE Observability Helm chart
 
-The SUSE Observability Helm chart exposes an `ingress` section in its values. This is disabled by default. The example below shows how to use the Helm chart to configure an nginx-ingress controller with TLS encryption enabled. Note that setting up the controller itself and the certificates is beyond the scope of this document.
+The SUSE Observability Helm chart exposes an `ingress` section in its values. This is disabled by default. The examples below show how to use the Helm chart to configure an ingress controller with TLS encryption enabled. Note that setting up the controller itself and the certificates is beyond the scope of this document.
 
 To configure the ingress for SUSE Observability, create a file `ingress_values.yaml` with contents like below. Replace `MY_DOMAIN` with your own domain (that's linked with your ingress controller) and set the correct name for the `tls-secret`. Consult the documentation of your ingress controller for the correct annotations to set. All fields below are optional, for example, if no TLS will be used, omit that section but be aware that SUSE Observability also doesn't encrypt the traffic.
 
@@ -20,7 +20,11 @@ To configure the ingress for SUSE Observability, create a file `ingress_values.y
 Note that setting up TLS is required for the use of the rancher UI extension.
 ====
 
-
+[tabs]
+====
+Nginx Ingress::
++
+--
 [,text]
 ----
 ingress:
@@ -29,16 +33,47 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
   hosts:
-    - host: stackstate.MY_DOMAIN
+    - host: suse-observability.MY_DOMAIN
   tls:
     - hosts:
-        - stackstate.MY_DOMAIN
+        - suse-observability.MY_DOMAIN
       secretName: tls-secret
 ----
 
-What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller. Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
+What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller.
+--
 
-The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress class] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
+Traefik::
++
+--
+.Known issues
+[WARNING]
+=====
+Make sure to use Traefik < 3.6.3 or >= 3.6.7 (with Helm chart version >= 39.0.0), as versions 3.6.3 to 3.6.6 have an issue that causes errors on some API endpoints. In particular, the component highlight pages fail to load due to API calls being blocked by Traefik with a `400 Bad Request` error.
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - otlp-http-suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+
+Replace the annotations placeholder above with the appropriate Traefik annotations for your environment.
+--
+====
+
+Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
+
+The examples use the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
 
 Include the `ingress_values.yaml` file when you run the `helm upgrade` command to deploy SUSE Observability:
 
@@ -61,10 +96,15 @@ This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kuber
 
 == Configure Ingress Rule for Open Telemetry
 
-The SUSE Observability Helm chart exposes an `opentelemetry-collector` service in its values where a dedicated `ingress` can be created. This is disabled by default. The ingress needed for `opentelemetry-collector` purposed needs to support GRPC protocol. The example below shows how to use the Helm chart to configure an nginx-ingress controller with GRPC and  TLS encryption enabled. Note that setting up the controller itself and the certificates is beyond the scope of this document.
+The SUSE Observability Helm chart exposes an `opentelemetry-collector` service in its values where a dedicated `ingress` can be created. This is disabled by default. The ingress needed for `opentelemetry-collector` purposes needs to support GRPC protocol. Note that setting up the controller itself and the certificates is beyond the scope of this document.
 
 To configure the `opentelemetry-collector` ingress for SUSE Observability, create a file `ingress_otel_values.yaml` with contents like below. Replace `MY_DOMAIN` with your own domain (that's linked with your ingress controller) and set the correct name for the `otlp-tls-secret`. Consult the documentation of your ingress controller for the correct annotations to set. All fields below are optional, for example, if no TLS will be used, omit that section but be aware that SUSE Observability also doesn't encrypt the traffic.
 
+[tabs]
+====
+Nginx Ingress::
++
+--
 [,text]
 ----
 opentelemetry-collector:
@@ -75,34 +115,75 @@ opentelemetry-collector:
       nginx.ingress.kubernetes.io/proxy-body-size: "50m"
       nginx.ingress.kubernetes.io/backend-protocol: GRPC
     hosts:
-      - host: otlp-stackstate.MY_DOMAIN
+      - host: otlp-suse-observability.MY_DOMAIN
         paths:
           - path: /
             pathType: Prefix
             port: 4317
     tls:
       - hosts:
-          - otlp-stackstate.MY_DOMAIN
+          - otlp-suse-observability.MY_DOMAIN
         secretName: otlp-tls-secret
     additionalIngresses:
       - name: otlp-http
         annotations:
           nginx.ingress.kubernetes.io/proxy-body-size: "50m"
         hosts:
-          - host: otlp-http-stackstate.MY_DOMAIN
+          - host: otlp-http-suse-observability.MY_DOMAIN
             paths:
               - path: /
                 pathType: Prefix
                 port: 4318
         tls:
           - hosts:
-              - otlp-http-stackstate.MY_DOMAIN
+              - otlp-http-suse-observability.MY_DOMAIN
             secretName: otlp-http-tls-secret
 ----
 
-What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller. Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
+What stands out in this file is the Nginx annotation to increase the allowed `proxy-body-size` to `50m` (larger than any expected request). By default, Nginx allows body sizes of maximum `1m`. SUSE Observability Agents and other data providers can sometimes send much larger requests. For this reason, you should make sure that the allowed body size is large enough, regardless of whether you are using Nginx or another ingress controller.
+--
 
-The example uses the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
+Traefik::
++
+--
+.Known issues
+[WARNING]
+=====
+Make sure to use Traefik < 3.6.3 or >= 3.6.7 (with Helm chart version >= 39.0.0), as versions 3.6.3 to 3.6.6 have an issue that causes errors on some API endpoints. In particular, the component highlight pages fail to load due to API calls being blocked by Traefik with a `400 Bad Request` error.
+=====
+
+[NOTE]
+=====
+Traefik support for the OpenTelemetry Collector ingress with GRPC backends is not yet available. The internal Helm charts need to be adjusted to support this configuration. This will be implemented in a future release.
+=====
+
+It is still possible to expose the OpenTelemetry Collector HTTP endpoint via Traefik:
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - host: otlp-http-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4318
+    tls:
+      - hosts:
+          - otlp-http-suse-observability.MY_DOMAIN
+        secretName: otlp-http-tls-secret
+----
+--
+====
+
+Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by SUSE Observability to generate convenient installation instructions for the agent.
+
+The examples use the `ingressClassName` field to specify the https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] instead of the deprecated `kubernetes.io/ingress.class` annotation. If your cluster has a default ingress class defined, the ingress class name field can be omitted.
 
 Include the `ingress_otel_values.yaml` file when you run the `helm upgrade` command to deploy SUSE Observability:
 
@@ -123,14 +204,6 @@ suse-observability/suse-observability
 ====
 This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
 ====
-
-== Traefik
-
-Traefik can be used as an alternative to Nginx as an ingress controller. 
-
-=== Known issues
-
-* Make sure to use Traefik <3.6.3 or >=3.6.7 (with Helm chart version >= 39.0.0), as versions 3.6.3 to 3.6.6 have an xref:https://github.com/traefik/traefik/pull/12360#issuecomment-3729140469[issue] that causes errors on some API endpoints. In particular the component highlight pages fail to load due to the API calls being blocked by Traefik with a 400 Bad Request error.
 
 == Configure via external tools
 
@@ -202,3 +275,4 @@ suse-observability/suse-observability
 * https://learn.microsoft.com/en-us/azure/aks/ingress-tls?tabs=azure-cli[AKS (learn.microsoft.com)]
 * https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html[EKS Official docs] (not using nginx)
 * https://aws.amazon.com/blogs/opensource/network-load-balancer-nginx-ingress-controller-eks/[EKS blog post] (using nginx)
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
