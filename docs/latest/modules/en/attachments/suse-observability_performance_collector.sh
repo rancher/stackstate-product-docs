@@ -44,7 +44,7 @@ if ! kubectl config current-context > /dev/null; then
   exit 1
 else
   CONTEXT=$(kubectl config current-context)
-  echo "Retrieving logs from kubernetes context: $CONTEXT"
+  echo "Running performance tests in kubernetes context: $CONTEXT"
 fi
 
 # Check if namespace exist or not
@@ -52,7 +52,7 @@ if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     echo "Namespace '$NAMESPACE' does not exist. Exiting."
     exit 1
 fi
-# Directory to store logs
+# Directory to store results
 OUTPUT_DIR="${NAMESPACE}_performance_$(date -u +%Y-%m-%d_%H-%M-%SZ)"
 ARCHIVE_FILE="${OUTPUT_DIR}.tar.gz"
 
