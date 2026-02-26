@@ -194,6 +194,35 @@ The `sts stackpack validate` command requires a running {stackstate-product-name
 
 For CI/CD pipelines where you may not have a running {stackstate-product-name} instance, use the `stack-pack-validator` tool from the StackState Server Docker image. This performs validation without requiring a live backend connection.
 
+===== GitLab CI Example
+
+Use the StackState Server Docker image directly in your GitLab CI pipeline:
+
+[source,yaml]
+----
+.validate-stackpack: &validate-stackpack
+  stage: validate
+  image: quay.io/stackstate/stackstate-server:latest
+  script:
+    - |
+      echo "Validating stackpack source: stackpacks/$STACKPACK"
+      /opt/docker/bin/stack-pack-validator -directory "$CI_PROJECT_DIR/stackpacks/$STACKPACK" || {
+        echo "ERROR: Stackpack validation failed for stackpacks/$STACKPACK"
+        exit 1
+      }
+      echo "Stackpack validation passed for stackpacks/$STACKPACK"
+  dependencies: []
+
+validate-my-stackpack:
+  <<: *validate-stackpack
+  variables:
+    STACKPACK: my-stackpack
+----
+
+===== Docker Command Line
+
+If running validation locally or in other CI/CD systems, use the `docker run` command:
+
 - Validate a packaged `.sts` file:
 +
 [source,bash]
@@ -216,7 +245,7 @@ docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
 
 [TIP]
 ====
-Use this approach in your CI/CD pipeline to validate StackPacks before publishing them. It ensures your StackPack meets all requirements without needing a running {stackstate-product-name} instance.
+Use the `stack-pack-validator` script in the `stackstate-server` image in your CI/CD pipeline to validate StackPacks before publishing them. This ensures your StackPack meets all requirements without needing a running {stackstate-product-name} instance.
 ====
 
 === Upload your StackPack
