@@ -1,0 +1,154 @@
+= Microsoft Entra ID via Keycloak
+:revdate: 2026-02-25
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Overview
+
+This guide describes how to configure Microsoft Entra ID (formerly Azure Active Directory) as an SSO identity provider in Keycloak, when Keycloak is used as the authentication provider for {stackstate-product-name}.
+
+The authentication flow is:
+
+----
+User -> Keycloak (identity broker) -> Microsoft Entra ID
+----
+
+Keycloak delegates authentication to Entra ID and maps Entra ID groups to Keycloak roles. {stackstate-product-name} then receives those roles from Keycloak through its standard xref:/setup/security/authentication/keycloak.adoc[Keycloak integration].
+
+NOTE: This is different from configuring xref:/setup/security/authentication/oidc/microsoft-entra-id.adoc[Entra ID as a direct OIDC provider] for {stackstate-product-name}, which doesn't involve Keycloak.
+
+== Prerequisites
+
+* A working Keycloak instance configured as the authentication provider for {stackstate-product-name} — see xref:/setup/security/authentication/keycloak.adoc[KeyCloak].
+* An Azure tenant with administrative access to register applications in Entra ID.
+* The Keycloak realm name and base URL (for example, `+https://keycloak.acme.com+` and realm `acme`).
+
+== Step 1: Register an application in Entra ID
+
+. Sign in to the https://portal.azure.com[Azure portal] and navigate to *Microsoft Entra ID* > *App registrations* > *New registration*.
+. Set a display name, for example `Keycloak SSO`.
+. Under *Redirect URI*, select *Web* and enter the Keycloak broker endpoint URL. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* — the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
++
+----
+https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint
+----
++
+Replace `<alias>` with the identity provider alias you will configure in Keycloak (for example, `entra-id`).
+. Click *Register*.
+. On the app overview page, note the *Application (client) ID* and the *Directory (tenant) ID*.
+. Navigate to *Certificates & secrets* > *Client secrets* > *New client secret*. Add a description, select an expiry period, and click *Add*. Copy the secret *Value* immediately — it won't be shown again.
+. To include group memberships in the token, navigate to *Token configuration* > *Add groups claim*. Select the group types you want to expose. This guide assumes you use *Group ID*.
+
+For more details, see the https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app[Microsoft documentation on registering an application].
+
+== Step 2: Configure the identity provider in Keycloak
+
+. Sign in to the Keycloak Admin Console and select your realm.
+. Navigate to *Identity Providers* > *Add provider* > *OpenID Connect v1.0*.
+. Configure the following settings:
++
+[cols="1,2"]
+|===
+| Setting | Value
+
+| *Alias*
+| An identifier for this provider, for example `entra-id`. This value is used in the redirect URI.
+
+| *Display Name*
+| The name shown on the Keycloak login page, for example `Microsoft Entra ID`.
+
+| *Discovery endpoint*
+| `+https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration+`
+
+| *Client ID*
+| The Application (client) ID from Step 1.
+
+| *Client Secret*
+| The client secret value from Step 1.
+
+| *Client Authentication*
+| `Client secret sent as post`
+
+| *Default Scopes*
+| `openid email profile`
+|===
+. Click *Save*.
+. Verify the provider appears on the Keycloak login page by opening your realm's login URL in a browser.
+
+For more details, see the https://www.keycloak.org/docs/latest/server_admin/#_identity_broker_oidc[Keycloak documentation on OpenID Connect v1.0 identity providers].
+
+== Step 3: Configure mappers
+
+Mappers transform claims from Entra ID into Keycloak user attributes or roles.
+
+=== Username mapper
+
+By default, Keycloak uses the identity provider's subject ID as the username. To use the email address instead:
+
+. In the Keycloak Admin Console, navigate to *Identity Providers* > *entra-id* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Username Template Importer`.
+. Set *Template* to `$\{CLAIM.email}`.
+. Click *Save*.
+
+=== Group-to-role mapper
+
+To map Entra ID group memberships to Keycloak roles:
+
+. Navigate to *Identity Providers* > *entra-id* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Claim to Role`.
+. Set *Claim* to `groups`.
+. Set *Claim Value* to the Entra ID group Object ID (for example, `aaaaaaaa-bbbb-1111-2222-aabbccddeeff`).
+. Under *Role*, select the Keycloak role to assign.
+. Click *Save*.
+
+Repeat this for each Entra ID group that should be mapped to a Keycloak role.
+
+TIP: You can find Entra ID group Object IDs in the Azure portal under *Microsoft Entra ID* > *Groups*. The Object ID is shown in the second column.
+
+== Step 4: Verify the role mapping chain
+
+The complete mapping chain is:
+
+----
+Entra ID group -> Keycloak role -> SUSE Observability role
+----
+
+. *Entra ID groups to Keycloak roles* — Configured in Step 3 using claim-to-role mappers.
+. *Keycloak roles to {stackstate-product-name} roles* — Configured in the `authentication.yaml` file using `roles.guest`, `roles.powerUser`, `roles.admin`, and `roles.k8sTroubleshooter`.
+
+To include Keycloak roles as a claim in the token sent to {stackstate-product-name}, verify that your Keycloak client for {stackstate-product-name} has a `roles` client scope or a protocol mapper that includes realm roles in the token.
+
+If Keycloak roles are sent in a field other than `roles`, configure the `jwtClaims.groupsField` in the {stackstate-product-name} Keycloak authentication configuration to point to the correct field. For example:
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    keycloak:
+      url: "https://keycloak.acme.com/auth"
+      realm: acme
+      authenticationMethod: client_secret_basic
+      clientId: stackstate
+      secret: "<keycloak-client-secret>"
+      jwsAlgorithm: RS256
+      jwtClaims:
+        groupsField: roles
+
+    roles:
+      guest: ["keycloak-guest-role"]
+      powerUser: ["keycloak-power-user-role"]
+      admin: ["keycloak-admin-role"]
+----
+
+To verify the full chain:
+
+. Log in to {stackstate-product-name} using a test user who is a member of an Entra ID group.
+. Confirm that the user is assigned the expected {stackstate-product-name} role.
+. If the user doesn't have the correct role, check the Keycloak user's role assignments and the {stackstate-product-name} authentication configuration.
+
+== See also
+
+* xref:/setup/security/authentication/keycloak.adoc[KeyCloak authentication for {stackstate-product-name}]
+* xref:/setup/security/authentication/keycloak/generic-oidc.adoc[Generic OIDC Provider via Keycloak]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permissions for predefined {stackstate-product-name} roles]
+* xref:/setup/security/authentication/troubleshooting.adoc[Troubleshooting authentication and authorization]
