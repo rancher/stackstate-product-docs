@@ -1,11 +1,11 @@
 = Generic OIDC Provider via Keycloak
-:revdate: 2026-02-25
+:revdate: 2026-03-04
 :page-revdate: {revdate}
-:description: SUSE Observability Self-hosted
+:description: SUSE Cloud Observability
 
 == Overview
 
-This guide describes how to configure any OIDC-compliant identity provider as an SSO provider in Keycloak, when Keycloak is used as the authentication provider for {stackstate-product-name}.
+This guide describes how to configure any OIDC-compliant identity provider as an SSO provider in Keycloak for your SUSE Cloud Observability tenant.
 
 The authentication flow is:
 
@@ -13,16 +13,16 @@ The authentication flow is:
 User -> Keycloak (identity broker) -> External OIDC Provider
 ----
 
-Keycloak delegates authentication to the external OIDC provider and maps claims to Keycloak roles. {stackstate-product-name} then receives those roles from Keycloak through its standard xref:/setup/security/authentication/keycloak.adoc[Keycloak integration].
+Keycloak delegates authentication to the external OIDC provider and maps claims to Keycloak roles. SUSE Cloud Observability then receives those roles from Keycloak through its standard integration.
 
 Use this guide when your OIDC provider is not covered by the provider-specific guides:
 
-* xref:/setup/security/authentication/keycloak/microsoft-entra-id.adoc[Microsoft Entra ID]
-* xref:/setup/security/authentication/keycloak/google.adoc[Google]
+* xref:/suse-cloud-observability/keycloak-sso/microsoft-entra-id.adoc[Microsoft Entra ID]
+* xref:/suse-cloud-observability/keycloak-sso/google.adoc[Google]
 
 == Prerequisites
 
-* A working Keycloak instance configured as the authentication provider for {stackstate-product-name} — see xref:/setup/security/authentication/keycloak.adoc[KeyCloak].
+* A SUSE Cloud Observability tenant with Advanced Keycloak management mode enabled -- see xref:/suse-cloud-observability/user-management.adoc[User Management].
 * An OIDC-compliant identity provider with a discovery endpoint (`+.well-known/openid-configuration+`).
 * Administrative access to register a client (application) in your OIDC provider.
 * The Keycloak realm name and base URL (for example, `+https://keycloak.acme.com+` and realm `acme`).
@@ -31,7 +31,7 @@ Use this guide when your OIDC provider is not covered by the provider-specific g
 
 Register a new client (or application) in your OIDC provider with the following settings:
 
-. Set the *Redirect URI* to the Keycloak broker endpoint. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* — the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
+. Set the *Redirect URI* to the Keycloak broker endpoint. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* -- the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
 +
 ----
 https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint
@@ -131,7 +131,7 @@ To change this behavior:
 
 Common options:
 
-* `first broker login` (default) — Review profile and link accounts.
+* `first broker login` (default) -- Review profile and link accounts.
 * A custom flow that automatically creates accounts without prompting.
 
 === Account linking
@@ -173,46 +173,20 @@ If your OIDC provider doesn't support a discovery endpoint, you can manually con
 The complete mapping chain is:
 
 ----
-OIDC Provider group/role -> Keycloak role -> SUSE Observability role
+OIDC Provider group/role -> Keycloak role -> SUSE Cloud Observability role
 ----
 
-. *Provider groups to Keycloak roles* — Configured in Step 3 using claim-to-role mappers or hardcoded roles.
-. *Keycloak roles to {stackstate-product-name} roles* — Configured in the `authentication.yaml` file using `roles.guest`, `roles.powerUser`, `roles.admin`, and `roles.k8sTroubleshooter`.
-
-To include Keycloak roles as a claim in the token sent to {stackstate-product-name}, verify that your Keycloak client for {stackstate-product-name} has a `roles` client scope or a protocol mapper that includes realm roles in the token.
-
-If Keycloak roles are sent in a field other than `roles`, configure the `jwtClaims.groupsField` in the {stackstate-product-name} Keycloak authentication configuration to point to the correct field. For example:
-
-[,yaml]
-----
-stackstate:
-  authentication:
-    keycloak:
-      url: "https://keycloak.acme.com/auth"
-      realm: acme
-      authenticationMethod: client_secret_basic
-      clientId: stackstate
-      secret: "<keycloak-client-secret>"
-      jwsAlgorithm: RS256
-      jwtClaims:
-        groupsField: roles
-
-    roles:
-      guest: ["keycloak-guest-role"]
-      powerUser: ["keycloak-power-user-role"]
-      admin: ["keycloak-admin-role"]
-----
+. *Provider groups to Keycloak roles* -- Configured in Step 3 using claim-to-role mappers or hardcoded roles.
+. *Keycloak roles to SUSE Cloud Observability roles* -- Roles map through the predefined Keycloak groups (`stackstate-k8s-troubleshooter`, `stackstate-k8s-admin`). No additional SUSE Cloud Observability configuration is needed -- the platform automatically maps Keycloak roles associated with these groups to the corresponding SUSE Cloud Observability roles.
 
 To verify the full chain:
 
-. Log in to {stackstate-product-name} using a test user from the external OIDC provider.
-. Confirm that the user is assigned the expected {stackstate-product-name} role.
-. If the user doesn't have the correct role, check the Keycloak user's role assignments and the {stackstate-product-name} authentication configuration.
+. Log in to SUSE Cloud Observability using a test user from the external OIDC provider.
+. Confirm that the user is assigned the expected SUSE Cloud Observability role.
+. If the user doesn't have the correct role, check the Keycloak user's role assignments and group memberships.
 
 == See also
 
-* xref:/setup/security/authentication/keycloak.adoc[KeyCloak authentication for {stackstate-product-name}]
-* xref:/setup/security/authentication/keycloak/microsoft-entra-id.adoc[Microsoft Entra ID via Keycloak]
-* xref:/setup/security/authentication/keycloak/google.adoc[Google via Keycloak]
-* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permissions for predefined {stackstate-product-name} roles]
-* xref:/setup/security/authentication/troubleshooting.adoc[Troubleshooting authentication and authorization]
+* xref:/suse-cloud-observability/user-management.adoc[User Management]
+* xref:/suse-cloud-observability/keycloak-sso/microsoft-entra-id.adoc[Microsoft Entra ID via Keycloak]
+* xref:/suse-cloud-observability/keycloak-sso/google.adoc[Google via Keycloak]
