@@ -1,11 +1,11 @@
 = Microsoft Entra ID via Keycloak
-:revdate: 2026-02-25
+:revdate: 2026-03-04
 :page-revdate: {revdate}
-:description: SUSE Observability Self-hosted
+:description: SUSE Cloud Observability
 
 == Overview
 
-This guide describes how to configure Microsoft Entra ID (formerly Azure Active Directory) as an SSO identity provider in Keycloak, when Keycloak is used as the authentication provider for {stackstate-product-name}.
+This guide describes how to configure Microsoft Entra ID (formerly Azure Active Directory) as an SSO identity provider in Keycloak for your SUSE Cloud Observability tenant.
 
 The authentication flow is:
 
@@ -13,13 +13,11 @@ The authentication flow is:
 User -> Keycloak (identity broker) -> Microsoft Entra ID
 ----
 
-Keycloak delegates authentication to Entra ID and maps Entra ID groups to Keycloak roles. {stackstate-product-name} then receives those roles from Keycloak through its standard xref:/setup/security/authentication/keycloak.adoc[Keycloak integration].
-
-NOTE: This is different from configuring xref:/setup/security/authentication/oidc/microsoft-entra-id.adoc[Entra ID as a direct OIDC provider] for {stackstate-product-name}, which doesn't involve Keycloak.
+Keycloak delegates authentication to Entra ID and maps Entra ID groups to Keycloak roles. SUSE Cloud Observability then receives those roles from Keycloak through its standard integration.
 
 == Prerequisites
 
-* A working Keycloak instance configured as the authentication provider for {stackstate-product-name} — see xref:/setup/security/authentication/keycloak.adoc[KeyCloak].
+* A SUSE Cloud Observability tenant with Advanced Keycloak management mode enabled -- see xref:/suse-cloud-observability/user-management.adoc[User Management].
 * An Azure tenant with administrative access to register applications in Entra ID.
 * The Keycloak realm name and base URL (for example, `+https://keycloak.acme.com+` and realm `acme`).
 
@@ -27,7 +25,7 @@ NOTE: This is different from configuring xref:/setup/security/authentication/oid
 
 . Sign in to the https://portal.azure.com[Azure portal] and navigate to *Microsoft Entra ID* > *App registrations* > *New registration*.
 . Set a display name, for example `Keycloak SSO`.
-. Under *Redirect URI*, select *Web* and enter the Keycloak broker endpoint URL. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* — the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
+. Under *Redirect URI*, select *Web* and enter the Keycloak broker endpoint URL. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* -- the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
 +
 ----
 https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint
@@ -36,7 +34,7 @@ https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint
 Replace `<alias>` with the identity provider alias you will configure in Keycloak (for example, `entra-id`).
 . Click *Register*.
 . On the app overview page, note the *Application (client) ID* and the *Directory (tenant) ID*.
-. Navigate to *Certificates & secrets* > *Client secrets* > *New client secret*. Add a description, select an expiry period, and click *Add*. Copy the secret *Value* immediately — it won't be shown again.
+. Navigate to *Certificates & secrets* > *Client secrets* > *New client secret*. Add a description, select an expiry period, and click *Add*. Copy the secret *Value* immediately -- it won't be shown again.
 . To include group memberships in the token, navigate to *Token configuration* > *Add groups claim*. Select the group types you want to expose. This guide assumes you use *Group ID*.
 
 For more details, see the https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app[Microsoft documentation on registering an application].
@@ -110,45 +108,20 @@ TIP: You can find Entra ID group Object IDs in the Azure portal under *Microsoft
 The complete mapping chain is:
 
 ----
-Entra ID group -> Keycloak role -> SUSE Observability role
+Entra ID group -> Keycloak role -> SUSE Cloud Observability role
 ----
 
-. *Entra ID groups to Keycloak roles* — Configured in Step 3 using claim-to-role mappers.
-. *Keycloak roles to {stackstate-product-name} roles* — Configured in the `authentication.yaml` file using `roles.guest`, `roles.powerUser`, `roles.admin`, and `roles.k8sTroubleshooter`.
-
-To include Keycloak roles as a claim in the token sent to {stackstate-product-name}, verify that your Keycloak client for {stackstate-product-name} has a `roles` client scope or a protocol mapper that includes realm roles in the token.
-
-If Keycloak roles are sent in a field other than `roles`, configure the `jwtClaims.groupsField` in the {stackstate-product-name} Keycloak authentication configuration to point to the correct field. For example:
-
-[,yaml]
-----
-stackstate:
-  authentication:
-    keycloak:
-      url: "https://keycloak.acme.com/auth"
-      realm: acme
-      authenticationMethod: client_secret_basic
-      clientId: stackstate
-      secret: "<keycloak-client-secret>"
-      jwsAlgorithm: RS256
-      jwtClaims:
-        groupsField: roles
-
-    roles:
-      guest: ["keycloak-guest-role"]
-      powerUser: ["keycloak-power-user-role"]
-      admin: ["keycloak-admin-role"]
-----
+. *Entra ID groups to Keycloak roles* -- Configured in Step 3 using claim-to-role mappers.
+. *Keycloak roles to SUSE Cloud Observability roles* -- Roles map through the predefined Keycloak groups (`stackstate-k8s-troubleshooter`, `stackstate-k8s-admin`). No additional SUSE Cloud Observability configuration is needed -- the platform automatically maps Keycloak roles associated with these groups to the corresponding SUSE Cloud Observability roles.
 
 To verify the full chain:
 
-. Log in to {stackstate-product-name} using a test user who is a member of an Entra ID group.
-. Confirm that the user is assigned the expected {stackstate-product-name} role.
-. If the user doesn't have the correct role, check the Keycloak user's role assignments and the {stackstate-product-name} authentication configuration.
+. Log in to SUSE Cloud Observability using a test user who is a member of an Entra ID group.
+. Confirm that the user is assigned the expected SUSE Cloud Observability role.
+. If the user doesn't have the correct role, check the Keycloak user's role assignments and group memberships.
 
 == See also
 
-* xref:/setup/security/authentication/keycloak.adoc[KeyCloak authentication for {stackstate-product-name}]
-* xref:/setup/security/authentication/keycloak/generic-oidc.adoc[Generic OIDC Provider via Keycloak]
-* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permissions for predefined {stackstate-product-name} roles]
-* xref:/setup/security/authentication/troubleshooting.adoc[Troubleshooting authentication and authorization]
+* xref:/suse-cloud-observability/user-management.adoc[User Management]
+* xref:/suse-cloud-observability/keycloak-sso/generic-oidc.adoc[Generic OIDC Provider via Keycloak]
+* xref:/suse-cloud-observability/keycloak-sso/google.adoc[Google via Keycloak]
