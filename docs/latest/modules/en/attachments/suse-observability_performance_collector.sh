@@ -60,15 +60,36 @@ techo() {
   echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a $OUTPUT_DIR/collector-output.log
 }
 
+collect_stackgraph_disk_performance() {
+    techo "StackGraph Disk performance..."
+
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==stackgraph -o jsonpath="{.items[*].metadata.name}")
+    if [ "${PODS[0]}" = "" ]; then
+      techo "StackGraph not found due to HA setup."
+    else
+      mkdir -p "$OUTPUT_DIR/stackgraph_disk"
+
+      for pod in $PODS; do
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/stackgraph_disk/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$OUTPUT_DIR/stackgraph_disk/$pod.log" 2>&1
+      done
+    fi
+}
+
 collect_hdfs_disk_performance() {
     techo "HDFS Disk performance..."
 
-    mkdir -p "$OUTPUT_DIR/hdfs_disk"
-
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==hdfs-dn -o jsonpath="{.items[*].metadata.name}")
-    for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/hdfs_disk/$pod.log" 2>&1
-    done
+    if [ "${PODS[0]}" = "" ]; then
+      techo "HDFS not found due to non-HA setup."
+    else
+      mkdir -p "$OUTPUT_DIR/hdfs_disk"
+
+      for pod in $PODS; do
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/hdfs_disk/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$OUTPUT_DIR/hdfs_disk/$pod.log" 2>&1
+      done
+    fi
 }
 
 collect_kafka_disk_performance() {
@@ -79,6 +100,7 @@ collect_kafka_disk_performance() {
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
     done
 }
 
@@ -89,10 +111,9 @@ collect_kafka_broker_performance() {
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
 
-    echo "Creating topics"
+    techo "Creating topics"
     index=0
     for pod in $PODS; do
-
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
           JMX_PORT="" /opt/bitnami/kafka/bin/kafka-topics.sh --create --if-not-exists --topic perf-test-topic-$index --bootstrap-server localhost:9092 --replica-assignment $index --config retention.ms=300000 --config retention.bytes=1073741824 \
         " > "$OUTPUT_DIR/kafka_producer/$pod.create.log" 2>&1
@@ -100,8 +121,7 @@ collect_kafka_broker_performance() {
         ((index++))
     done
 
-    prev_index=${#my_brokers[@]}
-    echo "Performance testing localhost"
+    techo "Performance testing localhost"
     index=0
     for pod in $PODS; do
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
@@ -111,17 +131,21 @@ collect_kafka_broker_performance() {
     done
 
 
-    echo "Performance testing remote"
-    index=0
-    # Used to select a topic on a remote broker
-    prev_index=${#my_brokers[@]}
-    for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-          JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
-        " > "$OUTPUT_DIR/kafka_producer/$pod.remote.log" 2>&1
-        prev_index=$index
-        ((index++))
-    done
+    if [ "${#PODS[@]}" = "1" ]; then
+      techo "Skipping remote testing due to only 1 kafka broker"
+    else
+      techo "Performance testing remote"
+      index=0
+      # Used to select a topic on a remote broker
+      prev_index=${#PODS[@]}
+      for pod in $PODS; do
+          kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
+            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+          " > "$OUTPUT_DIR/kafka_producer/$pod.remote.log" 2>&1
+          prev_index=$index
+          ((index++))
+      done
+    fi
 }
 
 archive_and_cleanup() {
@@ -139,6 +163,9 @@ trap "kill 0" EXIT
 
 echo "Collecting data in ${OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
+
+techo "Collecting StackGraph disk performance details..."
+collect_stackgraph_disk_performance
 
 techo "Collecting hdfs disk performance details..."
 collect_hdfs_disk_performance
