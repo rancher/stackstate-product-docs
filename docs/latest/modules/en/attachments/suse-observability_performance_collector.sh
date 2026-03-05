@@ -137,7 +137,8 @@ collect_kafka_broker_performance() {
       techo "Performance testing remote"
       index=0
       # Used to select a topic on a remote broker
-      prev_index=${#PODS[@]}
+      prev_index=${#POD_ARRAY[@]}
+      ((prev_index--))
       for pod in $PODS; do
           kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
             JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=suse-observability-kafka-headless:9092 acks=1\
