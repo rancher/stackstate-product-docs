@@ -130,8 +130,8 @@ collect_kafka_broker_performance() {
         ((index++))
     done
 
-
-    if [ "${#PODS[@]}" = "1" ]; then
+    POD_ARRAY=($PODS)
+    if [ "${#POD_ARRAY[@]}" = "1" ]; then
       techo "Skipping remote testing due to only 1 kafka broker"
     else
       techo "Performance testing remote"
@@ -140,7 +140,7 @@ collect_kafka_broker_performance() {
       prev_index=${#PODS[@]}
       for pod in $PODS; do
           kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=suse-observability-kafka-headless:9092 acks=1\
           " > "$OUTPUT_DIR/kafka_producer/$pod.remote.log" 2>&1
           prev_index=$index
           ((index++))
