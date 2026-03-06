@@ -28,7 +28,7 @@ shift $(($OPTIND - 1))
 NAMESPACE=${1:-suse-observability}
 
 # Check if commands are installed or not
-COMMANDS=("kubectl" "tar" "grep" "sed" "tr")
+COMMANDS=("kubectl" "tar" "awk" "tr" "grep")
 for cmd in ${COMMANDS[@]}; do
   if ! command -v $cmd &>/dev/null; then
      echo "$cmd is not installed. Please install it and try again."
@@ -60,97 +60,33 @@ techo() {
   echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a $OUTPUT_DIR/collector-output.log
 }
 
-collect_stackgraph_disk_performance_buffered() {
-    techo "StackGraph Buffered Disk performance..."
-    SUBDIR="$OUTPUT_DIR/stackgraph_disk_buffered"
+# Runs a dd disk write performance test on all pods matching a component label.
+# Usage: collect_disk_performance <label> <subdir> <component> <container> <testfile_path> [<extra_dd_flags>]
+#   label:          Human-readable name for log output (e.g. "StackGraph Buffered")
+#   subdir:         Subdirectory under OUTPUT_DIR to store results
+#   component:      Value for app.kubernetes.io/component pod selector
+#   container:      Container name inside the pod
+#   testfile_path:  Absolute path to the temporary test file inside the container
+#   extra_dd_flags: Optional extra flags appended to the dd command (e.g. "oflag=direct")
+collect_disk_performance() {
+    local label="$1" subdir="$2" component="$3" container="$4" testfile_path="$5" extra_dd_flags="$6"
+    local dd_flags="conv=fsync${extra_dd_flags:+ $extra_dd_flags}"
 
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==stackgraph -o jsonpath="{.items[*].metadata.name}")
-    if [ "${PODS[0]}" = "" ]; then
-      techo "StackGraph not found due to HA setup."
-    else
-      mkdir -p "$SUBDIR"
+    techo "$label Disk performance..."
+    local SUBDIR="$OUTPUT_DIR/$subdir"
 
-      for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
-      done
+    local PODS
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l "app.kubernetes.io/component==$component" -o jsonpath="{.items[*].metadata.name}")
+    if [ -z "$PODS" ]; then
+      techo "No pods found for component '$component', skipping."
+      return
     fi
-}
-
-collect_stackgraph_disk_performance_direct() {
-    techo "StackGraph Direct Disk performance..."
-    SUBDIR="$OUTPUT_DIR/stackgraph_disk_direct"
-
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==stackgraph -o jsonpath="{.items[*].metadata.name}")
-    if [ "${PODS[0]}" = "" ]; then
-      techo "StackGraph not found due to HA setup."
-    else
-      mkdir -p "$SUBDIR"
-
-      for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
-      done
-    fi
-}
-
-collect_hdfs_disk_performance_buffered() {
-    techo "HDFS Buffered Disk performance..."
-    SUBDIR="$OUTPUT_DIR/hdfs_disk_buffered"
-
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==hdfs-dn -o jsonpath="{.items[*].metadata.name}")
-    if [ "${PODS[0]}" = "" ]; then
-      techo "HDFS not found due to non-HA setup."
-    else
-      mkdir -p "$SUBDIR"
-
-      for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
-      done
-    fi
-}
-
-collect_hdfs_disk_performance_direct() {
-    techo "HDFS Direct Disk performance..."
-    SUBDIR="$OUTPUT_DIR/hdfs_disk_direct"
-
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==hdfs-dn -o jsonpath="{.items[*].metadata.name}")
-    if [ "${PODS[0]}" = "" ]; then
-      techo "HDFS not found due to non-HA setup."
-    else
-      mkdir -p "$SUBDIR"
-
-      for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
-      done
-    fi
-}
-
-collect_kafka_disk_performance_buffered() {
-    techo "Kafka Buffered Disk performance..."
-    SUBDIR="$OUTPUT_DIR/kafka_disk_buffered"
 
     mkdir -p "$SUBDIR"
 
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
-    done
-}
-
-collect_kafka_disk_performance_direct() {
-    techo "Kafka Direct Disk performance..."
-    SUBDIR="$OUTPUT_DIR/kafka_disk_direct"
-
-    mkdir -p "$SUBDIR"
-
-    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
-    for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- sh -xc "dd if=/dev/zero of=$testfile_path bs=100K count=5000 $dd_flags" > "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- sh -xc "rm $testfile_path" >> "$SUBDIR/$pod.log" 2>&1
     done
 }
 
@@ -239,19 +175,24 @@ generate_summary() {
     echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$SUMMARY"
     echo "" >> "$SUMMARY"
 
+    # Title-case a string like "kafka_disk_buffered" -> "Kafka Disk Buffered"
+    title_case() {
+        echo "$1" | tr '_' ' ' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1'
+    }
+
     # Disk throughput sections (dd output)
     for section in stackgraph_disk_buffered stackgraph_disk_direct hdfs_disk_buffered hdfs_disk_direct kafka_disk_buffered kafka_disk_direct; do
         SECTION_DIR="$OUTPUT_DIR/$section"
         [ -d "$SECTION_DIR" ] || continue
 
-        # Pretty-print the section name
-        label=$(echo "$section" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+        label=$(title_case "$section")
         echo "--- $label ---" >> "$SUMMARY"
 
         for logfile in "$SECTION_DIR"/*.log; do
             [ -f "$logfile" ] || continue
             pod=$(basename "$logfile" .log)
-            throughput=$(grep -oP '\d+(\.\d+)?\s+[KMGT]?B/s' "$logfile" | tail -1)
+            # Extract the throughput value (e.g. "145 MB/s") from dd output — last field of the line containing "B/s"
+            throughput=$(awk '/[KMGT]?B\/s/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]/ && $(i+1) ~ /B\/s/) {print $i, $(i+1); found=1}} END {if(!found) print ""}' "$logfile" | tail -1)
             if [ -n "$throughput" ]; then
                 printf "  %-60s %s\n" "$pod" "$throughput" >> "$SUMMARY"
             else
@@ -266,18 +207,19 @@ generate_summary() {
         SECTION_DIR="$OUTPUT_DIR/$section"
         [ -d "$SECTION_DIR" ] || continue
 
-        label=$(echo "$section" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+        label=$(title_case "$section")
         echo "--- $label ---" >> "$SUMMARY"
 
         for logfile in "$SECTION_DIR"/*.log; do
             [ -f "$logfile" ] || continue
             pod=$(basename "$logfile" .log)
-            # Extract the final summary line (starts with total record count and contains percentiles)
+            # Extract the final summary line (contains percentiles like "ms 50th")
             perf_line=$(grep 'ms 50th' "$logfile")
             if [ -n "$perf_line" ]; then
-                records_sec=$(echo "$perf_line" | grep -oP '[\d.]+ records/sec')
-                mb_sec=$(echo "$perf_line" | grep -oP '\([\d.]+ MB/sec\)')
-                avg_lat=$(echo "$perf_line" | grep -oP '[\d.]+ ms avg latency')
+                # Parse: "500000 records sent, 56818.18 records/sec (55.49 MB/sec), 489.62 ms avg latency, ..."
+                records_sec=$(echo "$perf_line" | awk -F', ' '{for(i=1;i<=NF;i++) if($i ~ /records\/sec/) print $i}' | awk '{print $1, $2}')
+                mb_sec=$(echo "$perf_line" | awk -F'[()]' '{for(i=1;i<=NF;i++) if($i ~ /MB\/sec/) printf "(%s)", $i}')
+                avg_lat=$(echo "$perf_line" | awk -F', ' '{for(i=1;i<=NF;i++) if($i ~ /avg latency/) print $i}')
                 printf "  %-60s %s %s, %s\n" "$pod" "$records_sec" "$mb_sec" "$avg_lat" >> "$SUMMARY"
             else
                 printf "  %-60s %s\n" "$pod" "N/A" >> "$SUMMARY"
@@ -306,12 +248,12 @@ trap "kill 0" EXIT
 echo "Collecting data in ${OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
 
-collect_stackgraph_disk_performance_buffered
-collect_stackgraph_disk_performance_direct
-collect_hdfs_disk_performance_buffered
-collect_hdfs_disk_performance_direct
-collect_kafka_disk_performance_buffered
-collect_kafka_disk_performance_direct
+collect_disk_performance "StackGraph Buffered" "stackgraph_disk_buffered" "stackgraph" "datanode" "/hadoop-data/data/testfile"
+collect_disk_performance "StackGraph Direct"   "stackgraph_disk_direct"   "stackgraph" "datanode" "/hadoop-data/data/testfile" "oflag=direct"
+collect_disk_performance "HDFS Buffered"       "hdfs_disk_buffered"       "hdfs-dn"    "datanode" "/hadoop-data/testfile"
+collect_disk_performance "HDFS Direct"         "hdfs_disk_direct"         "hdfs-dn"    "datanode" "/hadoop-data/testfile"      "oflag=direct"
+collect_disk_performance "Kafka Buffered"      "kafka_disk_buffered"      "kafka"      "kafka"    "/bitnami/kafka/testfile"
+collect_disk_performance "Kafka Direct"        "kafka_disk_direct"        "kafka"      "kafka"    "/bitnami/kafka/testfile"    "oflag=direct"
 collect_kafka_broker_performance
 generate_summary
 
