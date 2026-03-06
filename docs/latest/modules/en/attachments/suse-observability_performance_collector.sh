@@ -60,76 +60,152 @@ techo() {
   echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a $OUTPUT_DIR/collector-output.log
 }
 
-collect_stackgraph_disk_performance() {
-    techo "StackGraph Disk performance..."
+collect_stackgraph_disk_performance_buffered() {
+    techo "StackGraph Buffered Disk performance..."
+    SUBDIR="$OUTPUT_DIR/stackgraph_disk_buffered"
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==stackgraph -o jsonpath="{.items[*].metadata.name}")
     if [ "${PODS[0]}" = "" ]; then
       techo "StackGraph not found due to HA setup."
     else
-      mkdir -p "$OUTPUT_DIR/stackgraph_disk"
+      mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/stackgraph_disk/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$OUTPUT_DIR/stackgraph_disk/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
 }
 
-collect_hdfs_disk_performance() {
-    techo "HDFS Disk performance..."
+collect_stackgraph_disk_performance_direct() {
+    techo "StackGraph Direct Disk performance..."
+    SUBDIR="$OUTPUT_DIR/stackgraph_disk_direct"
+
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==stackgraph -o jsonpath="{.items[*].metadata.name}")
+    if [ "${PODS[0]}" = "" ]; then
+      techo "StackGraph not found due to HA setup."
+    else
+      mkdir -p "$SUBDIR"
+
+      for pod in $PODS; do
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
+      done
+    fi
+}
+
+collect_hdfs_disk_performance_buffered() {
+    techo "HDFS Buffered Disk performance..."
+    SUBDIR="$OUTPUT_DIR/hdfs_disk_buffered"
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==hdfs-dn -o jsonpath="{.items[*].metadata.name}")
     if [ "${PODS[0]}" = "" ]; then
       techo "HDFS not found due to non-HA setup."
     else
-      mkdir -p "$OUTPUT_DIR/hdfs_disk"
+      mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/hdfs_disk/$pod.log" 2>&1
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$OUTPUT_DIR/hdfs_disk/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
 }
 
-collect_kafka_disk_performance() {
-    techo "Kafka Disk performance..."
+collect_hdfs_disk_performance_direct() {
+    techo "HDFS Direct Disk performance..."
+    SUBDIR="$OUTPUT_DIR/hdfs_disk_direct"
 
-    mkdir -p "$OUTPUT_DIR/kafka_disk"
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==hdfs-dn -o jsonpath="{.items[*].metadata.name}")
+    if [ "${PODS[0]}" = "" ]; then
+      techo "HDFS not found due to non-HA setup."
+    else
+      mkdir -p "$SUBDIR"
+
+      for pod in $PODS; do
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
+      done
+    fi
+}
+
+collect_kafka_disk_performance_buffered() {
+    techo "Kafka Buffered Disk performance..."
+    SUBDIR="$OUTPUT_DIR/kafka_disk_buffered"
+
+    mkdir -p "$SUBDIR"
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync' > "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$OUTPUT_DIR/kafka_disk/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
     done
 }
 
-collect_kafka_broker_performance() {
-    techo "Kafka Topic performance..."
+collect_kafka_disk_performance_direct() {
+    techo "Kafka Direct Disk performance..."
+    SUBDIR="$OUTPUT_DIR/kafka_disk_direct"
 
-    mkdir -p "$OUTPUT_DIR/kafka_producer"
+    mkdir -p "$SUBDIR"
+
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
+    for pod in $PODS; do
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
+    done
+}
+
+create_kafka_topics() {
+  # Topics cannot be removed because topic deletion is disabled by default on the broker
+    techo "Creating topics"
+
+    SUBDIR="$OUTPUT_DIR/kafka_topic_create"
+
+    mkdir -p "$SUBDIR"
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
 
-    techo "Creating topics"
     index=0
     for pod in $PODS; do
+      # Topics are pinned to a particular broker using replica-assignment, allowing to test localhost/networked traffic
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
           JMX_PORT="" /opt/bitnami/kafka/bin/kafka-topics.sh --create --if-not-exists --topic perf-test-topic-$index --bootstrap-server localhost:9092 --replica-assignment $index --config retention.ms=300000 --config retention.bytes=1073741824 \
-        " > "$OUTPUT_DIR/kafka_producer/$pod.create.log" 2>&1
+        " > "$SUBDIR/$pod.log" 2>&1
 
         ((index++))
     done
+}
 
-    techo "Performance testing localhost"
+collect_kafka_broker_performance_local() {
+  # Topics cannot be removed because topic deletion is disabled by default on the broker
+    techo "Performance testing throughput to topic on localhost"
+
+    SUBDIR="$OUTPUT_DIR/kafka_producer_local"
+
+    mkdir -p "$SUBDIR"
+
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
+
     index=0
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-          JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
-        " > "$OUTPUT_DIR/kafka_producer/$pod.local.log" 2>&1
+       kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
+                 JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+               " > "$SUBDIR/$pod.log" 2>&1
+
         ((index++))
     done
+}
 
+collect_kafka_broker_performance_remote() {
+  # Topics cannot be removed because topic deletion is disabled by default on the broker
+    techo "Performance testing throughput to topic on remote broker"
+
+    SUBDIR="$OUTPUT_DIR/kafka_producer_remote"
+
+    mkdir -p "$SUBDIR"
+
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
+
+    # Convert to array to be able to do a broker count
     POD_ARRAY=($PODS)
     if [ "${#POD_ARRAY[@]}" = "1" ]; then
       techo "Skipping remote testing due to only 1 kafka broker"
@@ -141,12 +217,19 @@ collect_kafka_broker_performance() {
       ((prev_index--))
       for pod in $PODS; do
           kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=suse-observability-kafka-headless:9092 acks=1\
-          " > "$OUTPUT_DIR/kafka_producer/$pod.remote.log" 2>&1
+            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+          " > "$SUBDIR/$pod.log" 2>&1
           prev_index=$index
           ((index++))
       done
     fi
+}
+
+collect_kafka_broker_performance() {
+    techo "Kafka Topic performance..."
+    create_kafka_topics
+    collect_kafka_broker_performance_local
+    collect_kafka_broker_performance_remote
 }
 
 archive_and_cleanup() {
@@ -165,16 +248,12 @@ trap "kill 0" EXIT
 echo "Collecting data in ${OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
 
-techo "Collecting StackGraph disk performance details..."
-collect_stackgraph_disk_performance
-
-techo "Collecting hdfs disk performance details..."
-collect_hdfs_disk_performance
-
-techo "Collecting kafka disk performance details..."
-collect_kafka_disk_performance
-
-techo "Collecting kafka broker performance details..."
+collect_stackgraph_disk_performance_buffered
+collect_stackgraph_disk_performance_direct
+collect_hdfs_disk_performance_buffered
+collect_hdfs_disk_performance_direct
+collect_kafka_disk_performance_buffered
+collect_kafka_disk_performance_direct
 collect_kafka_broker_performance
 
 archive_and_cleanup
