@@ -28,7 +28,7 @@ shift $(($OPTIND - 1))
 NAMESPACE=${1:-suse-observability}
 
 # Check if commands are installed or not
-COMMANDS=("kubectl" "tar")
+COMMANDS=("kubectl" "tar" "grep" "sed" "tr")
 for cmd in ${COMMANDS[@]}; do
   if ! command -v $cmd &>/dev/null; then
      echo "$cmd is not installed. Please install it and try again."
@@ -71,7 +71,7 @@ collect_stackgraph_disk_performance_buffered() {
       mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
           kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
@@ -88,7 +88,7 @@ collect_stackgraph_disk_performance_direct() {
       mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/data/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
           kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
@@ -105,7 +105,7 @@ collect_hdfs_disk_performance_buffered() {
       mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
           kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
@@ -122,7 +122,7 @@ collect_hdfs_disk_performance_direct() {
       mkdir -p "$SUBDIR"
 
       for pod in $PODS; do
-          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+          kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'dd if=/dev/zero of=/hadoop-data/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
           kubectl -n "$NAMESPACE" exec "$pod" -c "datanode" -- sh -xc 'rm /hadoop-data/testfile' >> "$SUBDIR/$pod.log" 2>&1
       done
     fi
@@ -136,7 +136,7 @@ collect_kafka_disk_performance_buffered() {
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=100K count=5000 conv=fsync' > "$SUBDIR/$pod.log" 2>&1
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
     done
 }
@@ -149,7 +149,7 @@ collect_kafka_disk_performance_direct() {
 
     PODS=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[*].metadata.name}")
     for pod in $PODS; do
-        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=1M count=500 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
+        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'dd if=/dev/zero of=/bitnami/kafka/testfile bs=100K count=5000 conv=fsync oflag=direct' > "$SUBDIR/$pod.log" 2>&1
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- sh -xc 'rm /bitnami/kafka/testfile' >> "$SUBDIR/$pod.log" 2>&1
     done
 }
@@ -210,7 +210,6 @@ collect_kafka_broker_performance_remote() {
     if [ "${#POD_ARRAY[@]}" = "1" ]; then
       techo "Skipping remote testing due to only 1 kafka broker"
     else
-      techo "Performance testing remote"
       index=0
       # Used to select a topic on a remote broker
       prev_index=${#POD_ARRAY[@]}
@@ -230,6 +229,65 @@ collect_kafka_broker_performance() {
     create_kafka_topics
     collect_kafka_broker_performance_local
     collect_kafka_broker_performance_remote
+}
+
+generate_summary() {
+    techo "Generating summary..."
+    SUMMARY="$OUTPUT_DIR/summary.log"
+
+    echo "=== SUSE Observability Performance Summary ===" > "$SUMMARY"
+    echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$SUMMARY"
+    echo "" >> "$SUMMARY"
+
+    # Disk throughput sections (dd output)
+    for section in stackgraph_disk_buffered stackgraph_disk_direct hdfs_disk_buffered hdfs_disk_direct kafka_disk_buffered kafka_disk_direct; do
+        SECTION_DIR="$OUTPUT_DIR/$section"
+        [ -d "$SECTION_DIR" ] || continue
+
+        # Pretty-print the section name
+        label=$(echo "$section" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+        echo "--- $label ---" >> "$SUMMARY"
+
+        for logfile in "$SECTION_DIR"/*.log; do
+            [ -f "$logfile" ] || continue
+            pod=$(basename "$logfile" .log)
+            throughput=$(grep -oP '\d+(\.\d+)?\s+[KMGT]?B/s' "$logfile" | tail -1)
+            if [ -n "$throughput" ]; then
+                printf "  %-60s %s\n" "$pod" "$throughput" >> "$SUMMARY"
+            else
+                printf "  %-60s %s\n" "$pod" "N/A" >> "$SUMMARY"
+            fi
+        done
+        echo "" >> "$SUMMARY"
+    done
+
+    # Kafka producer throughput sections (kafka-producer-perf-test output)
+    for section in kafka_producer_local kafka_producer_remote; do
+        SECTION_DIR="$OUTPUT_DIR/$section"
+        [ -d "$SECTION_DIR" ] || continue
+
+        label=$(echo "$section" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+        echo "--- $label ---" >> "$SUMMARY"
+
+        for logfile in "$SECTION_DIR"/*.log; do
+            [ -f "$logfile" ] || continue
+            pod=$(basename "$logfile" .log)
+            # Extract the final summary line (starts with total record count and contains percentiles)
+            perf_line=$(grep 'ms 50th' "$logfile")
+            if [ -n "$perf_line" ]; then
+                records_sec=$(echo "$perf_line" | grep -oP '[\d.]+ records/sec')
+                mb_sec=$(echo "$perf_line" | grep -oP '\([\d.]+ MB/sec\)')
+                avg_lat=$(echo "$perf_line" | grep -oP '[\d.]+ ms avg latency')
+                printf "  %-60s %s %s, %s\n" "$pod" "$records_sec" "$mb_sec" "$avg_lat" >> "$SUMMARY"
+            else
+                printf "  %-60s %s\n" "$pod" "N/A" >> "$SUMMARY"
+            fi
+        done
+        echo "" >> "$SUMMARY"
+    done
+
+    techo "Summary written to $SUMMARY"
+    cat "$SUMMARY"
 }
 
 archive_and_cleanup() {
@@ -255,6 +313,7 @@ collect_hdfs_disk_performance_direct
 collect_kafka_disk_performance_buffered
 collect_kafka_disk_performance_direct
 collect_kafka_broker_performance
+generate_summary
 
 archive_and_cleanup
 echo "All information collected in the $ARCHIVE_FILE"
