@@ -60,19 +60,29 @@ techo() {
   echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a $OUTPUT_DIR/collector-output.log
 }
 
+# Title-case a string like "kafka_disk_buffered" -> "Kafka Disk Buffered"
+title_case() {
+    echo "$1" | tr '_' ' ' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1'
+}
+
+# Directory-case a string like "Kafka Disk Buffered" -> "kafka_disk_buffered"
+dir_case() {
+    echo "$1" | awk '{print tolower($0)}' | tr ' ' '_'
+}
+
 # Runs a dd disk write performance test on all pods matching a component label.
 # Usage: collect_disk_performance <label> <subdir> <component> <container> <testfile_path> [<extra_dd_flags>]
 #   label:          Human-readable name for log output (e.g. "StackGraph Buffered")
-#   subdir:         Subdirectory under OUTPUT_DIR to store results
 #   component:      Value for app.kubernetes.io/component pod selector
 #   container:      Container name inside the pod
 #   testfile_path:  Absolute path to the temporary test file inside the container
 #   extra_dd_flags: Optional extra flags appended to the dd command (e.g. "oflag=direct")
 collect_disk_performance() {
-    local label="$1" subdir="$2" component="$3" container="$4" testfile_path="$5" extra_dd_flags="$6"
+    local label="$1" component="$2" container="$3" testfile_path="$4" extra_dd_flags="$5"
+    local subdir=$(dir_case "$label")
     local dd_flags="conv=fsync${extra_dd_flags:+ $extra_dd_flags}"
 
-    techo "$label Disk performance..."
+    techo "$label performance..."
     local SUBDIR="$OUTPUT_DIR/$subdir"
 
     local PODS
@@ -87,6 +97,53 @@ collect_disk_performance() {
     for pod in $PODS; do
         kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- sh -xc "dd if=/dev/zero of=$testfile_path bs=100K count=5000 $dd_flags" > "$SUBDIR/$pod.log" 2>&1
         kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- sh -xc "rm $testfile_path" >> "$SUBDIR/$pod.log" 2>&1
+    done
+}
+
+# Runs a dd disk write performance test on all pods matching a component label.
+# Usage: collect_disk_performance <label> <subdir> <component> <container> <testfile_path> [<extra_dd_flags>]
+#   label:          Human-readable name for log output (e.g. "StackGraph Buffered")
+#   component:      Value for app.kubernetes.io/component pod selector
+#   container:      Container name inside the pod
+collect_network_performance() {
+    local label="$1" component="$2" container="$3"
+    local subdir=$(dir_case "$label")
+
+    techo "$label performance..."
+    local SUBDIR="$OUTPUT_DIR/$subdir"
+
+    local PODS
+    PODS=$(kubectl -n "$NAMESPACE" get pods -l "app.kubernetes.io/component==$component" -o jsonpath="{.items[*].metadata.name}")
+    if [ -z "$PODS" ]; then
+      techo "No pods found for component '$component', skipping."
+      return
+    fi
+
+    # Convert to array to be able to do a broker count
+    POD_ARRAY=($PODS)
+    if [ "${#POD_ARRAY[@]}" = "1" ]; then
+      techo "Skipping network testing due to only one '$component' found."
+    fi
+
+    POD_HOSTS=()
+    for pod in $PODS; do
+      pod_host=$(kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- hostname -f)
+      POD_HOSTS+=("$pod_host")
+    done
+
+    mkdir -p "$SUBDIR"
+
+    len=${#POD_ARRAY[@]}
+    for (( i=0; i<len; i++ )); do
+        next=$(( (i + 1) % len ))
+
+        pod=${POD_ARRAY[i]}
+
+        next_pod=${POD_ARRAY[next]}
+        next_pod_host=${POD_HOSTS[next]}
+
+        kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- sh -xc "nc -l 12348 > /dev/null" > "$SUBDIR/$pod.target.log" 2>&1 &
+        kubectl -n "$NAMESPACE" exec "$next_pod" -c "$container" -- sh -xc "dd if=/dev/zero bs=1M count=1000 | nc -q 1 $next_pod_host 12348" > "$SUBDIR/$pod.source.log" 2>&1
     done
 }
 
@@ -175,11 +232,6 @@ generate_summary() {
     echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$SUMMARY"
     echo "" >> "$SUMMARY"
 
-    # Title-case a string like "kafka_disk_buffered" -> "Kafka Disk Buffered"
-    title_case() {
-        echo "$1" | tr '_' ' ' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1'
-    }
-
     # Disk throughput sections (dd output)
     for section in stackgraph_disk_buffered stackgraph_disk_direct hdfs_disk_buffered hdfs_disk_direct kafka_disk_buffered kafka_disk_direct; do
         SECTION_DIR="$OUTPUT_DIR/$section"
@@ -228,6 +280,32 @@ generate_summary() {
         echo "" >> "$SUMMARY"
     done
 
+    # Network throughput sections (dd | nc output in *.source.log files)
+    for section in hdfs_network kafka_network; do
+        SECTION_DIR="$OUTPUT_DIR/$section"
+        [ -d "$SECTION_DIR" ] || continue
+
+        label=$(title_case "$section")
+        echo "--- $label ---" >> "$SUMMARY"
+
+        for logfile in "$SECTION_DIR"/*.source.log; do
+            [ -f "$logfile" ] || continue
+            pod=$(basename "$logfile" .source.log)
+            # Extract target hostname from the nc command (e.g. "nc -q 1 <host> 12348")
+            target=$(awk '/nc -q/ {for(i=1;i<=NF;i++) if($i == "-q") {print $(i+2); exit}}' "$logfile")
+            # Shorten the FQDN to just the pod name (first dot-separated segment)
+            target_short=$(echo "$target" | awk -F. '{print $1}')
+            # Extract throughput from dd output
+            throughput=$(awk '/[KMGT]?B\/s/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]/ && $(i+1) ~ /B\/s/) {print $i, $(i+1); found=1}} END {if(!found) print ""}' "$logfile" | tail -1)
+            if [ -n "$throughput" ]; then
+                printf "  %-60s %s\n" "$pod -> $target_short" "$throughput" >> "$SUMMARY"
+            else
+                printf "  %-60s %s\n" "$pod -> $target_short" "N/A" >> "$SUMMARY"
+            fi
+        done
+        echo "" >> "$SUMMARY"
+    done
+
     techo "Summary written to $SUMMARY"
     cat "$SUMMARY"
 }
@@ -248,13 +326,19 @@ trap "kill 0" EXIT
 echo "Collecting data in ${OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
 
-collect_disk_performance "StackGraph Buffered" "stackgraph_disk_buffered" "stackgraph" "datanode" "/hadoop-data/data/testfile"
-collect_disk_performance "StackGraph Direct"   "stackgraph_disk_direct"   "stackgraph" "datanode" "/hadoop-data/data/testfile" "oflag=direct"
-collect_disk_performance "HDFS Buffered"       "hdfs_disk_buffered"       "hdfs-dn"    "datanode" "/hadoop-data/testfile"
-collect_disk_performance "HDFS Direct"         "hdfs_disk_direct"         "hdfs-dn"    "datanode" "/hadoop-data/testfile"      "oflag=direct"
-collect_disk_performance "Kafka Buffered"      "kafka_disk_buffered"      "kafka"      "kafka"    "/bitnami/kafka/testfile"
-collect_disk_performance "Kafka Direct"        "kafka_disk_direct"        "kafka"      "kafka"    "/bitnami/kafka/testfile"    "oflag=direct"
+collect_disk_performance "StackGraph Disk Buffered" "stackgraph" "datanode" "/hadoop-data/data/testfile"
+collect_disk_performance "StackGraph Disk Direct"   "stackgraph" "datanode" "/hadoop-data/data/testfile" "oflag=direct"
+
+collect_disk_performance "HDFS Disk Buffered"       "hdfs-dn"    "datanode" "/hadoop-data/testfile"
+collect_disk_performance "HDFS Disk Direct"         "hdfs-dn"    "datanode" "/hadoop-data/testfile"      "oflag=direct"
+collect_network_performance "HDFS Network"             "hdfs-dn"    "datanode"
+
+collect_disk_performance "Kafka Disk Buffered"      "kafka"      "kafka"    "/bitnami/kafka/testfile"
+collect_disk_performance "Kafka Disk Direct"        "kafka"      "kafka"    "/bitnami/kafka/testfile"    "oflag=direct"
+# The kafka images is missing both the `hostname` command and `nc`, so we skip this one
+# collect_network_performance "Kafka Network"            "kafka"      "kafka"
 collect_kafka_broker_performance
+
 generate_summary
 
 archive_and_cleanup
