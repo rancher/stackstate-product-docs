@@ -1,0 +1,95 @@
+= Connect external AI tools to the MCP server
+:revdate: 2026-03-18
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+You can connect external MCP-compatible AI tools (like Claude Code) directly to the SUSE Observability MCP server. This lets the client use SUSE Observability read-only tools for topology, events, health, logs, traces, metrics, and built-in investigation guides.
+
+== Before you begin
+
+Make sure all of the following are in place:
+
+* AI Assistant is enabled in your SUSE Observability installation. See xref:/advanced/ai-assistant.adoc[AI Assistant].
+* You have a SUSE Observability API token. See xref:/setup/cli/cli-sts.adoc[CLI: sts].
+* Your user has permission to access the data you want the MCP client to read.
+
+[NOTE]
+====
+The MCP server exposes read-only observability tools. It authenticates to SUSE Observability using the same API token you provide to the MCP client.
+====
+
+== MCP endpoint
+
+When AI Assistant is enabled, the Helm chart exposes the MCP server at the `/mcp` path of your SUSE Observability base URL.
+
+Example:
+
+[,text]
+----
+https://observability.example.com/mcp
+----
+
+== Authentication
+
+For remote MCP clients such as Claude Code, configure the client to send the SUSE Observability API token in the `X-API-TOKEN` header.
+
+All MCP operations are executed in SUSE Observability with the permissions assigned to that API token. The MCP client can only read data that the token is allowed to access.
+
+To follow least-privilege principles, create or use a token that has only the permissions and data access scopes needed for the intended AI workflows.
+
+== Configure other MCP-compatible clients
+
+Any MCP client that supports remote HTTP servers can use the same connection details:
+
+* URL: `https://<your-suse-observability-url>/mcp`
+* Header: `X-API-TOKEN: <your-api-token>`
+
+=== Example: Claude Code
+
+Add the SUSE Observability MCP server as a remote MCP server in your Claude Code configuration:
+
+[,json]
+----
+{
+  "mcpServers": {
+    "suse-observability": {
+      "type": "http",
+      "url": "https://observability.example.com/mcp",
+      "headers": {
+        "X-API-TOKEN": "<your-api-token>"
+      }
+    }
+  }
+}
+----
+
+After saving the configuration, restart Claude Code or reload its MCP servers.
+
+== Verify the connection
+
+Once connected, the MCP client should discover SUSE Observability tools such as topology, health, logs, traces, metrics.
+
+Try a simple prompt in Claude Code, for example:
+
+[,text]
+----
+Show me the Kubernetes namespaces visible in SUSE Observability.
+----
+
+If the connection works, Claude Code will call the MCP tools and return data from your SUSE Observability instance.
+
+== Troubleshooting
+
+If the MCP client cannot connect or discover tools, check the following:
+
+* AI Assistant is enabled, which also deploys and exposes the MCP server.
+* The MCP URL ends with `/mcp`.
+* The client sends the `X-API-TOKEN` header.
+* The API token is valid and not expired.
+* The user behind the API token has the required RBAC permissions to read the requested data.
+* If you use self-signed certificates, configure your MCP client to trust the certificate. See xref:/use/security/self-signed-certificates.adoc[Self-signed certificates].
+
+For information on API tokens, see:
+
+* xref:/setup/cli/cli-sts.adoc[CLI: sts]
+* xref:/use/security/k8s-service-tokens.adoc[Service tokens]
