@@ -3,7 +3,7 @@
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
-AI Assistant is disabled by default in self-hosted SUSE Observability. When you enable it, the Helm chart turns on the AI Assistant feature in the UI and deploys two backend components:
+AI Assistant is disabled by default in self-hosted {stackstate-product-name}. When you enable it, the Helm chart turns on the AI Assistant feature in the UI and deploys two backend components:
 
 * the AI Assistant UI, which is already deployed but hidden behind the feature flag
 * the AI Assistant backend service
@@ -36,7 +36,7 @@ The Helm chart configures the AI Assistant backend to use AWS Bedrock by default
 
 == Configure MCP and AI Assistant
 
-Most AI Assistant settings should stay at their chart defaults. In particular, it is recommended not to change internal connectivity settings such as listen addresses, service ports, or the built-in environment variables unless you have explicit guidance for your deployment.
+Most AI Assistant settings should stay at their chart defaults. In particular, it is recommended not to change internal connectivity settings, such as listen addresses, service ports, or the built-in environment variables unless you have explicit guidance for your deployment.
 
 In practice, the most important settings are:
 
@@ -47,19 +47,19 @@ In practice, the most important settings are:
 
 === MCP configuration
 
-The MCP server is enabled automatically together with AI Assistant. The main setting to tune is `stackstate.components.mcp.replicaCount`. Increase it when you need more MCP capacity.
+The MCP server is enabled automatically together with AI Assistant. The main setting to tune are:
 
-You can also set `stackstate.components.mcp.resources` to match the expected workload.
+* `stackstate.components.mcp.replicaCount` - increase it when you need more MCP capacity
+* `stackstate.components.mcp.resources` - to control CPU and memory allocation
 
 === AI Assistant backend configuration
 
-For the AI Assistant backend, the most important settings are `stackstate.components.aiAssistant.resources` and `stackstate.components.aiAssistant.serviceAccount.annotations`.
+For the AI Assistant backend, the most important settings are:
 
-Use `stackstate.components.aiAssistant.resources` to control CPU and memory allocation.
+* `stackstate.components.aiAssistant.resources` - to control CPU and memory allocation
+* `stackstate.components.aiAssistant.serviceAccount.annotations` - to attach the IAM role required for AWS Bedrock
 
-Use `stackstate.components.aiAssistant.serviceAccount.annotations` to attach the IAM role required for AWS Bedrock.
-
-The persistence settings (`stackstate.components.aiAssistant.persistence.size` and `stackstate.components.aiAssistant.persistence.storageClass) can also be adjusted if you want a different PVC size or storage class for the SQLite database.
+The persistence settings (`stackstate.components.aiAssistant.persistence.size` and `stackstate.components.aiAssistant.persistence.storageClass`) can also be adjusted if you want a different PVC size or storage class for the SQLite database.
 
 Example:
 
@@ -124,11 +124,10 @@ This annotation is applied to the `suse-observability-ai-assistant` ServiceAccou
 
 == Enable Anthropic models in AWS Bedrock
 
-Before the first use of AI Assistant, make sure Anthropic Claude models are enabled in AWS Bedrock for the AWS account and region used by the AI Assistant backend.
-
-If model access is not enabled, AI Assistant will not be able to invoke the required Bedrock models even if the IAM role and ServiceAccount are configured correctly.
-
-Use the same AWS region that you configure for AI Assistant. If `AWS_REGION` is not set, the current AI Assistant backend default is `eu-west-1`.
+[IMPORTANT]
+====
+Before the first use of AI Assistant, make sure Anthropic Claude models are enabled in AWS Bedrock for the AWS account and region used by the AI Assistant backend. If model access is not enabled, AI Assistant will not be able to invoke the required Bedrock models even if the IAM role and ServiceAccount are configured correctly. Use the same AWS region that you configure for AI Assistant. If `AWS_REGION` is not set, the current AI Assistant backend default is `eu-west-1`.
+====
 
 . Open the AWS Bedrock console in the correct account and region.
 . Open the `Model catalog`. If Anthropic models are not enabled yet, AWS shows a prompt to enable access.
@@ -143,7 +142,10 @@ image::ai-assistant/setup-aws/enable_anthropic_popup.png[Anthropic model access 
 +
 image::ai-assistant/setup-aws/playground.png[Anthropic Claude models available in the AWS Bedrock playground]
 
-. We recommend opening the Bedrock playground for `Claude Sonnet 4.6` and `Claude Opus 4.6` and sending a simple prompt such as `hello` to confirm that model access works correctly before using AI Assistant.
+[NOTE]
+====
+It is recommended to open the Bedrock playground for `Claude Sonnet 4.6` and `Claude Opus 4.6` and send a simple prompt such as `hello` to confirm that model access works correctly before using AI Assistant.
+====
 
 [NOTE]
 ====
@@ -163,7 +165,7 @@ Grant the AI Assistant role permission to invoke the Bedrock models used by the 
 
 [NOTE]
 ====
-Even though the current implementation uses Claude models, we recommend allowing these actions on all Bedrock models with `"Resource": ["*"]`. This helps avoid IAM policy updates when a future SUSE Observability release changes the default model set.
+Even though the current implementation uses Claude models, we recommend allowing these actions on all Bedrock models with `"Resource": ["*"]`. This helps avoid IAM policy updates when a future {stackstate-product-name} release changes the default model set.
 ====
 
 Recommended policy:
