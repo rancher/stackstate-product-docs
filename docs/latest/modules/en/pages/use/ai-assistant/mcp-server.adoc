@@ -15,12 +15,14 @@ Using AI Assistant generates costs because it invokes external AI models. Larger
 Make sure all of the following are in place:
 
 * AI Assistant is enabled in your SUSE Observability installation. See xref:/advanced/ai-assistant.adoc[AI Assistant].
-* You have a SUSE Observability API token copied from the *CLI* page in the SUSE Observability UI. See xref:/setup/cli/cli-sts.adoc[CLI: sts].
-* Your user has permission to access the data you want the MCP client to read.
+* You have either:
+** a SUSE Observability user API token copied from the *CLI* page in the SUSE Observability UI. See xref:/setup/cli/cli-sts.adoc[CLI: sts].
+** a SUSE Observability Service token created with `sts service-token`. See xref:/use/security/k8s-service-tokens.adoc[Service tokens].
+* The token has permission to access the data you want the MCP client to read.
 
 [NOTE]
 ====
-The MCP server exposes read-only observability tools. It authenticates to SUSE Observability using the same API token you provide to the MCP client.
+The MCP server exposes read-only observability tools. It authenticates to SUSE Observability using the same token you provide to the MCP client.
 ====
 
 == MCP endpoint
@@ -36,27 +38,37 @@ https://observability.example.com/mcp
 
 == Authentication
 
-For remote MCP clients such as Claude Code, configure the client to send the SUSE Observability API token in the `X-API-TOKEN` header.
+For remote MCP clients such as Claude Code, use one of the following authentication methods:
 
-All MCP operations are executed in SUSE Observability with the permissions assigned to that API token. The MCP client can only read data that the token is allowed to access.
+* user API token in the `X-API-Token` header, the token can be copied from the *CLI* page in the SUSE Observability UI.
+* Service token in the `X-API-Key` header
+
+Example Service token creation:
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+
+All MCP operations are executed in SUSE Observability with the permissions assigned to that token. The MCP client can only read data that the token is allowed to access.
 
 To follow least-privilege principles, create or use a token that has only the permissions and data access scopes needed for the intended AI workflows.
-
-[IMPORTANT]
-====
-The MCP integration currently supports only the user API token copied from the *CLI* page in the SUSE Observability UI. Service tokens created with the `sts service-token` command are not supported for MCP access.
-====
 
 == Configure other MCP-compatible clients
 
 Any MCP client that supports remote HTTP servers can use the same connection details:
 
 * URL: `https://<your-suse-observability-url>/mcp`
-* Header: `X-API-Token: <your-api-token>`
+* Header for user API tokens: `X-API-Token: <your-api-token>`
+* Header for Service tokens: `X-API-Key: <your-service-token>`
 
 === Example: Claude Code
 
 Add the SUSE Observability MCP server as a remote MCP server in your Claude Code configuration:
+
+User API token example:
 
 [,json]
 ----
@@ -67,6 +79,23 @@ Add the SUSE Observability MCP server as a remote MCP server in your Claude Code
       "url": "https://observability.example.com/mcp",
       "headers": {
         "X-API-Token": "<your-api-token>"
+      }
+    }
+  }
+}
+----
+
+Service token example:
+
+[,json]
+----
+{
+  "mcpServers": {
+    "suse-observability": {
+      "type": "http",
+      "url": "https://observability.example.com/mcp",
+      "headers": {
+        "X-API-Key": "<your-service-token>"
       }
     }
   }
@@ -94,9 +123,12 @@ If the MCP client cannot connect or discover tools, check the following:
 
 * AI Assistant is enabled, which also deploys and exposes the MCP server.
 * The MCP URL ends with `/mcp`.
-* The client sends the `X-API-Token` header.
-* The API token is valid and not expired.
-* The user behind the API token has the required RBAC permissions to read the requested data.
+* The client sends either the `X-API-Token` or `X-API-Key` header.
+* The token is valid and not expired.
+* The user or service account behind the token has the required permissions to read the requested data.
 * If you use self-signed certificates, configure your MCP client to trust the certificate. See xref:/use/security/self-signed-certificates.adoc[Self-signed certificates].
 
-For information on the required API token, see xref:/setup/cli/cli-sts.adoc[CLI: sts].
+For more information about supported tokens, see:
+
+* xref:/setup/cli/cli-sts.adoc[CLI: sts]
+* xref:/use/security/k8s-service-tokens.adoc[Service tokens]
