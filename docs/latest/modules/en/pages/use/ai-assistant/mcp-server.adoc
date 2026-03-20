@@ -3,7 +3,7 @@
 :page-revdate: {revdate}
 :description: SUSE Observability
 
-You can connect external MCP-compatible AI tools (like Claude Code) directly to the {stackstate-product-name} MCP server. This lets the client use {stackstate-product-name} read-only tools for topology, events, health, logs, traces, metrics, and built-in investigation guides.
+You can connect external MCP-compatible AI tools (like Claude Code) directly to the {stackstate-product-name} MCP server. This lets the client use {stackstate-product-name} read-only tools for topology, events, health, logs, traces, and metrics, as well as built-in prompts and guidance that help the LLM use those tools effectively.
 
 [WARNING]
 ====
@@ -22,7 +22,7 @@ Make sure all of the following are in place:
 
 [NOTE]
 ====
-The MCP server exposes read-only observability tools. It authenticates to {stackstate-product-name} using the same token you provide to the MCP client.
+The MCP server exposes read-only observability tools and ability to create dashboards. It authenticates to {stackstate-product-name} using the same token you provide to the MCP client.
 ====
 
 == MCP endpoint
@@ -68,7 +68,11 @@ Any MCP client that supports remote HTTP servers can use the same connection det
 
 Add the {stackstate-product-name} MCP server as a remote MCP server in your Claude Code configuration:
 
-User API token example:
+[tabs]
+====
+User API token::
++
+--
 
 [,json]
 ----
@@ -85,7 +89,10 @@ User API token example:
 }
 ----
 
-Service token example:
+--
+Service token::
++
+--
 
 [,json]
 ----
@@ -102,6 +109,9 @@ Service token example:
 }
 ----
 
+--
+====
+
 After saving the configuration, restart Claude Code or reload its MCP servers.
 
 == Verify the connection
@@ -112,10 +122,39 @@ Try a simple prompt in Claude Code, for example:
 
 [,text]
 ----
-Show me the Kubernetes namespaces visible in {stackstate-product-name}.
+Show me the Kubernetes namespaces visible in SUSE Observability.
 ----
 
 If the connection works, Claude Code will call the MCP tools and return data from your {stackstate-product-name} instance.
+
+== Usage
+
+The MCP client uses the available tools and resources when they are relevant to your request. This allows you to ask questions about the applications and infrastructure observed by {stackstate-product-name}, and to let the agent investigate issues or create dashboards based on the available telemetry.
+
+For example, you can ask:
+
+[,text]
+----
+Give me a top 5 of resource usage in namespace my-app
+What are the dependencies of the checkout pod in the sock-shop namespace?
+Is there anything in a critical state?
+Create a dashboard for the most important metrics of my checkout service
+----
+
+When you ask the agent to create a dashboard, it can use the metrics tools to determine which available metrics make sense for the requested dashboard.
+
+=== Investigating an incident or problem
+
+The MCP server also includes an `investigate` prompt that gives the agent detailed guidance on how to use {stackstate-product-name} to investigate a problem thoroughly. This usually gives better results than only asking the AI to investigate, because the prompt steers the agent to follow a more structured investigation approach.
+
+Use it by explicitly mentioning the prompt together with the subject to investigate. In Claude Code, `/investigate` auto-completes to `/suse-observability:investigate`.
+
+[,text]
+----
+/investigate The critical pod in the my-app namespace
+----
+
+Depending on the complexity of the problem and the available information, the investigation can take a few minutes. It finishes with a report of the findings.
 
 == Troubleshooting
 
