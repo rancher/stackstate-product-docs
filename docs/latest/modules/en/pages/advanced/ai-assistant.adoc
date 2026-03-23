@@ -1,5 +1,5 @@
 = AI Assistant
-:revdate: 2026-03-18
+:revdate: 2026-03-23
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
@@ -31,21 +31,35 @@ After enabling the flag, the chart exposes the AI Assistant UI and deploys the `
 
 Most predefined roles already have access to AI Assistant. To grant users with custom roles access, follow the steps in <<access-ai-assistant,Access AI Assistant>>.
 
-[NOTE]
+== Configure AI model provider
+
+Set `ai.assistant.provider` in your Helm values to choose which model provider AI Assistant uses. The default value is `bedrock`.
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: bedrock
+----
+
+To use Anthropic directly instead of AWS Bedrock, change the provider value to `anthropic` and add the Anthropic API key configuration described in the `Anthropic` tab below.
+
+[tabs]
 ====
-The Helm chart configures the AI Assistant backend to use AWS Bedrock by default by setting `USE_BEDROCK=true`.
-====
+AWS Bedrock::
++
+--
 
-== AWS Bedrock configuration
+AWS Bedrock is the default model provider for AI Assistant.
 
-AWS Bedrock is currently the only supported model provider for AI Assistant. In future releases, it will also be possible to configure AI Assistant to use Anthropic directly.
-
-=== Enable Anthropic models in AWS Bedrock
+[discrete]
+= Enable Anthropic models in AWS Bedrock
 
 [IMPORTANT]
-====
-Before the first use of AI Assistant, make sure Anthropic Claude models are enabled in AWS Bedrock for the AWS account and region used by the AI Assistant backend. If model access is not enabled, AI Assistant will not be able to invoke the required Bedrock models even if the IAM role and ServiceAccount are configured correctly. Use the same AWS region that you configure for AI Assistant. If `AWS_REGION` is not set, the current AI Assistant backend default is `eu-west-1`.
-====
+=====
+Before the first use of AI Assistant, make sure Anthropic Claude models are enabled in AWS Bedrock for the AWS account and region used by the AI Assistant backend. If model access is not enabled, AI Assistant will not be able to invoke the required Bedrock models even if the IAM role and ServiceAccount are configured correctly. Use the same AWS region that you configure for AI Assistant. If `ai.assistant.bedrock.awsRegion` is not set, the chart default is `eu-west-1`.
+=====
 
 . Open the AWS Bedrock console in the correct account and region.
 . Open the `Model catalog`. If Anthropic models are not enabled yet, AWS shows a prompt to enable access.
@@ -61,20 +75,22 @@ image::ai-assistant/setup-aws/enable_anthropic_popup.png[Anthropic model access 
 image::ai-assistant/setup-aws/playground.png[Anthropic Claude models available in the AWS Bedrock playground]
 
 [NOTE]
-====
+=====
 It is recommended to open the Bedrock playground for `Claude Sonnet 4.6` and `Claude Opus 4.6` and send a simple prompt such as `hello` to confirm that model access works correctly before using AI Assistant.
-====
+=====
 
 [NOTE]
-====
+=====
 The exact AWS console screens can differ slightly between regions and AWS accounts, but the required outcome is the same: Anthropic Claude models must be enabled in Bedrock before AI Assistant is used.
 
 After model access is enabled in AWS Bedrock, it can take a few minutes before the models become usable in AI Assistant.
-====
+=====
 
-=== Create the IAM policy and role
+[discrete]
+= Create the IAM policy and role
 
-==== IAM policy permissions
+[discrete]
+== IAM policy permissions
 
 Grant the AI Assistant role permission to invoke the Bedrock models used by the service. The current AI Assistant defaults use Anthropic Claude models through Bedrock, so the minimum required actions are:
 
@@ -82,9 +98,9 @@ Grant the AI Assistant role permission to invoke the Bedrock models used by the 
 * `bedrock:InvokeModelWithResponseStream`
 
 [NOTE]
-====
+=====
 Even though the current implementation uses Claude models, we recommend allowing these actions on all Bedrock models with `"Resource": ["*"]`. This helps avoid IAM policy updates when a future {stackstate-product-name} release changes the default model set.
-====
+=====
 
 Recommended policy:
 
@@ -109,7 +125,8 @@ Recommended policy:
 
 If you prefer a more restrictive policy, you can scope access to specific model ARNs, but you must review that policy on every upgrade.
 
-==== IAM role trust policy
+[discrete]
+== IAM role trust policy
 
 Create an IAM role that trusts the Kubernetes ServiceAccount used by the AI Assistant backend:
 
@@ -137,7 +154,8 @@ Create an IAM role that trusts the Kubernetes ServiceAccount used by the AI Assi
 
 Replace the AWS account ID, OIDC provider, AWS region, and Kubernetes namespace with your own values.
 
-=== Configure the ServiceAccount for AWS Bedrock
+[discrete]
+= Configure the ServiceAccount for AWS Bedrock
 
 Only the AI Assistant backend needs AWS credentials for Bedrock. The MCP server does not call Bedrock.
 
@@ -148,6 +166,9 @@ On Amazon EKS, the recommended approach is IAM Roles for Service Accounts (IRSA)
 ai:
   assistant:
     enabled: true
+    provider: bedrock
+    bedrock:
+      awsRegion: eu-west-1
 
 stackstate:
   components:
@@ -155,12 +176,65 @@ stackstate:
       serviceAccount:
         annotations:
           eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/suse-observability-ai-assistant
-      extraEnv:
-        open:
-          AWS_REGION: eu-west-1
 ----
 
 This annotation is applied to the `suse-observability-ai-assistant` ServiceAccount created by the chart.
+
+--
+Anthropic::
++
+--
+
+AI Assistant can also call Anthropic directly by setting `ai.assistant.provider=anthropic`.
+
+[discrete]
+= Configure Anthropic with a Helm value
+
+Set the provider to `anthropic` and provide the API key in your Helm values:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: anthropic
+    anthropic:
+      apiKey: <your-anthropic-api-key>
+----
+
+If you set `ai.assistant.anthropic.apiKey`, the chart uses that API key for the AI Assistant backend.
+
+[discrete]
+= Configure Anthropic with an existing Secret
+
+If you already manage the Anthropic API key in an existing Kubernetes Secret, reference that Secret instead of storing the key directly in the Helm values:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: anthropic
+    anthropic:
+      fromExternalSecret:
+        name: anthropic-api-key
+        key: ANTHROPIC_API_KEY
+----
+
+If you omit `ai.assistant.anthropic.fromExternalSecret.key`, the chart uses `ANTHROPIC_API_KEY` by default.
+
+[NOTE]
+=====
+When `ai.assistant.anthropic.fromExternalSecret.name` is set, the referenced Secret must already exist in the same namespace as the Helm release before you run `helm install` or `helm upgrade`.
+=====
+
+[NOTE]
+=====
+Only the AI Assistant backend needs the Anthropic API key. The MCP server does not call Anthropic.
+=====
+
+--
+====
 
 [#access-ai-assistant]
 == Access AI Assistant
@@ -191,6 +265,9 @@ Most AI Assistant settings should stay at their chart defaults. In particular, i
 
 In practice, the most important settings are:
 
+* `ai.assistant.provider` to choose `bedrock` or `anthropic`
+* `ai.assistant.bedrock.awsRegion` for AWS Bedrock region selection
+* `ai.assistant.anthropic.apiKey` or `ai.assistant.anthropic.fromExternalSecret.*` for Anthropic API key management
 * `stackstate.components.mcp.replicaCount` to scale the MCP server
 * `stackstate.components.mcp.resources` to size the MCP server
 * `stackstate.components.aiAssistant.resources` to size the AI Assistant backend
@@ -208,7 +285,10 @@ The MCP server is enabled automatically together with AI Assistant. The main set
 For the AI Assistant backend, the most important settings are:
 
 * `stackstate.components.aiAssistant.resources` - to control CPU and memory allocation
+* `ai.assistant.provider` - to choose whether the backend uses AWS Bedrock or Anthropic directly
+* `ai.assistant.bedrock.awsRegion` - to set the AWS region when using AWS Bedrock
 * `stackstate.components.aiAssistant.serviceAccount.annotations` - to attach the IAM role required for AWS Bedrock
+* `ai.assistant.anthropic.apiKey` or `ai.assistant.anthropic.fromExternalSecret.*` - to provide the Anthropic API key when using Anthropic directly
 
 The persistence settings (`stackstate.components.aiAssistant.persistence.size` and `stackstate.components.aiAssistant.persistence.storageClass`) can also be adjusted if you want a different PVC size or storage class for the SQLite database.
 
@@ -219,6 +299,9 @@ Example:
 ai:
   assistant:
     enabled: true
+    provider: bedrock
+    bedrock:
+      awsRegion: eu-west-1
 
 stackstate:
   components:
@@ -246,7 +329,7 @@ stackstate:
         size: 5Gi
 ----
 
-This example focuses on the settings most often changed in production: MCP scaling, CPU and memory sizing, the IAM role annotation, and optional AI Assistant persistence sizing.
+This example focuses on the settings most often changed in production: model provider selection, MCP scaling, CPU and memory sizing, the IAM role annotation for AWS Bedrock, and optional AI Assistant persistence sizing.
 
 == Related information
 
