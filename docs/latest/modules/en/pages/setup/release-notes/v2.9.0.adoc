@@ -1,11 +1,9 @@
-= v2.9.0 - 24/Mar/2026
-:revdate: 2026-03-24
+= v2.9.0 - 25/Mar/2026
+:revdate: 2026-03-25
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
 == Release Notes: {stackstate-product-name} Helm Chart v2.9.0
-
-= Release Notes
 
 == Component Versions
 
@@ -19,24 +17,33 @@
 
 == New Features & Enhancements
 
-* *SUSE Observability AI Investigation Agent:* Introduced a production-ready, autonomous diagnostic system designed to investigate and resolve Kubernetes incidents.
-** *Autonomous Incident Investigation:* The agent uses a hypothesis-driven methodology (Orient → Hypothesize → Test → Conclude) to investigate infrastructure issues end-to-end, generating formal reports with root cause analysis and remediation steps.
-** *Advanced Metric Analysis:* Implements a "hidden tool" pattern where Python statistical libraries analyze raw metric data (detecting trends, changepoints, and anomalies) and return compact, high-value summaries to the LLM, preventing context window bloat.
-** *Model Context Protocol (MCP) Integration:* Built on a clean separation of concerns using a Go-based MCP tool server for data retrieval and a Python LangGraph runtime for orchestration and intelligence.
-** *Multi-Provider Support:* Compatible with various LLM providers, including Anthropic, OpenAI, AWS Bedrock, and Ollama.
-** *Rancher AI Alignment:* Architecturally aligned with the Rancher AI Agent (Liz), sharing common patterns for Helm charts, CRDs, and persistent checkpointing to ensure a unified SUSE AI experience.
+=== AI Investigation Agent
+The AI Investigation Agent can autonomously execute investigations into production incidents, identifying the most likely root causes and providing actionable remediation steps.
+It has access to all the tools offered by the MCP server, and uses an iterative approach to finding the root cause of an incident.
 
+
+=== Liz, the AI Assistant
+Liz serves as the intelligent, conversational front-end assistant for SUSE Observability. It acts as an orchestration layer, utilizing specialized tools from the MCP server to transform complex telemetry into guided dialogue.
+
+* *Conversational Cluster Management:* Allows users to find data using natural language, such as querying runtime states, crafting complex metric queries, or analyzing the impact of environment changes.
+
+* *Automated Dashboarding:* The agent assists in the creation of custom dashboards, streamlining the visualization of critical system health and performance metrics.
+
+=== Model Context Protocol (MCP) Server
+Description: The SUSE Observability Model Context Protocol (MCP) server provides AI Agents access to the information in SUSE Observability across all domains: topology, events, health, logs, traces and metrics.
+
+* *Immediate Remediation:* Coding agents can now combine CLI tool access with observability data to not only identify issues but also execute immediate fixes, such as performing a   rollback using `kubect` commands.
+
+* *Closing the Developer Loop:* By bridging the gap between infrastructure alerts and the codebase, the MCP Server enables agents to pinpoint specific bugs and implement fixes directly within the repository.
+
+=== Infrastructure & Connectivity
 * *Gateway API Support:* The SUSE Observability Helm chart now supports the Kubernetes Gateway API.
 ** *Global Configuration:* A single global flag allows users to switch between standard Ingress and the Gateway API seamlessly.
-** *Simplified Setup:* Following Rancher-standard patterns, the configuration is minimized to require only the URL and TLS secret in most environments.
+** *Simplified Setup:* Following Rancher-standard patterns, configuration is minimized to require only the URL and TLS secret in most environments.
 ** *Documentation:* Updated installation guides now cover both Ingress and Gateway API implementation paths.
 
 == Bug Fixes
 
 * *Health State Aggregation Logic:* Improved the precedence logic for aggregated health states (e.g., at the Namespace or Cluster level). The *Clear* state now takes precedence over *Unknown*. 
 ** *Impact:* In scenarios where a component has many Unknown states and at least one Clear state (with no Critical or Deviating states), the overall health will now aggregate to *Clear* instead of *Unknown*.
-
-=== Agent Bug Fixes
-
-* *Agent Data Interaction:* Refactored the internal agent library to utilize the standardized MCP server for all StackState API interactions, ensuring more robust data validation and response encoding.
-* *Version Compatibility:* This release is fully validated for use with **SUSE Observability Agent v1.2.28**.
+* *Rancher Extension Snapshot API:* Fixed an incompatibility issue within the Snapshot API request model to ensure stable data retrieval within the Rancher UI.
