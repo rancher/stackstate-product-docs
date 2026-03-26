@@ -1,11 +1,18 @@
 = Expose SUSE Observability outside of the cluster
-:revdate: 2025-07-10
+:revdate: 2026-03-23
 :page-revdate: {revdate}
 :description: {stackstate-product-name} Self-hosted
 
 == Overview
 
-{stackstate-product-name} can be exposed with a Kubernetes Ingress resource. The examples on this page show how to configure a Traefik or Nginx Ingress controller using xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm for SUSE Observability running on Kubernetes]. This page also documents which service/port combination to expose when using a different method of configuring ingress traffic.
+{stackstate-product-name} can be exposed outside of the cluster using either a traditional https://kubernetes.io/docs/concepts/services-networking/ingress/[Kubernetes Ingress] resource or the https://gateway-api.sigs.k8s.io/[Kubernetes Gateway API]. The examples on this page show how to configure both methods using the {stackstate-product-name} Helm chart. This page also documents which service/port combination to expose when using a different method of configuring ingress traffic.
+
+The https://gateway-api.sigs.k8s.io/[Gateway API] is the successor to Kubernetes Ingress and provides more expressive, extensible, and role-oriented routing. It is recommended for new deployments on clusters that have a Gateway API-compatible controller installed (such as Traefik, Envoy Gateway, or Istio).
+
+[NOTE]
+====
+`ingress.enabled` and `gateway.enabled` are mutually exclusive -- the Helm chart will fail validation if both are set to `true`.
+====
 
 When observing the cluster that also hosts {stackstate-product-name}, the agent traffic can be kept entirely within the cluster itself by xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_agents_in_the_same_cluster[changing the agent configuration] during agent installation.
 
@@ -86,6 +93,85 @@ Include the `ingress_values.yaml` file when you run the `helm upgrade` command t
 helm upgrade --install \
   --namespace "suse-observability" \
   --values "ingress_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
+====
+
+== Configure Gateway API via the {stackstate-product-name} Helm chart
+
+As an alternative to Ingress, the {stackstate-product-name} Helm chart supports the https://gateway-api.sigs.k8s.io/[Kubernetes Gateway API] for exposing {stackstate-product-name} outside the cluster. The chart creates an `HTTPRoute` resource that attaches to an existing `Gateway`.
+
+[NOTE]
+====
+* A Gateway API-compatible controller (such as https://doc.traefik.io/traefik/routing/providers/kubernetes-gateway/[Traefik], https://gateway.envoyproxy.io/[Envoy Gateway], or https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/[Istio]) must be installed on the cluster.
+* A `Gateway` resource must already exist. The chart only creates `HTTPRoute` resources -- it does not create the `Gateway` itself.
+* TLS termination is configured on the `Gateway` listener, not on the `HTTPRoute`. Refer to your Gateway controller's documentation for TLS setup.
+====
+
+To configure the Gateway API for {stackstate-product-name}, create a file `gateway_values.yaml` with contents like below. Replace `MY_DOMAIN` with your own domain and set the `parentRefs` to match your `Gateway` resource.
+
+[tabs]
+====
+Traefik::
++
+--
+[,text]
+----
+gateway:
+  enabled: true
+  parentRefs:
+    - name: my-gateway
+      namespace: gateway-namespace
+      sectionName: websecure
+  hostnames:
+    - suse-observability.MY_DOMAIN
+----
+--
+
+Generic (Envoy Gateway, Istio, etc.)::
++
+--
+[,text]
+----
+gateway:
+  enabled: true
+  parentRefs:
+    - name: my-gateway
+      namespace: gateway-namespace
+  hostnames:
+    - suse-observability.MY_DOMAIN
+----
+--
+====
+
+If `hostnames` is omitted, it will be derived from the `baseUrl` configured during installation. If `path` is omitted, it defaults to the path component of `baseUrl` or `/`.
+
+The `gateway` section also supports optional advanced configuration:
+
+* `annotations` -- annotations for the `HTTPRoute` resource
+* `filters` -- https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteFilter[HTTPRoute filters] for request/response modification
+* `timeouts` -- request and backend request timeouts
+* `backendWeight` -- weight for traffic splitting
+
+Refer to the `gateway` section in the chart's `values.yaml` for full details.
+
+Make sure to update the `baseUrl` in the values file generated during initial installation, it will be used by {stackstate-product-name} to generate convenient installation instructions for the agent.
+
+Include the `gateway_values.yaml` file when you run the `helm upgrade` command to deploy {stackstate-product-name}:
+
+[,text]
+----
+helm upgrade --install \
+  --namespace "suse-observability" \
+  --values "gateway_values.yaml" \
   --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
   --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
@@ -235,6 +321,83 @@ suse-observability/suse-observability
 This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
 ====
 
+== Configure Gateway API for Open Telemetry
+
+The OpenTelemetry Collector can also be exposed using the Kubernetes Gateway API. The chart supports both `HTTPRoute` (for OTLP over HTTP, port 4318) and `GRPCRoute` (for OTLP over gRPC, port 4317) via the `kind` field.
+
+To expose both HTTP and gRPC endpoints, use `additionalGateways` to create multiple routes. Create a file `gateway_otel_values.yaml` with contents like below:
+
+[tabs]
+====
+gRPC only::
++
+--
+[,text]
+----
+opentelemetry-collector:
+  gateway:
+    enabled: true
+    kind: GRPCRoute
+    parentRefs:
+      - name: my-gateway
+        namespace: gateway-namespace
+        sectionName: grpc
+    hostnames:
+      - otlp-suse-observability.MY_DOMAIN
+    port: 4317
+----
+--
+
+HTTP and gRPC::
++
+--
+[,text]
+----
+opentelemetry-collector:
+  gateway:
+    enabled: true
+    kind: HTTPRoute
+    parentRefs:
+      - name: my-gateway
+        namespace: gateway-namespace
+        sectionName: websecure
+    hostnames:
+      - otlp-http-suse-observability.MY_DOMAIN
+    port: 4318
+    additionalGateways:
+      - name: grpc
+        kind: GRPCRoute
+        parentRefs:
+          - name: my-gateway
+            namespace: gateway-namespace
+            sectionName: grpc
+        hostnames:
+          - otlp-suse-observability.MY_DOMAIN
+        port: 4317
+----
+--
+====
+
+Include the `gateway_otel_values.yaml` file when you run the `helm upgrade` command to deploy {stackstate-product-name}:
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace "suse-observability" \
+  --values "gateway_otel_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`] was already executed.
+====
+
 == Configure via external tools
 
 To make {stackstate-product-name} accessible outside of the Kubernetes cluster it's installed in, it's enough to route traffic to port `8080` of the `<namespace>-stackstate-k8s-router` service. The UI of {stackstate-product-name} can be accessed directly under the root path of that service (i.e. `http://<namespace>-stackstate-k8s-router:8080`) while agents will use the `/receiver` path (`http://<namespace>-stackstate-k8s-router:8080/receiver`).
@@ -302,8 +465,15 @@ suse-observability/suse-observability
 
 == See also
 
+=== Ingress
+
 * https://learn.microsoft.com/en-us/azure/aks/ingress-tls?tabs=azure-cli[AKS (learn.microsoft.com)]
 * https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html[EKS Official docs] (not using nginx)
 * https://aws.amazon.com/blogs/opensource/network-load-balancer-nginx-ingress-controller-eks/[EKS blog post] (using nginx)
 * https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
-* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
+
+=== Gateway API
+
+* https://gateway-api.sigs.k8s.io/[Kubernetes Gateway API documentation]
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-gateway/[Traefik Kubernetes Gateway API (doc.traefik.io)]
+* https://gateway.envoyproxy.io/[Envoy Gateway]

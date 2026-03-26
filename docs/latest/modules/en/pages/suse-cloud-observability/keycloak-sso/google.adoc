@@ -1,0 +1,126 @@
+= Google via Keycloak
+:revdate: 2026-03-04
+:page-revdate: {revdate}
+:description: SUSE Cloud Observability
+
+== Overview
+
+This guide describes how to configure Google as an SSO identity provider in Keycloak for your SUSE Cloud Observability tenant.
+
+The authentication flow is:
+
+----
+User -> Keycloak (identity broker) -> Google
+----
+
+Keycloak delegates authentication to Google and maps users to Keycloak roles. SUSE Cloud Observability then receives those roles from Keycloak through its standard integration.
+
+== Prerequisites
+
+* A SUSE Cloud Observability tenant with Advanced Keycloak management mode enabled -- see xref:/suse-cloud-observability/user-management.adoc[User Management].
+* A Google Cloud project with access to the https://console.cloud.google.com/apis/credentials[Google Cloud Console].
+* The Keycloak realm name and base URL (for example, `+https://keycloak.acme.com+` and realm `acme`).
+
+== Step 1: Create OAuth credentials in Google Cloud Console
+
+. Go to the https://console.cloud.google.com/apis/credentials[Google Cloud Console Credentials page].
+. Click *Create credentials* > *OAuth client ID*.
+. Select *Web application* as the application type.
+. Set a name, for example `Keycloak SSO`.
+. Under *Authorized redirect URIs*, add the Keycloak broker endpoint URL. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *Google* -- the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
++
+----
+https://<keycloak-host>/realms/<realm>/broker/google/endpoint
+----
+. Click *Create*.
+. Note the *Client ID* and *Client secret*.
+
+If you haven't configured a consent screen for this project, Google will prompt you to do so. Configure the consent screen with at least the `email`, `profile`, and `openid` scopes.
+
+For more details, see the https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred[Google documentation on creating OAuth credentials].
+
+== Step 2: Configure the identity provider in Keycloak
+
+Keycloak includes a built-in Google identity provider that simplifies configuration.
+
+. Sign in to the Keycloak Admin Console and select your realm.
+. Navigate to *Identity Providers* > *Add provider* > *Google*.
+. Configure the following settings:
++
+[cols="1,2"]
+|===
+| Setting | Value
+
+| *Client ID*
+| The Client ID from Step 1.
+
+| *Client Secret*
+| The Client secret from Step 1.
+
+| *Default Scopes*
+| `openid email profile`
+|===
+. Click *Save*.
+. After saving, additional settings become available. Expand *Advanced settings* (or scroll down) and set *Trust Email* to `On` -- this tells Keycloak to trust the email address provided by Google without requiring verification.
+. Click *Save* again.
+. Verify the provider appears on the Keycloak login page by opening your realm's login URL in a browser.
+
+For more details, see the https://www.keycloak.org/docs/latest/server_admin/#google[Keycloak documentation on Google as an identity provider].
+
+== Step 3: Configure role mapping
+
+Google doesn't provide group claims in its standard OAuth tokens. There are several options for assigning Keycloak roles to Google-authenticated users:
+
+=== Option A: Hardcoded role (simplest)
+
+Assign a default Keycloak role to all users who authenticate through Google:
+
+. Navigate to *Identity Providers* > *google* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Hardcoded Role`.
+. Select the Keycloak role to assign to all Google users.
+. Click *Save*.
+
+This approach is suitable when all Google users should have the same level of access.
+
+=== Option B: Manual group assignment in Keycloak
+
+Assign Keycloak roles to individual users after their first login:
+
+. After a user logs in with Google for the first time, their account is created in Keycloak.
+. Navigate to *Users* in the Keycloak Admin Console, find the user.
+. Go to the *Role Mappings* tab and assign the appropriate roles.
+
+This approach is suitable for small teams where individual role assignment is manageable.
+
+=== Option C: Google Workspace groups (advanced)
+
+If you use Google Workspace, you can retrieve group memberships using the Google Admin SDK API:
+
+. In the Google Cloud Console, enable the *Admin SDK API*.
+. Grant the Keycloak service account domain-wide delegation to read group memberships.
+. In Keycloak, configure a custom identity provider mapper to retrieve and map Google Workspace groups.
+
+This approach requires additional configuration in both Google Workspace and Keycloak. See the https://www.keycloak.org/docs/latest/server_admin/#google[Keycloak documentation] for details on configuring Google Workspace group mappings.
+
+== Step 4: Verify the role mapping chain
+
+The complete mapping chain is:
+
+----
+Google user -> Keycloak role -> SUSE Cloud Observability role
+----
+
+. *Google users to Keycloak roles* -- Configured in Step 3 using one of the options above.
+. *Keycloak roles to SUSE Cloud Observability roles* -- Roles map through the predefined Keycloak groups (`stackstate-k8s-troubleshooter`, `stackstate-k8s-admin`). No additional SUSE Cloud Observability configuration is needed -- the platform automatically maps Keycloak roles associated with these groups to the corresponding SUSE Cloud Observability roles.
+
+To verify the full chain:
+
+. Log in to SUSE Cloud Observability using a test user with a Google account.
+. Confirm that the user is assigned the expected SUSE Cloud Observability role.
+. If the user doesn't have the correct role, check the Keycloak user's role assignments and group memberships.
+
+== See also
+
+* xref:/suse-cloud-observability/user-management.adoc[User Management]
+* xref:/suse-cloud-observability/keycloak-sso/microsoft-entra-id.adoc[Microsoft Entra ID via Keycloak]
+* xref:/suse-cloud-observability/keycloak-sso/generic-oidc.adoc[Generic OIDC Provider via Keycloak]
