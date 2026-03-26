@@ -1,0 +1,238 @@
+= Migrating backups from MinIO to S3Proxy
+:revdate: 2026-03-06
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+== Upgrading from a version prior to {release-version}
+
+{stackstate-product-name} {release-version} replaces MinIO with S3Proxy as the backup storage gateway. The backups themselves remain in place and require no migration. However, the Helm chart values used to configure MinIO have changed.
+
+The legacy `minio.*` values are still accepted but are deprecated and will be removed in a release after Q3 2026. It is recommended to update your `values.yaml` configuration at the earliest opportunity.
+
+== What changed
+
+The following table summarises the mapping from old MinIO values to new S3Proxy values:
+
+[cols="1,1", options="header"]
+|===
+| Old value (deprecated) | New value
+
+| `minio.accessKey`
+| `global.s3proxy.credentials.accessKey`
+
+| `minio.secretKey`
+| `global.s3proxy.credentials.secretKey`
+
+| `minio.persistence.enabled`
+| `backup.storage.backend.pvc.enabled`
+
+| `minio.s3gateway.enabled`
+| `backup.storage.backend.s3.enabled`
+
+| `minio.s3gateway.serviceEndpoint`
+| `backup.storage.backend.s3.endpoint`
+
+| `minio.s3gateway.accessKey`
+| `backup.storage.backend.s3.accessKey`
+
+| `minio.s3gateway.secretKey`
+| `backup.storage.backend.s3.secretKey`
+
+| `minio.azuregateway.enabled`
+| `backup.storage.backend.azure.enabled`
+
+| `minio.serviceAccount.annotations`
+| `s3proxy.serviceAccount.annotations`
+|===
+
+For Azure, the storage account name and key were previously passed as `minio.accessKey` and `minio.secretKey` respectively. These are now set as dedicated values under `backup.storage.backend.azure`.
+
+== Migration per storage backend
+
+=== AWS S3
+
+==== Using explicit credentials
+
+Old configuration:
+
+[,yaml]
+----
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+New configuration:
+
+[,yaml]
+----
+global:
+  s3proxy:
+    credentials:
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      s3:
+        enabled: true
+        region: "eu-west-1"  # Set to your AWS region
+        accessKey: AWS_ACCESS_KEY
+        secretKey: AWS_SECRET_KEY
+----
+
+==== Using IAM role / IRSA
+
+Old configuration:
+
+[,yaml]
+----
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-backup-role
+----
+
+New configuration:
+
+[,yaml]
+----
+global:
+  s3proxy:
+    credentials:
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      s3:
+        enabled: true
+        region: "eu-west-1"  # Set to your AWS region
+        # Leave accessKey and secretKey empty to use the IAM role
+s3proxy:
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-backup-role
+----
+
+==== Using a custom S3-compatible endpoint
+
+Old configuration:
+
+[,yaml]
+----
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    serviceEndpoint: "https://s3.example.com"
+    accessKey: BACKEND_ACCESS_KEY
+    secretKey: BACKEND_SECRET_KEY
+----
+
+New configuration:
+
+[,yaml]
+----
+global:
+  s3proxy:
+    credentials:
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      s3:
+        enabled: true
+        endpoint: "https://s3.example.com"
+        accessKey: BACKEND_ACCESS_KEY
+        secretKey: BACKEND_SECRET_KEY
+----
+
+=== Azure Blob Storage
+
+Old configuration:
+
+[,yaml]
+----
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+New configuration:
+
+[,yaml]
+----
+global:
+  s3proxy:
+    credentials:
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      azure:
+        enabled: true
+        accountName: AZURE_STORAGE_ACCOUNT_NAME
+        accountKey: AZURE_STORAGE_ACCOUNT_KEY  # Leave empty to use managed identity
+----
+
+[NOTE]
+====
+The `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` values for `global.s3proxy.credentials` are the internal cluster credentials used by backup jobs to authenticate with S3Proxy. These are not your Azure credentials - set them to any values you choose:
+
+* `accessKey` should contain 5 to 20 alphanumeric characters.
+* `secretKey` should contain 8 to 40 alphanumeric characters.
+====
+
+=== Kubernetes Persistent Volume
+
+Old configuration:
+
+[,yaml]
+----
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+New configuration:
+
+[,yaml]
+----
+global:
+  s3proxy:
+    credentials:
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true
+        size: 500Gi  # Adjust to match your existing PVC size
+----
+
+== Settings backup PVC
+
+As part of this upgrade, a new small PVC (2Gi by default) is created to store settings backups locally. This is separate from the existing settings backup PVC used by previous versions.
+
+The old PVC is not removed automatically. After verifying that new settings backups have been created successfully (using the `sts-backup-cli settings list` command), the old PVC can be manually deleted. Settings backups have a 10-day retention period, so after that time the old backups will no longer be accessible regardless.
+
+If you need to restore a settings backup that was stored on the old PVC, you can do so by passing the `--from-old-pvc` option to the `sts-backup-cli settings restore` command. This allows you to restore from the old PVC without migrating it to the new storage backend first.
+
+The size of the new settings backup PVC can be configured using `backup.storage.settingsPvc.size` (default: `2Gi`).
+
