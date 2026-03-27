@@ -28,7 +28,7 @@ All schemas described here are part of *StackPacks 2.0* and are under active dev
 
 See the following screenshots to get an idea of which pages and UI elements on the respective pages the `ComponentPresentation` configuration pertains to.
 
-=== Component Type Overview Page
+=== Component Overview Page
 
 In the schema reference below, see the `overview` section.
 
@@ -47,75 +47,94 @@ for a given mode and context.
 
 [,yaml]
 ----
-_type: ComponentPresentation
+type: ComponentPresentation
 identifier: urn:...:component-presentation:<presentation-name>
-mode: ["observability" | "security" | "all"]
+name: string
+description: string           # Optional description
 
 binding:
-  _type: ComponentPresentationQueryBinding
-  query: string                       # Primitive STQL query used to match components
+  query: string               # Primitive STQL query that defines to which components does the presentation applies to
 
 rank:
-  specificity: number                 # Higher values indicate more specific definitions
+  specificity: number         # Higher values indicate more specific definitions
 
 presentation:
-  icon: string                        # Optional icon (base64-encoded)
-  name:                               # Optional naming configuration
-    plural: string
-    singular: string
-    title: string
+  icon: string                # Optional icon (base64-encoded)
 
-  mainMenu:                           # Optional main menu entry
-    group: string                     # Name of an existing MainMenuGroup
-    rank: number                      # Optional override within the group
+  overview:                   # Optional overview page configuration
+    name:                     # Naming configuration
+      plural: string
+      singular: string
+      title: string
 
-  overview:                           # Optional overview page configuration
+    mainMenu:                 # Optional main menu entry
+      group: string           # Name of an existing MainMenuGroup
+      order: number           # Order in the group - higher numbers come first
+      icon: !icon path        # Optional reference to icon
+
+    fixedColumns: number      # Optional number of columns that remain fixed when scrolling horizontally
     columns:
-      - _type: string                 # ViewTypeTableCol*
+      - columnId: string      # identifier for the column, to be aligned with more specific/generic presentations
+        title: string         # Optional
+        projection:           # Optional Projection
+          _type: string
+          ...
 
-  highlight:                          # Optional highlight page configuration
-    summary:
-      ...
+  highlight:                  # Optional highlight page configuration
+    title: string
     fields:
-      - _type: string                 # ComponentTypeField
-        fieldId: string
-        label:
-          title: string
-          helpBubbleText: string      # Optional
-        valueExtractor:
+      - fieldId: string
+        title: string
+        description: string   # Optional
+        order: number         # Order in the about section - higher numbers come first
+        projection:           # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
           _type: string
-        display:
-          _type: string
-    about:
-      _type: ComponentTypeAbout
-      fields:
-        - string
+          ...
 
-  filter:                             # Optional overview filters
-    - _type: FilterField
-      name: string
-      tagField: string
+  filters:                    # Optional overview filters
+    - filterId: string
+      displayName:            # Optional - name in the menu
+        singular: string
+        plural: string
+      menuSection: string     # Optional - section for the menu item
+      filter:                 # Optional Filter
+        _type: string
+        ...
 ----
 
-== Identifier
+=== Identifier
 
-Identifiers should follow the {stackstate-product-name} identifier (i.e., `urn:...`) format. Refer to xref:/configure/topology/identifiers.adoc[identifiers] documentation for more information.
+Identifiers should follow the {stackstate-product-name} identifier (i.e., `urn:...:<type>:<name>`) format. Refer to xref:/configure/topology/identifiers.adoc[identifiers] documentation for more information.
 
-== Binding
+=== Binding
 
-The binding determines which components a `ComponentPresentation` applies to.
-
-Bindings are evaluated against component data and must be simple and efficient, as they are used during UI evaluation.
+The binding determines which components a `ComponentPresentation` applies to.  Bindings are evaluated against component data and must be simple and efficient, as they are used during UI evaluation.
 
 Currently supported `binding` type:
 
-* `ComponentPresentationQueryBinding`: an STQL query (refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] for more information)
+* `ComponentPresentationQueryBinding`: a simple STQL query (refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] for more information).  All field-based selectors (labels, layer, domain, identifiers, health state and name) are available, as is boolean logic to combine them.  Only graph traversal (`withNeighborsOf`) is not allowed.
 
-== Rank
+For overview pages, the set of `ComponentPresentations` that can contribute columns is determined on a query level.  When there is a logical possibility for a component to match the overview query, but not the query for a particular `ComponentPresentation`, that presentation will not be considered.
+
+=== Rank
 
 The `rank` section controls how multiple matching `ComponentPresentation` definitions are combined.
 
-Higher specificity values indicate more specialized definitions and take precedence over lower values when composing presentation behavior.
+It reflects how far down the resource hierarchy a presentation applies: from global/shared context to highly specific workload instances.  Higher specificity values indicate more specialized definitions and take precedence over lower values when composing presentation behavior.
+
+Values are user-defined but should generally increase as bindings become more specific along the resource hierarchy; the ranges below are guidelines, not enforced rules.
+
+[cols="1,1"]
+|===
+| Range   | Use
+
+| 0       | Universal base (`common`)
+| 1–99    | Environment & infrastructure (cloud, account, cluster)
+| 100–199 | Platform & orchestration (k8s, otel base)
+| 200–299 | Application / service
+| 300–399 | Runtime / SDK / language 
+| 400+    | User / customer overrides 
+|===
 
 == Presentation sections
 
@@ -125,13 +144,8 @@ Presentation sections are composed when multiple definitions apply to the same c
 
 === Icon and name
 
-Defines iconography and naming used across the UI.
-
-=== Main menu
-
-Controls whether matching components appear in the main menu.
-
-The referenced menu group must be defined separately using `MainMenuGroup`.
+Defines iconography and naming used across the UI.  Icons can be included by using the `!icon` yaml tag, followed by the path of an icon relative to the `icons/` folder.
+E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the file `icons/services/main-menu.svg`.
 
 === Overview
 
@@ -139,22 +153,216 @@ Defines columns shown in overview tables.
 
 Columns may override or extend columns defined by other matching presentations.
 
+==== Main menu
+
+Controls whether matching components appear in the main menu.  The menu item will open an overview page with components that match the binding query.
+
+[,yaml]
+----
+mainMenu: 
+  group: "Open Telemetry"
+  icon: !icon "service.svg"
+  order: 2
+----
+
+When the `icon` field is left empty, the icon on the `ComponentPresentation` itself will be used. The group matches a main menu group by name.  The `order` field determines the position of the menu item in the group.  An item with a higher value comes closer to the top.
+
+The referenced menu group must be defined separately using `MainMenuGroup`:
+[,yaml]
+----
+_type: MainMenuGroup
+identifier: urn:...:main-menu-group:<group-name>
+name: string
+description: string           # Optional description
+defaultOpen: boolean
+order: number                 # Optional order.
+iconbase64: string            # Either a base64-encoded image, or a `!icon` reference to a separate image file
+items:                        # Optional - kept for backwards compability, not needed for component presentations
+  - viewIdentifier: string    # identifier for a (legacy) view
+----
+For backwards compatibility it is possible to list views in a group under `items`.  Component presentations are added automatically to the group; they do not need to be added explicitly.
+
+Although the field name suggests otherwise, the icon can be specified as `!icon path-to-the-icon`.  This is again for backwards compatibility.  
+
+==== Columns
+
+The overview section in the component presentation defines which columns should be shown and in what order.  It also specifies what columns should remain in-view when scrolling horizontally, when the browser windows is too narrow to show all columns in full.
+
+Column definitions can be completely spelled out, including title and projection, but it is also possible to inherit from other presentations.  Based on the binding query, other component presentations with the same query or a strictly more generic one are considered.
+
 === Highlight
 
-Defines fields and sections shown on highlight pages.
+Defines fields and sections shown on highlight pages.  For a component, all applicable presentations can contribute fields to display.
 
-==== Summary
+Each field contains a *title* and a *projection*. The title is displayed as the name of the field.  The projection determines how a value, or a combination of values, are shown.  Values are either expressed using CEL expressions, evaluated against the various attributes of a component, or they represent a (metric) query that can be executed.  For example a `ComponentLinkProjection` expects 2 arguments, a `name` and an `identifier`:
+[,yaml]
+----
+fields:
+  - fieldId: "namespace"
+    title: "Namespace"
+    order: 85.0
+    projection:
+      _type: ComponentLinkProjection
+      name: "${tags.service.namespace}"
+      identifier: "urn:opentelemetry:namespace/${tags.service.namespace}"
+----
 
-==== Fields
+A more specific presentation can override field definitions of a more generic one, e.g. for reordering or suppression.  A field provided by the generic presentation can be hidden by including a field with the same `fieldId`, but without a `projection`.
 
-==== About
+The `order` field can take on any value, with higher values ending up closer to the top of the "About" section in the highlights perspective.  
+To maintain a consistent UI, we use the following conventions:
 
-Defines fields shown in the about panel on the component highlights page.
+Generic fields:: (e.g., name, health) should use low order numbers (e.g., 10-20) to appear at the top by default.
+Specialized fields:: should use higher order numbers to appear after generic ones.
+Overrides:: A specialized presentation can hide a generic section (like health) or move it by overriding the field and providing a different order (e.g., a negative value to push it further down).
 
-=== Filter
+=== Filters
 
-Defines filters shown for overview pages.
+Defines filters shown for overview pages.  They can inherit their definition from more generic component presentations, in which case just specifying the `filterId` is sufficient.  Other properties (`displayName`, `filter` and `menuSection`) are merged.  The most specific component presentation with a property set for a filter, determines its value.
 
-Filters are shown when matching data exists for the bound components.
+The `menuSection` is relevant when there are more filters than fit in the available area in the overview menu.  Filters with the same `menuSection` are then grouped together in a dropdown.
+
+There is currently one type of filter available:
+* `TagFilter`: allows filtering on a tag key-value combination
+
+[,yaml]
+----
+- filterId: "otel_service"
+  displayName:
+    singular: "OTEL service"
+    plural: "OTEL services"
+  filter:
+    _type: "TagFilter"
+    tagKey: "service.name"
+  menuSection: Otel
+----
+
+The intention is for filters to persist when navigating between overview and highlight pages.  So if at all possible, try to reuse the same filter ids (with the same semantics) across different component  presentations.  The filters defined for all OTEL components are
+
+* `otel_namespace` (tag key `service.namespace`, menu section "Otel")
+* `otel_service` (tag key `service.name`, menu section "Otel")
+* `k8s_namespace` (tag key `namespace`, menu section "K8s")
+* `k8s_cluster` (tag key `cluster-name`, menu section "K8s")
+
+== Projections
+
+Projections extract relevant information from a component and define how that should be presented to the user.  Generally a CEL expression is used for data extraction, or a PromQL query string is interpolated.
+
+Not every projection can be used in every context; the available projections and where they can be used is:
+
+[cols="1,^1,^1"]
+|===
+|Projection |Overview | Highlight
+
+|TextProjection           | icon:check[role="green"] | icon:check[role="green"]
+|HealthProjection         | icon:check[role="green"] | icon:check[role="green"]
+|DurationProjection       | icon:check[role="green"] | icon:check[role="green"]
+|RatioProjection          | icon:check[role="green"] | icon:check[role="green"]
+|NumericProjection        | icon:check[role="green"] | icon:check[role="green"]
+|MetricProjection         | icon:check[role="green"] | icon:check[role="green"]
+|ComponentLinkProjection  | icon:check[role="green"] | icon:check[role="green"]
+|ContainerImageProjection | icon:check[role="green"] | icon:check[role="green"]
+|MapProjection            | icon:times[role="red"]   | icon:check[role="green"]
+|===
+
+=== CEL context
+
+CEL expressions are evaluated in an environment representing the component.  The following variables are available
+
+[cols="1,1,3"]
+|===
+|Variable               | Type                | Description
+
+|name                   | string              | The name of the component
+|typeName               | string              | The type of the component
+|identifiers            | list<string>        | Identifiers of the component
+|tags                   | map<string,string>  | Labels of the component, in key-value pairs
+|properties             | map<string,dyn>     | Properties of the component
+|healthState            | string              | One of the supported health states (CLEAR, DEVIATING, CRITICAL, UNKNOWN)
+|lastUpdateTimestamp    | uint                | Timestamp of last update, in milliseconds since epoch
+|===
+
+=== PromQL interpolation
+
+In a promql query, these variables can be used to create label selectors (e.g. `the_metric{namespace=${tags.namespace},ip=${properties.ip_address}}`)
+
+[cols="1,1,3"]
+|===
+|Variable               | Type                | Description
+
+|name                   | string              | The name of the component
+|type                   | string              | The type of the component
+|layer                  | string              | The layer of the component
+|domain                 | string              | The domain of the component
+|tags                   | map<string,string>  | Labels of the component, in key-value pairs
+|properties             | map<string,dyn>     | Properties of the component
+|===
+
+
+[,yaml]
+----
+_type: 'TextProjection'
+value: cel:string             # Cel string for the text to display
+asTag: boolean                # Optional - should the text be rendered as a tag
+----
+
+[,yaml]
+----
+_type: 'HealthProjection'
+value: cel:string             # Cel string that represents a valid HealthState
+----
+
+[,yaml]
+----
+_type: 'DurationProjection'
+startTime: cel:string         # Cel string in ISO8601 format for start time
+endTime: cel:string           # Optional - Cel string in ISO8601 format for end time
+----
+
+[,yaml]
+----
+_type: 'RatioProjection'
+numerator: cel:number         # Cel number for the numerator
+denominator: cel:number       # Cel number for the denominator
+status: cel:string            # Optional - expression that evaluates to a valid HealthState
+----
+
+[,yaml]
+----
+_type: 'NumericProjection'
+value: cel:number             # Cel number for the value
+decimalPlaces: integer        # Optional - number of decimal places to display
+unit: string                  # Optional - unit of the number
+----
+
+[,yaml]
+----
+_type: 'MetricProjection'
+query: string                 # Parametrized PromQL query
+showChart: boolean            # Optional - should a chart be shown on an overview
+decimalPlaces: integer        # Optional - number of decimal places to display
+unit: string                  # Optional - unit of the metric
+----
+
+[,yaml]
+----
+_type: 'ComponentLinkProjection'
+name: cel:string              # Cel string for the name of the link
+identifier: cel:string        # Cel string that creates a valid identifier xref:/configure/topology/identifiers.adoc[identifiers]
+----
+
+[,yaml]
+----
+_type: 'ContainerImageProjection'
+imageId: cel:string           # Cel expression for the image
+imageName: cel:string         # Cel expression for a name for the image
+----
+
+[,yaml]
+----
+_type: 'MapProjection'
+value: cel:map<string,string> # Cel map<string,string> with key value pairs
+asTags: boolean               # Optional (default: true): should the entries be rendered as tags
+----
 
 endif::ss-ff-stackpacks2_enabled[]
