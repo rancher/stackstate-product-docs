@@ -1,0 +1,588 @@
+= 自我签名证书
+:revdate: 2025-07-29
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== SUSE Observability Server
+
+=== 使用自签名证书公开 SUSE Observability Server
+
+xref:k8s-suse-rancher-prime.adoc#_installation[SUSE Observability Server] 组件无法自行终止 SSL，必须使用受 SSL 保护的 Ingress 控制器或负载均衡器通过 HTTPS 公开服务。本节解释如何使用自签名证书配置 Ingress 控制器。
+
+==== 使用带 TLS 的 Ingress 控制器
+
+要使用自签名证书通过 Traefik Ingress 控制器公开 SUSE Observability Server，您需要：
+
+1. 从您的服务器证书和密钥创建 Kubernetes TLS 秘密
+2. 使用 TLS 设置配置 Ingress 资源
+3. 启用 Ingress 部署 SUSE Observability Server
+
+===== 创建 TLS 秘密
+
+从您的证书和私钥文件创建 Kubernetes TLS 秘密：
+
+[,bash]
+----
+# Create TLS secret for main SUSE Observability Server
+kubectl create secret tls tls-secret \
+  --cert=server.crt \
+  --key=server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP GRPC endpoint
+kubectl create secret tls otlp-tls-secret \
+  --cert=otlp-server.crt \
+  --key=otlp-server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP HTTP endpoint
+kubectl create secret tls otlp-http-tls-secret \
+  --cert=otlp-http-server.crt \
+  --key=otlp-http-server.key \
+  --namespace suse-observability
+----
+
+===== Helm 值配置
+
+创建一个值文件（例如，`ingress-with-tls-values.yaml`）并包含 Ingress 配置：
+
+[tabs]
+====
+Traefik（默认）::
++
+--
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+      traefik.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+
+Nginx::
++
+--
+[NOTE]
+=====
+Ingress Nginx 项目正在 https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[退役中]。建议用户考虑使用 Traefik 等替代方案。
+=====
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+====
+
+===== 使用 Ingress 安装
+
+使用 Ingress 配置部署 SUSE Observability Server：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values ingress-with-tls-values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+有关完整的安装说明，请参见 xref:k8s-suse-rancher-prime.adoc#_installation[安装]。
+
+=== SUSE Observability Server 使用自签名证书连接到外部系统
+
+[NOTE]
+====
+本节用于配置 SUSE Observability Server 以信任使用自签名证书的外部系统。当服务器需要与使用自签名证书保护的外部服务（如 webhook）建立连接时，适用此配置。
+====
+
+SUSE Observability Server 与外部系统有多个交互点。例如，事件处理程序可以调用其他系统中的 webhook。在默认配置下，如果这些系统使用自签名证书或 JVM 默认不信任的证书进行 TLS 加密，SUSE Observability Server 将无法与其通信。
+
+为了解决这个问题，SUSE Observability Server 允许配置自定义信任库。
+
+=== 创建自定义信任库
+
+您需要有自定义TLS证书可用。如果您没有该证书，您需要通过浏览器xref:/use/security/self-signed-certificates.adoc#_retrieve_certificate_via_the_browser[获取它]。
+
+使用 keytool 工具和 JVM（Java 虚拟机）安装中包含的 `cacerts` 文件，将现有的 TLS 证书文件转换为 SUSE Observability Server 所需的格式。您可以在任何机器上运行此操作，无论操作系统类型如何。
+
+如果您的计算机上没有安装JVM，您也可以xref:/use/security/self-signed-certificates.adoc#_using_a_docker_jvm[使用JVM Docker镜像]。
+
+==== 使用已安装的JVM
+
+在您的计算机上安装JVM并将证书保存为文件`site.cert`后，您可以通过获取JVM的信任库并添加额外的证书来创建新的信任库。
+
+. 创建一个工作目录`workdir`并将证书文件`site.cert`复制到该目录。
+. 切换到`workdir`目录，并从您的Java安装中复制`cacerts`文件。`$JAVA_HOME`是一个环境变量，包含您的Java安装位置。这通常在安装Java时设置。
++
+[,bash]
+----
+cd workdir
+cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
+----
+
+. 运行以下keytool命令以添加证书。所需的密码是`changeit`。别名需要是证书的唯一别名，例如，域名本身，不带任何点。
++
+[,bash]
+----
+keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -file site.cert
+----
+
+. `custom_cacerts`存储文件现在包括`site.cert`证书。您可以通过在输出中搜索别名来验证这一点。
++
+[,bash]
+----
+keytool -list -keystore custom_cacerts
+----
+
+==== 使用 Docker JVM
+
+如果您的计算机上没有安装 JVM，您可以使用 JVM Docker 镜像。证书应被检索并保存为文件 `site.cert`。
+
+. 创建一个工作目录`workdir`并将证书文件`site.cert`复制到该目录。
+. 启动 Java Docker 容器，并将 `workdir` 挂载为卷以便访问：
++
+[,bash]
+----
+docker run -it -v `pwd`/workdir:/workdir  adoptopenjdk:11 bash
+----
+
+. 切换到 `workdir` 目录并复制 `cacerts` 文件：
++
+[,bash]
+----
+cd /workdir
+cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
+----
+
+. 运行以下keytool命令以添加证书。所需的密码是`changeit`。别名需要是证书的唯一别名，例如域名本身，不带任何点。
++
+[,bash]
+----
+keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -file site.cert
+----
+
+. `custom_cacerts`存储文件现在将包括`site.cert`证书。您可以通过在输出中搜索别名来验证这一点。
++
+[,bash]
+----
+ keytool -list -keystore custom_cacerts
+----
+
+=== 使用自定义信任库
+
+信任库和密码可以作为值指定。信任库只能通过 helm 命令行指定，因为它是一个文件。密码值在示例中以相同方式指定，但也可以通过 `values.yaml` 文件提供。
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set-file 'stackstate.java.trustStore'=custom_cacerts \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*注意：*
+
+* 第一次运行 helm 升级命令将导致 pods 重启，这可能会导致短暂的可用性中断。
+* 在每次 `helm upgrade` 运行时包含这些参数。
+* 密码和信任库作为 Kubernetes 秘密存储。
+====
+
+
+[discrete]
+==== Base64 编码的信任库
+
+如有需要，Java 信任库也可以通过将 Base64 编码的字符串传递到 Helm 值中进行配置。
+
+[tabs]
+====
+Linux::
++
+--
+
+要使用 Base64 编码的信任库，请运行以下 `helm upgrade` 命令：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set 'stackstate.java.trustStoreBase64Encoded'=$(cat custom_cacerts | base64 -w0) \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+MacOs::
++
+--
+
+要使用 Base64 编码的信任库，请运行以下 `helm upgrade` 命令：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set 'stackstate.java.trustStoreBase64Encoded'=$(cat custom_cacerts | base64) \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+====
+
+=== 通过浏览器检索证书
+
+证书可以直接从 Chrome 浏览器下载。所涉及的步骤可能会根据您使用的版本略有不同：
+
+. 导航到您需要证书的 URL。
+. 点击地址栏中的锁形图标。
+. 点击 *证书*。
+. 选择 *详细信息*。
+. 选择 *导出*。
+. 使用默认的导出文件类型保存（Base64 ASCII 编码）。
+
+== SUSE Observability Agent
+
+xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[SUSE Observability Agent] 通过 HTTPS 连接到 SUSE Observability Server。如果您的服务器使用自签名证书，您必须配置 SUSE Observability Agent 以信任该证书，从而建立安全连接。
+
+[NOTE]
+====
+当您的服务器使用由私有证书颁发机构（CA）签署的证书时，也需要此配置。在这种情况下，请使用下面描述的相同方法添加私有 CA 证书。
+====
+
+=== 配置自定义证书
+
+通过 Helm 图表值使用以下两种方法之一配置自定义证书：
+
+==== 方法 1：直接 PEM 数据
+
+将证书数据直接嵌入到您的 Helm 配置中：
+
+[,yaml]
+----
+global:
+  customCertificates:
+    enabled: true
+    pemData: |
+      -----BEGIN CERTIFICATE-----
+      MIIDrzCCApegAwIBAgIUDMPkLOLGJ12438MbI32eykbw2xowDQYJKoZIhvcNAQEL
+      BQAwKTEnMCUGA1UEAwwedmlsaWFrb3Yuc2FuZGJveC5zdGFja3N0YXRlLmlvMB4X
+      DTI1MDcxNzEzMjgzN1oXDTI2MDcxNzEzMjgzN1owKTEnMCUGA1UEAwwedmlsaWFr
+      b3Yuc2FuZGJveC5zdGFja3N0YXRlLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+      MIIBCgKCAQEA0MIdPOxrCpXB+F6P6NY7MyOimuViVWJGDW9ckz4mXZYCJD4iqrKS
+      Y4bP6ODO4BgWxKFElxNdwNIqhLmI7RR1MWSRo47oxwPLnqw3INlsX0t1rBp6k6zK
+      K4YY+wGdUH/keug03uMS7HxBXEmhCaMnGPj2BBfB4URc41DkFexGU/Fi1cyv0aCq
+      CgxbThN/fGSGN2evLuabk9mfw4AH3K8isQ+kS9i3O459BgDGH8yjbrWfBUdPXVx5
+      iFiYjGJjVM0pTP1dNriTc88lpajXRK++6O2gmjL9kbf0PGzRsvqqVgI07yR8uV1I
+      0MaUwM2/VJrVB6t80wBuC1Tiv+RiYmtJXwIDAQABo4HOMIHLMB0GA1UdDgQWBBSh
+      iKBCmrp8jHSCMvUnHv/Wgg7LyDAfBgNVHSMEGDAWgBShiKBCmrp8jHSCMvUnHv/W
+      gg7LyDAPBgNVHRMBAf8EBTADAQH/MHgGA1UdEQRxMG+CHnZpbGlha292LnNhbmRi
+      b3guc3RhY2tzdGF0ZS5pb4Ijb3RscC12aWxpYWtvdi5zYW5kYm94LnN0YWNrc3Rh
+      dGUuaW+CKG90bHAtaHR0cC12aWxpYWtvdi5zYW5kYm94LnN0YWNrc3RhdGUuaW8w
+      DQYJKoZIhvcNAQELBQADggEBAIuBFVqJsJImOB4thRk+FFd7UJlK1kQna9woKv23
+      ju+fpEWgZZQ0U/xGS9f3JvxCUJv8oj3HYkfPQQgtPmewATVBx2cTRpogV6JFcAo7
+      fPSLCzOuSt3c4SM1OtDnyToUaAf6YQQT4m+V4IKb6Qo0XWfCxhkuKJlOfmDtqNg/
+      uVYjfG7+KOZs+6CTJwqdIwpNDbLD+DNfo3b/c731Qa1b9o8Z8rIrNrYXj4kly3D1
+      97QiVJCL0u/fC+/KsUxq9ynAYSPgyd2CBnxnQDcq8aQATVTlAafSfk0shvucgQmJ
+      KIL9xaM3iTdvrWGtWeAiEQocsRBJM5xjqtnu0R5xDlLU/TQ=
+      -----END CERTIFICATE-----
+----
+
+==== 方法 2：ConfigMap 引用
+
+创建一个包含您的证书的 Kubernetes ConfigMap，并在 Helm 配置中引用它：
+
+[,yaml]
+----
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tls-config
+data:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    [Your certificate content here]
+    -----END CERTIFICATE-----
+----
+
+在您的 Helm 配置中引用 ConfigMap：
+
+[,yaml]
+----
+global:
+  customCertificates:
+    enabled: true
+    configMapName: "tls-config"
+----
+
+=== 使用自定义证书部署
+
+==== 使用直接 PEM 数据
+
+对于直接 PEM 数据方法，首先将您的证书存储在一个 shell 变量中：
+
+[,bash]
+----
+export CERT_DATA=$(cat <<'EOF'
+-----BEGIN CERTIFICATE-----
+[Your certificate content here]
+-----END CERTIFICATE-----
+EOF
+)
+----
+
+使用证书配置部署 SUSE Observability Agent：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set-string 'stackstate.apiKey'='YOUR_API_KEY' \
+  --set-string 'stackstate.cluster.name'='YOUR_CLUSTER_NAME' \
+  --set-string 'stackstate.url'='YOUR_SUSE_OBSERVABILITY_URL' \
+  --set 'global.customCertificates.enabled'=true \
+  --set 'global.customCertificates.pemData'="$CERT_DATA" \
+  suse-observability-agent suse-observability/suse-observability-agent
+----
+
+==== 使用 ConfigMap 引用
+
+对于 ConfigMap 方法，创建包含您的证书的 ConfigMap：
+
+[,bash]
+----
+kubectl create configmap tls-config \
+  --from-file=tls.crt=your-certificate.crt \
+  --namespace suse-observability
+----
+
+使用 ConfigMap 引用部署 SUSE Observability Agent：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set-string 'stackstate.apiKey'='YOUR_API_KEY' \
+  --set-string 'stackstate.cluster.name'='YOUR_CLUSTER_NAME' \
+  --set-string 'stackstate.url'='YOUR_SUSE_OBSERVABILITY_URL' \
+  --set 'global.customCertificates.enabled'=true \
+  --set 'global.customCertificates.configMapName'='tls-config' \
+  suse-observability-agent suse-observability/suse-observability-agent
+----
+
+== SUSE Observability CLI
+
+xref:setup/cli/cli-sts.adoc[SUSE Observability CLI] 通过 HTTPS 连接到 SUSE Observability Server。当您的服务器使用自签名证书或来自私有证书颁发机构 (CA) 的证书时，请配置 CLI 以信任这些证书。
+
+=== 配置自定义 CA 证书
+
+使用以下方法之一配置自定义 CA 证书：
+
+* **持久化配置**：使用 `sts context save` 存储证书配置以供将来命令使用
+* **一次性使用**：在需要时为单个 CLI 命令添加证书标志
+
+==== 方法 1：CA 证书文件路径
+
+指定您的 PEM 编码 CA 证书文件的路径：
+
+[,bash]
+----
+sts context save \
+  --name staging \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-path /path/to/ca.crt
+----
+
+==== 方法 2：Base64 编码的 CA 证书数据
+
+将 CA 证书数据提供为 base64 编码的字符串：
+
+[,bash]
+----
+sts context save \
+  --name staging \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-base64-data BASE64_ENCODED_CERTIFICATE_DATA
+----
+
+==== 将 CA 证书与其他命令一起使用
+
+使用证书标志与任何 CLI 命令进行一次性证书验证：
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-path /path/to/ca.crt
+
+# Using base64-encoded certificate data
+sts settings list \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-base64-data BASE64_ENCODED_CERTIFICATE_DATA
+----
+
+=== 配置优先级
+
+当提供了两个证书选项时，文件路径（`--ca-cert-path`）优先于 base64 数据（`--ca-cert-base64-data`）。
+
+=== 存储
+
+证书配置存储在：`~/.config/stackstate-cli/config.yaml`
+
+[NOTE]
+====
+**重要说明**：`--skip-ssl` 标志禁用所有 SSL 验证并忽略证书配置。始终使用 CA 证书选项与自定义证书进行安全连接。
+====
+
+== SUSE 可观测性 Open Telemetry
+
+=== 为自定义证书颁发机构创建 ConfigMap
+
+----
+kubectl create configmap tls-config \
+  --namespace open-telemetry \
+  --from-file=tls.crt=<your-certificate>
+----
+
+. 通过在`otel-collector.yaml`的顶层添加以下内容来挂载 ConfigMap：
+
+----
+# Mounting volume for CA certificate
+extraVolumes: 
+  - name: tls-config
+    configMap:
+      items:
+        - key: tls.crt
+          path: tls.crt
+      name: tls-config
+extraVolumeMounts:
+  - mountPath: "/certs"
+    name: tls-config
+    readOnly: true
+----
+
+. 在`otel-collector.yaml`中更新 exporter 配置，以使用证书*ca_file*，并添加`tls.ca_file`键：
+
+----
+otlp/suse-observability:
+  auth:
+    authenticator: bearertokenauth
+  # Put in your own otlp endpoint, for example suse-observability.my.company.com:443
+  endpoint: <your-endpoint>
+  compression: snappy
+  tls:
+    ca_file: /certs/tls.crt
+----
+
+. 安装（或升级）您的 Open Telemetry 收集器。
+
+== Rancher UI 扩展用于 SUSE Observability
+
+在为 SUSE Observability 安装 Rancher UI 扩展时（请参见xref:/k8s-suse-rancher-prime.adoc#_installing_ui_extensions[安装 UI 扩展]），该扩展必须与您的 SUSE Observability 服务器进行通信。如果您的服务器使用自签名证书，则扩展安装将失败。
+
+**解决方案**：在安装扩展之前，将您的自定义证书添加到Rancher。请遵循 Rancher 文档：https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/custom-ca-root-certificates[配置自定义 CA root 证书^]。
+
+在 Rancher 中配置证书后，扩展将成功连接到您的 SUSE Observability 服务器。

@@ -1,0 +1,131 @@
+= 采样
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+采样用于减少导出到 SUSE Observability 的数据显示量，同时尽量不影响遥测数据的质量。应用采样的主要原因是降低成本（如网络、存储等）。
+
+如果您的应用程序生成的数据很少，则无需进行采样，甚至可能由于缺乏遥测数据而妨碍可观测性。然而，如果您的应用程序有大量流量，例如每秒超过1000个跨度，则应用采样是有意义的。
+
+采样主要有两种类型，头部采样和尾部采样。
+
+== 头部采样
+
+头部采样尽早做出采样决策（是否导出数据）。因此，决策不能基于整个追踪，而只能基于可用的非常有限的信息。otel收集器具有https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[概率采样处理器]，实现了一致概率采样。采样器是可配置的，并根据追踪ID（对追踪有用）或属性的哈希值（对日志有用）做出采样决策。这确保了一个追踪的所有跨度始终被采样或不被采样，您将在 SUSE Observability 中拥有完整的追踪。
+
+头部采样的优点包括：
+
+* 易于理解
+* 高效
+* 配置简单
+
+但缺点是无法对整个追踪做出采样决策，例如对所有失败的追踪进行采样，而仅对少量成功的追踪进行采样。
+
+要启用头部采样，请配置处理器并将其包含在管道中。此示例根据追踪ID对4个追踪中的1个进行采样：
+
+[,yaml]
+----
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+----
+
+== 尾部采样
+
+尾部采样将采样决策推迟到追踪（几乎）完成时。这使得尾部采样器能够根据整个追踪做出采样决策，例如始终采样失败的追踪和/或慢速追踪。还有许多其他可能性，例如基于特定属性或服务参与进行采样。
+
+OpenTelemetry Collector 提供了一个 https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[尾部采样处理器]，可以用来应用尾部采样策略。
+
+尾部采样的主要优点在于，它能够基于完整的追踪数据做出采样决策，从而提供额外的灵活性，而不是仅依赖于创建单个跨度时获得的部分信息。
+
+
+[WARNING]
+====
+尽管有优势，尾部采样也有以下缺点：
+
+* 更难配置和理解。
+* 必须是有状态的，以便在做出采样决策之前存储追踪的跨度。
+* 因此，资源使用量也会（大幅）增加。
+* 采样器可能无法跟上，需要额外的监控和扩展。
+====
+
+要启用尾部采样，请配置处理器并将其包含在管道中。
+
+[,yaml]
+----
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+    - name: rate-limited-composite
+      type: composite
+      composite:
+        max_total_spans_per_second: 500
+        policy_order: [errors, slow-traces, rest]
+        composite_sub_policy:
+        - name: errors
+          type: status_code
+          status_code:
+            status_codes: [ ERROR ]
+        - name: slow-traces
+          type: latency
+          latency:
+            threshold_ms: 1000
+        - name: rest
+          type: always_sample
+        rate_allocation:
+        - policy: errors
+          percent: 33
+        - policy: slow-traces
+          percent: 33
+        - policy: rest
+          percent: 34
+----
+
+示例采样：
+
+* 每秒最多 500 个跨度。
+* 所有错误追踪中的跨度，最多占最大值的 33%。
+* 所有慢于 1 秒的追踪中的跨度，最多占最大值的 33%。
+* 其他跨度，最多达到允许的最大速率。
+
+有关配置选项和不同策略的更多详细信息，请使用 https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[尾部采样自述文件]。
+
+然而，这并不是完全的设置后即可忘记。如果其资源使用量开始增加，您需要扩展到使用多个收集器来处理尾部采样，这还需要 https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[路由]，以根据追踪ID路由流量。
+
+== 结合跨度指标进行追踪采样。
+
+在入门部分，收集器配置不包括采样。在添加采样时，我们需要小心确保从追踪中计算得出的指标尽可能准确。尤其是尾部采样可能导致非常偏斜的指标，因为通常错误的相对数量要高得多。为了避免这种情况，我们将追踪管道拆分为多个部分，并通过前向连接器将它们连接起来。修改配置以包括额外的连接器和采样处理器。并按照这里所示修改管道：
+
+[,yaml]
+----
+connectors:
+  # enable the forwarder
+  forward:
+processors:
+  # Configure the probabilistic sampler to sample 25% of the traffic
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [forward]
+    traces/spanmetrics:
+      receivers: [forward]
+      processors: []
+      exporters: [spanmetrics]
+    traces/sampling:
+      receivers: [forward]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, otlp/stackstate]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/stackstate]
+----
+
+示例使用配置为采样25%流量的概率采样器。您可能希望根据您的情况调整百分比或改用<<_tail_sampling,尾部采样器>>。尾部采样器的管道设置相同，只需将对`probabilistic_sampler`的引用替换为`tail_sampling`。

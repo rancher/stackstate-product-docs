@@ -1,0 +1,41 @@
+= 派生状态监视器
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+在可观测性场景中，当逻辑（业务）组件缺乏直接监视器但受到其技术依赖项问题的影响时，可以使用派生状态监视器功能从连接的技术组件中推导出逻辑组件的状态。
+该监视器遍历组件依赖关系，并根据直接观察（例如，从指标中）选择最关键的健康状态，忽略任何已派生的状态。它将把派生状态应用于通过 `componentTypes` 参数选择的所有组件。
+在遍历过程中，仅考虑具有观察到的（非派生）健康状态的组件进行健康推导。具有派生状态的组件在评估中被跳过，但仍然会被遍历以达到更深层的依赖关系--例如，依赖于其他逻辑组件的逻辑组件。
+
+== 派生健康状态监视器示例
+
+使用 `derived-state-monitor` 函数实现的监视器如下所示：
+
+----
+  - _type: "Monitor"
+    name: "Aggregated health state of a Deployment, StatefulSet, ReplicaSet and DaemonSet"
+    tags:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - derived
+      - propagated
+    identifier: "urn:stackpack:my-stackpack:monitor:my-aggregated-health-monitor"
+    status: "DISABLED"
+    description: "Description"
+    function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+    arguments:
+      componentTypes: "deployment, replicaset, statefulset, daemonset"
+    intervalSeconds: 30
+    remediationHint: "Investigate component [{{ causeComponentName }}](/#/components/{{ causeComponentUrnForUrl }}) as is causing the workload to be unhealthy."
+----
+
+* 该函数有一个单一参数 `componentTypes`，您可以将不同的组件类型表示为一个由 `,` 分隔的字符串。
+* 该函数提供三个值可用于修复指南。
+ ** `componentName` 是逻辑组件的名称。
+ ** `causeComponentName` 是状态传播的组件名称及其 `causeComponentUrnForUrl`，以便能够创建链接。
+
+可以根据xref:use/alerting/k8s-dynamic-threshold-monitors.adoc[使用 CLI 向组件添加阈值监视器]的指南来实现该监视器。

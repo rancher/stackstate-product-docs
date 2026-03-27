@@ -1,0 +1,40 @@
+= Fehlerbehebung bei Authentifizierung und Autorisierung
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+Wenn die Authentifizierung oder Autorisierung fehlschlägt, liegt dies normalerweise an einer Abweichung in der Konfiguration des Anbieters und von SUSE Observability. Um die Fehlersuche zu erleichtern, ist es möglich, das Debug-Logging für Authentifizierung und Autorisierung speziell in SUSE Observability zu aktivieren.
+
+[CAUTION]
+====
+Deaktivieren Sie das Debug-Logging wieder, sobald Sie mit der Fehlersuche fertig sind, da es sehr wahrscheinlich ist, dass das Debug-Logging Geheimnisse und/oder persönliche Informationen enthält.
+====
+
+
+Um das Debug-Logging zu aktivieren, kopieren Sie den folgenden YAML-Ausschnitt in eine `debug-auth.yaml` Datei.
+
+[,yaml]
+----
+stackstate:
+  components:
+    server:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+    api:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+----
+
+Führen Sie nun den `helm upgrade` Befehl aus, den Sie zuvor verwendet haben, aber fügen Sie diese eine zusätzliche YAML-Datei hinzu (also `helm upgrade .... --values debug-auth.yaml`), um das Debug-Logging zu aktivieren. Es werden keine Pods neu gestartet, die Änderungen an der Logging-Konfiguration werden nach etwa 30 Sekunden automatisch geladen.
+
+Um das Debug-Logging zu deaktivieren, führen Sie den `helm upgrade ....` Befehl erneut aus, aber lassen Sie das `--values debug-auth.yaml` weg. Nach 30 Sekunden wird die aktualisierte Logging-Konfiguration geladen und das Debug-Logging stoppt.
+
+
+== Fehlerbehebung bei Berechtigungsproblemen
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Überprüfen Sie die Benutzersubjekte] (Benutzer und Rollen) und überprüfen Sie die Konfiguration, abhängig vom verwendeten Authentifizierungsmodell.
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[Überprüfen Sie eine Subjektberechtigung] und überprüfen Sie die Konfiguration, abhängig vom verwendeten Autorisierungsmodell.

@@ -1,0 +1,106 @@
+= Journaux Kubernetes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergé v5.1.x
+
+== Présentation
+
+Dans une configuration Kubernetes, les fonctions de SUSE Observability sont réparties sur différents pods et les journaux de chaque fonction sont stockés par pod et par conteneur. Vous pouvez accéder aux journaux récents en utilisant `kubectl`, bien que pour un stockage à long terme, il soit recommandé de mettre en place une agrégation des journaux.
+
+== Pods Kubernetes pour la journalisation
+
+Les journaux de SUSE Observability sont stockés par pod et par conteneur. Le tableau ci-dessous indique le pod auquel accéder pour consulter les journaux relatifs à des fonctions spécifiques de SUSE Observability. Notez que les noms de pods réels incluront un suffixe numérique ou une chaîne aléatoire (par exemple, `stackstate-receiver-5b9d79db86-h2hkz`) et peuvent également inclure le nom de la version spécifié lors du déploiement de SUSE Observability comme préfixe.
+
+[NOTE]
+====
+Notez que les journaux stockés sur les pods seront régulièrement supprimés. Pour un accès à long terme aux journaux, il est conseillé de mettre en place <<_log_aggregation,l'agrégation des journaux>> pour votre cluster Kubernetes.
+====
+
+
+|===
+| Fonction SUSE Observability | Journaux sur le pod
+
+| API (y compris la topologie, les graphiques et les paramètres)
+| `stackstate-api`
+
+| Indexation des données dans Elasticsearch
+| `stackstate-e2es` (événements)
+
+| Ingestion de données
+| `stackstate-receiver`
+
+| Gestionnaires d'événements
+| `stackstate-view-health`
+
+| Monitor
+| `stackstate-checks`
+
+| Propagation d'état
+| `stackstate-state`
+
+| Synchronisation
+| `stackstate-sync`
+
+| Voir l'état de santé
+| `stackstate-view-health`
+|===
+
+Vous pouvez accéder aux journaux sur un pod spécifique en utilisant la commande `kubectl logs`.
+
+Par exemple :
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== Accéder aux journaux récents
+
+=== Journaux de pod ou de conteneur
+
+Les journaux les plus récents peuvent être récupérés depuis Kubernetes en utilisant la commande `kubectl logs`. Vérifiez le <<_kubernetes_pods_for_logging,pod que vous devez surveiller>> pour récupérer un journal spécifique.
+
+Par exemple :
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== Journaux de synchronisation
+
+Tous les journaux de synchronisation peuvent être trouvés dans un pod `stackstate-sync-<suffix>`. Vous pouvez utiliser le nom de synchronisation pour localiser des informations spécifiques dans un instantané des journaux.
+
+Par exemple :
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== Agrégation de journaux
+
+Pour le stockage à long terme des données de journaux de SUSE Observability, il est conseillé de mettre en place l'agrégation de journaux sur votre cluster Kubernetes. Cela peut être fait en utilisant un système tiers de stockage tel qu'Elasticsearch, Splunk ou Logz.io et un expéditeur de journaux tel que Logstash ou Fluentd.
+
+Pour plus de détails sur la façon dont cela peut être fait, consultez :
+
+* Expédition des journaux avec https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)]
+* Un aperçu complet de la configuration de https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[l'agrégation de journaux dans Elasticsearch (bitnami.com)]
+
+== Reportez-vous également à la section
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[référence de commande kubectl (kubernetes.io/docs)]

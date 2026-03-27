@@ -1,0 +1,51 @@
+= トラブルシューティング
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== クイックトラブルシューティングガイド
+
+SUSE Observabilityの起動トラブルシューティングのためのクイックガイドです：
+
+. インストールが成功裏に完了し、リリースがリストに表示されていることを確認してください：
++
+[,text]
+----
+helm list --namespace suse-observability
+----
+
+. SUSE Observabilityのネームスペース内のすべてのポッドが実行中であることを確認してください：
++
+[,text]
+----
+kubectl get pods
+----
++
+最初のデプロイメントでは、いくつかのポッド内のコンテナが再起動を数回行うことがあります。これは、他のポッドが起動して`ready`の状態になるのを待っているためです。これは、スケジューリングやDockerイメージのプル遅延により遅れることがあります。
++
+`pending`の状態にあるポッドは、通常、問題の兆候です：
+
+ ** ポッドは、クラスター内のリソース不足によりスケジュールできません。クラスターオートスケーラーがアクティブな場合、通常は自動的に解決できますが、そうでない場合は、クラスターにノードを追加するための手動介入が必要です。
+ ** ポッドはスケジュールできませんが、適合するノードは存在します。しかし、そのノードにはポッドが許容しない`taints`があります。これを解決するために、タイントのないノードを追加できますが、SUSE Observabilityは特定のタイントを許容し、タイントのあるノードで実行するようにxref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_override_default_configuration[構成]することもできます。
+ ** ポッドは、永続ボリューム（PV）がマウントされるのを待っています。原因として、SUSE ObservabilityのHelmチャートが`storageClassName`を指定せず、クラスターにデフォルトのストレージクラスがあることに依存している可能性があります。クラスターにデフォルトがない場合、SUSE ObservabilityのHelm値を介してxref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[ストレージクラスを指定する]必要があります。
+
++
+状態が`ImagePullBackOff`のポッドについては、正確なエラーメッセージも確認してください。一般的な原因は次のとおりです：
+
+ ** イメージをプルするために使用された不正なユーザー名/パスワード
+ ** Dockerレジストリへの接続に失敗しました。これは、認証の問題や接続の問題（ファイアウォール、エアギャップインストール）による可能性があります。
+ ** オーバーライドされたDockerイメージレジストリURLのタイプミス
+
++
+`Pending`、`ImagePullBackOff`、または`CrashLoopBackOff`の状態の詳細な原因を調べるには、このコマンドを使用してください：
++
+[,text]
+----
+kubectl describe pod <pod-name>
+----
++
+出力の最後には通常、問題を含む`event`セクションがあります。各コンテナの終了に関する詳細が記載された`State`セクションもあります。
+
+. プライム顧客の場合は、https://scc.suse.com/のSUSE Observabilityサポートに連絡して、ローカルクラスタでのSUSE Observabilityの設定について支援を受けてください。サポートチームのためにインスタンスに関する情報を収集するには、xref:/setup/install-stackstate/support-package-logs.adoc[サポートパッケージ (ログ)]を使用してください。
+. 問題がパフォーマンスに関連している場合は、xref:/setup/install-stackstate/support-package-performance.adoc[サポートパッケージ (パフォーマンス)]を実行して、パフォーマンスを積極的に調査してください。
+. 上記の手順で問題が解決しない場合は、xref:/setup/install-stackstate/advanced-troubleshooting.adoc[高度なトラブルシューティングガイド]が利用可能です。

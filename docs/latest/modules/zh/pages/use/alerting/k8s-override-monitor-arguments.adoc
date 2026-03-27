@@ -1,0 +1,103 @@
+= 通过 Kubernetes 注释覆盖监控器阈值参数
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+SUSE Observability 提供 xref:/use/alerting/k8s-monitors.adoc[开箱即用的监控器]，可对 Kubernetes 集群中可能发生的常见问题进行监控。这些监控器使用某些适合大多数用例的默认参数，但有时需要通过覆盖一些默认参数（如 `threshold` 或 `failureState`）来调整其行为。
+声明覆盖的机制是通过 Kubernetes 资源注释，指明它们应适用于哪个监控器和组件。例如，我们可以为特定服务的 `failureState` 监控器覆盖 `Available service endpoints`，以便在失败时发出 `CRITICAL` 状态，而不是默认的 `DEVIATING`。
+
+== how-to
+
+* <<_how_to_build_my_annotation,how-to 构建我的注释>>
+* <<_what_monitors_allow_overriding_arguments,哪些监控器允许覆盖参数？>>
+* <<_build_an_override_for_a_custom_monitor,为自定义监控器构建覆盖>>
+
+作为示例，这些步骤将覆盖 Kubernetes HTTP 服务的 `Available service endpoints` 监控器的参数。
+
+== how-to 构建我的注释
+
+SUSE Observability 监控器的覆盖注释键遵循以下约定：
+
+----
+monitor.${owner}.stackstate.io/${monitorShorName}
+----
+
+`owner` 属性表示创建该监控器的人，对于开箱即用的监控器是 `kubernetes-v2`，而 `monitorShorName` 属性表示监控器的 ID，可以从监控器的 `identifier` 属性中提取，该属性可以通过 CLI 在列出或检查监控器时读取。
+
+----
+sts monitor list
+
+ID              | STATUS  | IDENTIFIER                                                                          | NAME                                        | FUNCTION ID     | TAGS
+8051105457030   | ENABLED | urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint | Available service endpoints                 | 233276809885571 | [services]
+----
+
+在我们的示例中，标识符是 `urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint`，而 `monitorShorName` 对应于 `service-available-endpoint` 中的最后一个段，因此注释键为：
+
+[,bash]
+----
+monitor.kubernetes-v2.stackstate.io/service-available-endpoint
+----
+
+注释负载是一个 JSON 对象，其中可以定义以下可选参数：
+
+* `threshold`：可选。一个用于比较的数值阈值。
+* `failureState`：可选。可以是“CRITICAL”或“DEVIATING”。“CRITICAL”在 SUSE Observability 中显示为红色，而“DEVIATING”显示为橙色，以表示不同的严重性。
+* `enabled`：可选。布尔数据类型，决定监控器是否会为该组件生成健康状态。
+
+完整的注释将如下所示
+
+[,bash]
+----
+    monitor.kubernetes-v2.stackstate.io/service-available-endpoint: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL",
+        "enabled": true
+      }
+----
+
+== 哪些监控器允许覆盖参数？
+
+* xref:/use/alerting/kubernetes-monitors.adoc#_available_service_endpoints[可用服务端点]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_limits_resourcequota[CPU 限制资源配额]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_requests_resourcequota[CPU 请求资源配额]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_limits_resourcequota[内存限制资源配额]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_requests_resourcequota[内存请求资源配额]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_disk_pressure[节点磁盘压力]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_memory_pressure[节点内存压力]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_pid_pressure[节点 PID 压力]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_readiness[节点就绪状态]
+* xref:/use/alerting/kubernetes-monitors.adoc#_orphaned_persistent_volumes[孤立的持久卷]（仅 `enabled` 属性）
+* xref:/use/alerting/kubernetes-monitors.adoc#_out_of_memory_for_containers[容器内存不足]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_5xx_error_ratio[HTTP - 5xx 错误比例]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_response_time_q95_is_above_3_seconds[HTTP - 响应时间 - Q95 超过 3 秒]
+
+== 为自定义监控器构建一个覆盖
+
+任何使用 xref:/use/alerting/k8s-add-monitors-cli.adoc[使用 CLI 向组件添加阈值监控器] 指南创建的自定义阈值监控器都适合覆盖参数，因为 xref:/use/alerting/k8s-add-monitors-cli.adoc#_write_the_outline_of_the_monitor[示例显示] 自定义监控器的标识符结构为 ``urn:custom:monitor:{monitorShortName}``，因此此类标识符的覆盖注释键预期为
+
+[,bash]
+----
+monitor.custom.stackstate.io/${monitorShortName}
+----
+
+示例使用标识符 `urn:custom:monitor:deployment-has-replicas`，因此注释键将是
+
+[,bash]
+----
+monitor.custom.stackstate.io/deployment-has-replicas
+----
+
+完整的注释将如下所示
+
+[,bash]
+----
+    monitor.custom.stackstate.io/deployment-has-replicas: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL"
+        "enabled": true
+      }
+----

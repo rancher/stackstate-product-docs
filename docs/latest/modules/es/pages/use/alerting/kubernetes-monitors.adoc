@@ -1,0 +1,227 @@
+= Monitores
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+Esta sección describe los monitores listos para usar que se entregan con SUSE Observability. Los monitores entregados con el producto se añaden constantemente. Echa un vistazo en la sección de Monitores en el menú principal para encontrar la lista completa.
+
+== Monitores de Kubernetes listos para usar
+
+=== Puntos finales de servicio disponibles
+
+Es importante asegurar que tus servicios estén disponibles y accesibles para los usuarios. Para monitorizar esto, SUSE Observability ha configurado una verificación que verifica si un servicio tiene al menos un punto final disponible. Los puntos finales son direcciones de red que permiten la comunicación entre diferentes componentes en un sistema distribuido, y necesitan estar disponibles para que el servicio funcione correctamente.
+Si en los últimos 10 minutos no hay ningún punto final disponible, el monitor permanecerá en estado DESVIADO, indicando que podría haber un problema con el servicio que debe solucionarse.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Límites de CPU resourcequota
+
+Los usuarios crean recursos (pods, servicios, etc.) en el espacio de nombres, y el sistema de cuotas rastrea el uso para asegurar que no exceda los límites de recursos duros para CPU definidos en un ResourceQuota. El monitor alertará cuando los límites totales de CPU en el espacio de nombres lleguen al 90% o más de lo establecido por la cuota. Cada `resourcequota` en el espacio de nombres produce un estado de salud del monitor.
+
+=== Solicitudes de CPU resourcequota
+
+Los usuarios crean recursos (pods, servicios, etc.) en el espacio de nombres, y el sistema de cuotas rastrea el uso para asegurar que no exceda las solicitudes de recursos duros para CPU definidas en un ResourceQuota. El monitor alertará cuando las solicitudes totales de CPU en el espacio de nombres lleguen al 90% o más de lo establecido por la cuota. Cada `resourcequota` en el espacio de nombres produce un estado de salud del monitor.
+
+=== Réplicas deseadas de Daemonset
+
+Es importante que se cumpla el número deseado de réplicas para un Daemonset. Los Daemonsets se utilizan para gestionar un conjunto de pods que necesitan ejecutarse en todos o en un subconjunto de nodos en un clúster, asegurando que una copia del pod esté en ejecución en cada nodo que cumpla con los criterios especificados. Esto es útil para tareas como el registro, la monitorización y otras tareas a nivel de clúster que necesitan ejecutarse en cada nodo del clúster. 
+
+Para monitorizar esto, SUSE Observability ha establecido una verificación que verifica si las réplicas disponibles coinciden con el número deseado de réplicas. Esta verificación solo se aplicará a los DaemonSets que tengan un número deseado de réplicas mayor que cero. 
+
+* Si el número de réplicas disponibles es menor que el número deseado, el monitor señalará un estado de salud DESVIADO, indicando que puede haber un problema con el StatefulSet.
+* Si el número de réplicas disponibles es cero, el monitor señalará un estado de salud CRÍTICO, indicando que el StatefulSet no está funcionando en absoluto. 
+
+Para entender la definición completa del monitor, consulta los detalles.
+
+=== Desviación del espacio en disco
+
+Es importante monitorizar el uso de las Persistent Volume Claims (PVCs) en tu clúster de Kubernetes a lo largo del tiempo. Las PVCs se utilizan para almacenar datos que necesitan persistir más allá de la vida útil de un contenedor, y es crucial asegurarse de que tengan suficiente espacio para almacenar los datos.
+Para rastrear esto, hemos establecido una verificación que utiliza predicción lineal para prever la tendencia de uso del volumen de Kubernetes durante un período de 4 días. Si la tendencia indica que las PVCs se quedarán sin espacio dentro de este marco de tiempo, recibirás una notificación, lo que te permitirá tomar medidas para prevenir la pérdida de datos o el tiempo de inactividad.
+
+=== Espacio en disco crítico
+
+Es importante monitorizar el uso de las Persistent Volume Claims (PVCs) en tu clúster de Kubernetes. Las PVCs se utilizan para almacenar datos que necesitan persistir más allá de la vida útil de un contenedor, y es crucial asegurarse de que tengan suficiente espacio para almacenar los datos. Para rastrear esto, hemos establecido una verificación que utiliza predicción lineal para prever la tendencia de uso del volumen de Kubernetes durante un período de 12 horas. Si la tendencia indica que las PVCs se quedarán sin espacio dentro de este marco de tiempo, recibirás una notificación, lo que te permitirá tomar medidas para prevenir la pérdida de datos o el tiempo de inactividad.
+
+=== Réplicas deseadas de ampliación
+
+Es importante que se cumpla el número deseado de réplicas para las Ampliaciones. Las Ampliaciones se utilizan para gestionar la ampliación y la escalabilidad de un conjunto de Pods idénticos en un clúster de Kubernetes. Al asegurarse de que el número deseado de réplicas esté en ejecución y disponible, las Ampliaciones pueden ayudar a mantener la disponibilidad y fiabilidad de una aplicación o servicio de Kubernetes. Para monitorizar esto, SUSE Observability ha establecido una verificación que verifica si las réplicas disponibles coinciden con el número deseado de réplicas en las Ampliaciones.
+
+Esta verificación solo se aplicará a las Ampliaciones que tengan un número deseado de réplicas mayor que cero.
+
+* Si el número de réplicas disponibles es menor que el número deseado, el monitor señalará un estado de salud DESVIADO, indicando que puede haber un problema con las Ampliaciones.
+* Si el número de réplicas disponibles es cero, el monitor señalará un estado de salud CRÍTICO, indicando que las Ampliaciones no están funcionando en absoluto.
+
+Para entender la definición completa del monitor, consulta los detalles.
+
+=== HTTP - ratio de errores 5xx
+
+Las respuestas HTTP con un código de estado en el rango de 5xx indican errores del lado del servidor, como una mala configuración, sobrecarga o errores internos del servidor.
+Para asegurar una buena experiencia de usuario, el porcentaje de respuestas 5xx debería ser inferior al 5% del total de respuestas HTTP para un servicio de Kubernetes.
+
+Dado que el umbral exacto y la gravedad pueden depender de la aplicación, los umbrales pueden ser xref:/use/alerting/k8s-override-monitor-arguments.adoc[sobrescritos a través de una anotación de Kubernetes] en el servicio. Por ejemplo, para anular el umbral de desviación preconfigurado y tener solo un umbral crítico del 6%, añade esta anotación a tu servicio:
+```
+monitor.kubernetes-v2.stackstate.io/http-error-ratio-for-service: | 
+  { 
+    "criticalThreshold": 0.06,
+    "deviatingThreshold": null
+  }
+```
+
+Omitir el umbral de desviación de este fragmento de json lo habría mantenido en el 5% configurado, con el umbral crítico en el 6%, lo que significa que el monitor solo resultaría en un estado de desviación para un ratio de errores entre el 5% y el 6%.
+
+=== HTTP - tiempo de respuesta - Q95 está por encima de 3 segundos
+
+Rastrear el tiempo de respuesta HTTP del percentil 95 (Q95) para tus servicios de Kubernetes te ayuda a detectar solicitudes lentas y anomalías de rendimiento que podrían afectar a los usuarios. Si el tiempo de respuesta Q95 supera los 3 segundos durante un intervalo de tiempo especificado, el monitor te alertará con un estado de desviación.
+
+Puedes adaptar este monitor a las necesidades de tu aplicación xref:/use/alerting/k8s-override-monitor-arguments.adoc[sobrescribiendo la configuración predeterminada], como el intervalo de tiempo, el umbral o el cuantil, utilizando una anotación de Kubernetes en tu servicio. Esta flexibilidad es útil si tu servicio tiene requisitos de rendimiento únicos. Por ejemplo, servicios de polling prolongado.
+
+Para personalizar el monitor, añade una anotación como la siguiente a tu servicio y ajusta los valores según sea necesario:
+
+```
+monitor.kubernetes-v2.stackstate.io/http-response-time/overrides: |
+  {
+    "deviatingTimeWindow": "10m",            // Time window for a deviating state (e.g., "10m", "1h")
+    "deviatingThreshold": 1.2,               // Threshold in seconds for a deviating state
+    "criticalTimeWindow": "30m",             // Time window for a critical state
+    "criticalThreshold": 2.0,                // Threshold in seconds for a critical state
+    "quantile": 0.99,                        // Quantile to monitor (e.g., 0.95, 0.99)
+    "nameTemplate": "API latency (p{{ quantile }}) > {{ threshold }}", // Custom monitor name
+    "enabled": true                          // Set to false to disable this monitor for the service
+  }
+```
+
+- Puedes omitir cualquier campo para usar su valor predeterminado.
+- El monitor evalúa el cuantil elegido del tiempo de respuesta durante el intervalo especificado. Si el valor está por encima del umbral, el monitor se activa.
+- En el ejemplo anterior, el monitor señalará un estado de desviación si el tiempo de respuesta del percentil 99 (Q99) está por encima de 1.2 segundos (en los últimos 10 minutos), y un estado crítico si está por encima de 2.0 segundos (en los últimos 30 minutos).
+
+=== Tendencia de uso del volumen de Kubernetes durante 12 horas
+
+Es importante monitorizar el uso de las Persistent Volume Claims (PVCs) en tu clúster de Kubernetes. Las PVCs se utilizan para almacenar datos que necesitan persistir más allá de la vida útil de un contenedor, y es crucial asegurarse de que tengan suficiente espacio para almacenar los datos. Para rastrear esto, SUSE Observability ha establecido una verificación que utiliza predicción lineal para prever la tendencia de uso del volumen de Kubernetes durante un período de 12 horas. Si la tendencia indica que las PVCs se quedarán sin espacio dentro de este marco de tiempo, recibirás una notificación, lo que te permitirá tomar medidas para prevenir la pérdida de datos o el tiempo de inactividad.
+
+=== Tendencia de uso del volumen de Kubernetes durante 4 días
+
+Es importante monitorizar el uso de las Persistent Volume Claims (PVCs) en tu clúster de Kubernetes a lo largo del tiempo. Las PVCs se utilizan para almacenar datos que necesitan persistir más allá de la vida útil de un contenedor, y es crucial asegurarse de que tengan suficiente espacio para almacenar los datos.
+Para rastrear esto, SUSE Observability configuró un chequeo que utiliza predicción lineal para prever la tendencia de uso del volumen de Kubernetes durante un período de 4 días. Si la tendencia indica que las PVCs se quedarán sin espacio dentro de este marco de tiempo, recibirás una notificación, lo que te permitirá tomar medidas para prevenir la pérdida de datos o el tiempo de inactividad.
+
+=== Límites de memoria de ResourceQuota
+
+Los usuarios crean recursos (pods, servicios, etc.) en el espacio de nombres, y el sistema de cuotas rastrea el uso para asegurar que no exceda los límites de recursos duros para la memoria definidos en un ResourceQuota. El monitor alertará cuando los límites totales de memoria en el espacio de nombres lleguen al 90% o más de lo establecido por la cuota. Cada `resourcequota` en el espacio de nombres produce un estado de salud del monitor.
+
+=== Solicitudes de memoria de ResourceQuota
+
+Los usuarios crean recursos (pods, servicios, etc.) en el espacio de nombres, y el sistema de cuotas rastrea el uso para asegurar que no exceda las solicitudes de recursos duros para la memoria definidas en un ResourceQuota. El monitor alertará cuando las solicitudes totales de memoria en el espacio de nombres lleguen al 90% o más de lo establecido por la cuota. Cada `resourcequota` en el espacio de nombres produce un estado de salud del monitor.
+
+=== Presión de disco en el nodo
+
+La presión de disco en el nodo se refiere a una situación en la que los discos conectados a un nodo experimentan una tensión excesiva. Si bien es poco probable que se encuentre presión de disco en el nodo debido a las medidas preventivas integradas de Kubernetes, aún puede ocurrir de manera esporádica. Hay dos razones principales por las que puede surgir presión de disco en el nodo. La primera razón se relaciona con que Kubernetes no limpia las imágenes no utilizadas. En circunstancias normales, Kubernetes verifica y elimina regularmente cualquier imagen que no esté en uso. Por lo tanto, esta es una causa poco común de presión de disco en el nodo, pero debe ser reconocida. El problema más probable implica la acumulación de registros. En Kubernetes, los registros se guardan típicamente en dos escenarios: cuando los contenedores están en ejecución y cuando se retienen los registros del contenedor que salió más recientemente para fines de solución de problemas. Este enfoque tiene como objetivo encontrar un equilibrio entre preservar registros importantes y descartar los innecesarios con el tiempo. Sin embargo, si un contenedor de larga duración genera un volumen extenso de registros, pueden acumularse hasta el punto de sobrecargar la capacidad del disco del nodo. Para entender la definición completa del monitor, consulta los detalles.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Presión de memoria del nodo
+
+La presión de memoria del nodo se refiere a una situación en la que los recursos de memoria en un nodo de Kubernetes están excesivamente tensionados. Si bien encontrar presión de memoria en el nodo es poco común debido a los mecanismos de gestión de recursos integrados en Kubernetes, aún puede ocurrir en circunstancias específicas. Existen dos razones principales por las cuales puede surgir la presión de memoria del nodo. La primera razón está relacionada con solicitudes y límites de recursos mal configurados o insuficientes para los contenedores que se ejecutan en el nodo. Kubernetes se basa en solicitudes y límites de recursos para asignar y gestionar recursos de manera efectiva. Si los contenedores no están configurados con precisión con sus requisitos de memoria, pueden consumir más memoria de la esperada, lo que lleva a la presión de memoria del nodo. La segunda razón implica la presencia de aplicaciones o procesos que consumen mucha memoria. Ciertas cargas de trabajo o aplicaciones pueden tener mayores demandas de memoria, lo que resulta en un aumento de la utilización de memoria en el nodo. Si múltiples pods o contenedores con requisitos de memoria sustanciales se programan en el mismo nodo sin una adecuada asignación de recursos, puede causar presión de memoria. Para mitigar la presión de memoria del nodo, es crucial revisar y ajustar las solicitudes y límites de recursos para los contenedores, asegurando que se alineen con las necesidades reales de memoria de las aplicaciones. Monitorear y optimizar el uso de memoria dentro de las propias aplicaciones también puede ayudar a reducir el consumo de memoria. Además, considera la escalabilidad horizontal de pods para escalar dinámicamente el número de pods en función de la utilización de memoria. El monitoreo regular, el análisis de métricas relacionadas con la memoria y la asignación proactiva de recursos de memoria pueden ayudar a mantener un estado de memoria saludable en los nodos de Kubernetes. Es esencial entender los requisitos específicos de tus cargas de trabajo y ajustar la asignación de recursos en consecuencia para prevenir la presión de memoria y asegurar un rendimiento óptimo.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Presión de PID del nodo
+
+La presión de PID del nodo ocurre cuando los recursos de identificación de procesos (PID) disponibles en un nodo de Kubernetes están excesivamente tensionados. La primera razón está relacionada con solicitudes y límites de recursos mal configurados o insuficientes para los contenedores que se ejecutan en el nodo. Kubernetes se basa en solicitudes y límites de recursos precisos para asignar y gestionar recursos de manera efectiva. Si los contenedores no están configurados correctamente con sus requisitos de PID, pueden consumir más PIDs de los esperados, lo que resulta en presión de PID del nodo. La segunda razón es la presencia de aplicaciones o procesos que consumen muchos PIDs. Algunas cargas de trabajo o aplicaciones tienen mayores demandas para la identificación de procesos, lo que lleva a un aumento en la utilización de PID en el nodo. Si se programan múltiples pods o contenedores con requisitos significativos de PID en el mismo nodo sin una adecuada asignación de recursos, puede causar presión de PID. Para abordar la presión de PID en el nodo, es importante revisar y ajustar las solicitudes y límites de recursos para los contenedores para asegurar que se alineen con las necesidades reales de PID de las aplicaciones. Monitorear y optimizar el uso de PID dentro de las propias aplicaciones también puede ayudar a reducir el consumo de PID. Además, considerar la escalabilidad horizontal de pods puede escalar dinámicamente el número de pods en función de la utilización de PID. El monitoreo regular, el análisis de métricas relacionadas con PID y la asignación proactiva de recursos de PID son cruciales para mantener un estado saludable del uso de PID en los nodos de Kubernetes. Es esencial entender los requisitos específicos de tus cargas de trabajo y ajustar la asignación de recursos en consecuencia para prevenir la presión de PID y asegurar un rendimiento óptimo.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Preparación del Nodo
+
+Verifica si el Nodo está funcionando como se espera.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Volúmenes Persistentes Huérfanos
+
+Verifica que no haya volúmenes persistentes huérfanos. Un volumen persistente huérfano es un volumen persistente que no está asociado con una reclamación de volumen persistente. Un volumen persistente huérfano puede ser un riesgo de seguridad, ya que puede contener datos sensibles que no se están utilizando. Un volumen persistente huérfano también puede ser un desperdicio de recursos, ya que no se está utilizando.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor] pero solo la propiedad `enabled`
+
+=== Falta de memoria para contenedores
+
+Es importante asegurar que los contenedores que se ejecutan en tu clúster de Kubernetes tengan suficiente memoria para funcionar correctamente. Las condiciones de falta de memoria (OOM) pueden hacer que los contenedores se bloqueen o dejen de responder, lo que lleva a reinicios y posible pérdida de datos.
+Para monitorear estas condiciones, SUSE Observability configuró una verificación que detecta e informa sobre eventos OOM en los contenedores que se ejecutan en el clúster. Esta verificación te ayudará a identificar cualquier contenedor que esté quedándose sin memoria y te permitirá tomar medidas para prevenir problemas antes de que ocurran.
+Permite xref:/use/alerting/k8s-override-monitor-arguments.adoc[Sobrescribir argumentos del monitor]
+
+=== Estado de Pod Listo
+
+Verifica si un Pod que ha sido programado está en ejecución y listo para recibir tráfico dentro del tiempo esperado.
+
+=== Duración del span del Pod
+
+Monitorea la duración de los spans del servidor y del consumidor. Cuando el percentil 95 de la duración es mayor que el umbral (por defecto 5000ms), el monitor tiene un estado DESVIANDO. Este monitor admite la anulación de configuraciones a través de xref:/use/alerting/k8s-override-monitor-arguments.adoc[anulaciones de argumentos de monitor].
+
+=== Ratio de error del span del Pod
+
+Monitorea el porcentaje de los spans del servidor y del consumidor que tienen un estado de error. Si el porcentaje de spans con error supera el umbral (por defecto 5), el monitor tiene un estado DESVIANDO. Este monitor admite la anulación de configuraciones a través de xref:/use/alerting/k8s-override-monitor-arguments.adoc[anulaciones de argumentos de monitor].
+
+=== Pods en Estado de Espera
+
+Si un pod está en un estado de espera y contiene una razón de CreateContainerConfigError, CreateContainerError, CrashLoopBackOff o ImagePullBackOff, se considerará en estado DESVIANDO.
+
+=== Réplicas deseadas del ReplicaSet.
+
+Es importante asegurar que el número deseado de réplicas para tu ReplicaSet (y Despliegue) se esté cumpliendo. Los ReplicaSets y Despliegues se utilizan para gestionar el número de réplicas de un pod particular en un clúster de Kubernetes.
+
+Para monitorizar esto, SUSE Observability ha establecido una verificación que verifica si las réplicas disponibles coinciden con el número deseado de réplicas. Esta verificación solo se aplicará a ReplicaSets y Despliegues que tengan un número deseado de réplicas mayor que cero.
+
+* Si el número de réplicas disponibles es menor que el número deseado, el monitor señalará un estado de salud DESVIANDO, indicando que puede haber un problema con el ReplicaSet o el Despliegue.
+* Si el número de réplicas disponibles es cero, el monitor señalará un estado de salud CRÍTICO, indicando que el ReplicaSet o el Despliegue no está funcionando en absoluto.
+
+Además, el estado de salud del ReplicaSet se propagará al Despliegue para un monitoreo más completo.
+
+=== Reinicios para contenedores
+
+Es importante monitorear los reinicios de cada contenedor en un clúster de Kubernetes. Los contenedores pueden reiniciarse por una variedad de razones, incluyendo problemas con la aplicación o la infraestructura.
+Para asegurar que la aplicación funcione sin problemas, SUSE Observability ha configurado un monitor que rastrea el número de reinicios de contenedores durante un periodo de 10 minutos. Si hay más de 3 reinicios durante este periodo de tiempo, el estado de salud del contenedor se establecerá en DESVIADO, indicando que puede haber un problema que necesita ser investigado.
+
+=== Puntos finales de servicio disponibles
+
+Es importante asegurarse de que sus servicios estén disponibles y accesibles para los usuarios. Para monitorizar esto, hemos configurado una verificación que verifica si un servicio tiene al menos un punto final disponible. Los puntos finales son direcciones de red que permiten la comunicación entre diferentes componentes en un sistema distribuido, y necesitan estar disponibles para que el servicio funcione correctamente.
+Si hay una ocurrencia de cero puntos finales disponibles en los últimos 10 minutos, el monitor permanecerá en un estado desviado, indicando que puede haber un problema con el servicio que necesita ser abordado.
+Para entender la definición completa del monitor, consulta los detalles.
+
+=== Duración del span de servicio
+
+Monitorea la duración de los spans del servidor y del consumidor. Cuando el percentil 95 de la duración es mayor que el umbral (por defecto 5000 ms), el monitor tiene un estado DESVIADO. Este monitor admite la anulación de configuraciones a través de xref:/use/alerting/k8s-override-monitor-arguments.adoc[anulaciones de argumentos de monitor].
+
+=== Ratio de error del intervalo de servicio
+
+Porcentaje de spans de servidor y consumidor que están en un estado de error para un servicio de Kubernetes. Este monitor admite la anulación de configuraciones a través de xref:/use/alerting/k8s-override-monitor-arguments.adoc[anulaciones de argumentos de monitor].
+
+=== Réplicas deseadas de StatefulSet
+
+Es importante que se cumpla el número deseado de réplicas para un StatefulSet. Los StatefulSets se utilizan para gestionar aplicaciones con estado y requieren un número específico de réplicas para funcionar correctamente.
+
+Para monitorizar esto, SUSE Observability ha establecido una verificación que verifica si las réplicas disponibles coinciden con el número deseado de réplicas. Esta verificación solo se aplicará a los StatefulSets que tengan un número deseado de réplicas mayor que cero.
+
+* Si el número de réplicas disponibles es menor que el número deseado, el monitor señalará un estado de salud DESVIADO, indicando que puede haber un problema con el StatefulSet.
+* Si el número de réplicas disponibles es cero, el monitor señalará un estado de salud CRÍTICO, indicando que el StatefulSet no está funcionando en absoluto.
+
+=== Nodo no programable
+
+Si te encuentras con un evento "NodeNotSchedulable" en Kubernetes, significa que el planificador de Kubernetes no pudo colocar un pod en un nodo específico debido a algunas restricciones o problemas con el nodo. Este evento ocurre cuando el planificador no puede encontrar un nodo adecuado para ejecutar el pod de acuerdo con sus requisitos de recursos y otras restricciones.
+
+=== Estado de salud agregado de un clúster
+
+El clúster no posee un estado de salud propio. Pero un clúster se construye a partir de algunos componentes, algunos de ellos son críticos para el funcionamiento normal. El monitor agrega los estados de estos componentes:
+
+* todos los pods en el espacio de nombres 'kube-system'
+* todos los nodos y luego toma el estado de salud más crítico.
+
+=== estado de salud de las cargas de trabajo derivadas (Deployment, DaemonSet, ReplicaSet, StatefulSet)
+
+El monitor agrega los estados de todas las dependencias de mayor nivel y luego devuelve el estado de salud más crítico basado en observaciones directas (por ejemplo, de métricas).
+Este enfoque asegura que las señales de salud se propaguen desde componentes técnicos de bajo nivel (como los Pods) a componentes lógicos de nivel superior, pero solo cuando el componente en sí carece de un estado de salud observado.
+Para utilizar este monitor de manera efectiva, asegúrate de que algunas o todas las siguientes comprobaciones de salud estén desactivadas:
+
+* Réplicas deseadas de ampliación
+* Réplicas deseadas de DaemonSet
+* Réplicas deseadas de ReplicaSet
+* Réplicas deseadas de StatefulSet
+
+Si tienes un caso de uso donde los componentes lógicos no tienen monitores directos, entonces puedes utilizar la función xref:/use/alerting/k8s-derived-state-monitors.adoc[Derived State Monitor] para inferir su salud basada en los componentes técnicos de los que dependen.
+
+== Consulte también
+
+* xref:/use/alerting/k8s-monitors.adoc[Monitores]

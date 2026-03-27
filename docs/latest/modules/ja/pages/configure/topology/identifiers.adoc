@@ -1,0 +1,136 @@
+= 識別子
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+識別子は、SUSE Observabilityでトポロジー要素（コンポーネントや関係）や機能を特定するために使用されます。このページでは、トポロジー要素に使用されるさまざまな種類の識別子と、SUSE Observabilityにおけるグローバルスコープ識別子の構造について説明します。
+
+== トポロジー識別子
+
+トポロジー要素は、SUSE Observabilityで2種類の識別子を使用します：
+
+* *統合スコープ識別子* - 統合内のコンポーネントや関係を特定するために使用されます。各コンポーネントまたは関係には、1つの統合スコープ識別子のみがあります。識別子は任意ですが、統合自体のスコープ内で一貫性がなければなりません。
+* *グローバルスコープ識別子* - 統合間でコンポーネントを統合するために使用されます。例えば、ServiceNowとSUSE Observabilityエージェントの間で使用されます。各コンポーネントは複数のグローバルスコープ識別子を持つことができますが、関係にはグローバル識別子はありません。それらはSUSE Observabilityによって割り当てられ、xref:/configure/topology/identifiers.adoc#_global_scope_identifiers[SUSE Observabilityグローバル識別子規約]に従ってフォーマットされます。
+
+以下のコードサンプルは、両方の種類の識別子を持つコンポーネントを示しています。
+
+* 統合スコープ識別子 - `this-host-unique-identifier`
+* グローバルスコープ識別子 - `urn:host:/this-host-fqdn`
+
+
+[,text]
+----
+self.component("this-host-unique-identifier", "Host", {
+    "name": "this-host",
+    "domain": "Webshop",
+    "layer": "Machines",
+    "identifiers": ["urn:host:/this-host-fqdn"],
+    "labels": ["host:this-host", "region:eu-west-1"],
+    "environment": "Production"
+})
+----
+
+
+== SUSE Observabilityエージェント識別子
+
+SUSE Observabilityエージェントが同期されたトポロジー要素を特定するために使用するグローバルスコープ識別子は、以下の表に示されています。
+
+|===
+| リソースタイプ | URN識別子形式
+
+| ホスト
+| `urn:host:/[hostName]`
+
+| プロセス
+| `urn:process:/[hostName]:[pid]:[createTime]`
+
+| コンテナ
+| `urn:container:/[hostName]:[containerId]`
+
+| トレースで発見されたサービス
+| `urn:service:/[serviceName]`
+
+| トレースで発見されたサービスインスタンス
+| `urn:service-instance:/[serviceName]:/[hostName]`
+|===
+
+xref:/configure/topology/identifiers.adoc#_stackstate_agent[SUSE Observability Agentからの例となるURNグローバルスコープ識別子]を参照してください。
+
+== グローバルスコープ識別子
+
+SUSE Observabilityが異なる外部ソースから一致するグローバルスコープ識別子を持つコンポーネントを受信すると、コンポーネントとそのプロパティ（ラベル、ストリーム、チェック）は単一のコンポーネントに統合されます。これにより、異なるソースからのデータをITの全体像に統合することが可能になります。
+
+SUSE Observabilityにおけるグローバルスコープ識別子は、次の規約に従ったグローバルに一意なURNです：
+
+[,text]
+----
+urn:<prefix>:<type-name>:<free-form>
+----
+
+URN識別子にはすべての文字が許可されているわけではないことに注意してください。次のURN正規表現を使用して、識別子を確認できます：
+
+[,text]
+----
+^urn:[a-z0-9][a-z0-9-]{0,31}:[a-z0-9()+,\-.:=@;$_!*'%/?#]+$
+----
+
+`<prefix>`および`<type-name>:<free-form>`セグメントの形式は以下に説明されています。
+
+=== Prefix
+
+`prefix`セグメントは、グローバル識別子の必須部分です。それは識別子が属するスコープの名前を示し、純粋に組織的な目的で使用されます。
+
+[NOTE]
+====
+プレフィックスにStackPack名が含まれている場合、そのオブジェクトはそのStackPackの管理下に置かれます。これは、StackPackがアンインストールされると、そのオブジェクトもアンインストールされることを意味します。
+====
+
+
+認識されたURNプレフィックスは次のとおりです：
+
+* `stackpack:<name>` - StackPackに属するオブジェクト。
+* `stackpack:<name>:shared` - StackPackのインスタンス間で共有されるオブジェクト。
+* `stackpack:<name>:instance:{{instanceId}}` - 特定のStackPackのインスタンスに属するオブジェクトで、`{{instanceId}}`は各特定のStackPackのインスタンスのStackPackインストールプロセス中に提供されたIDを返すハンドルバーです。
+* `system:auto` - 特定のStackPackに属さないシステムによって作成されたオブジェクト。
+
+=== タイプ名と自由形式
+
+識別子は`<type-name>:<free-form>`セグメントによって一意に識別されます。
+
+* `<type-name>`は、識別子が割り当てられたオブジェクトのドメインオブジェクトタイプに一致します（大文字と小文字は区別されません）。
+* `<free-form>` は任意ですが、タイプに対して一意でなければなりません。自由形式のセグメントのフォーマットはユーザーによって決定されます。オブジェクトの名前（存在する場合）と一致する必要はなく、複数のセグメントで構成されることもできます。
+
+== 例の識別子
+
+=== 一般的な StackPack
+
+一般的な StackPack からの例の URN グローバルスコープ識別子。一般的な StackPack がアンインストールされると、オブジェクトもアンインストールされます。
+
+* コンポーネントタイプサーバー：
+ ** `urn:stackpack:common:component-type:server`
+
+=== SUSE Observability エージェント
+
+SUSE Observability Agent からの例の URN グローバルスコープ識別子。
+
+* ホスト:
+ ** `urn:host:/example.org`
+* プロセス:
+ ** `urn:process:/db.infra.company.org:161841:1602158335000`
+* ［Container］:
+ ** `urn:container:/compnode5.k8s.example.org:8b18c68a820904c55b4909d7f5a9a52756d45e866c07c92bf478bcf6cd240901`
+* トレースで発見されたサービス：
+ ** `urn:service:/prod-db`
+* トレースで発見されたサービスインスタンス：
+ ** `urn:service-instance:/prod-db:/main.example.org`
+
+=== 他の StackPack
+
+さまざまな StackPack からの例の URN グローバルスコープ識別子。名前付き StackPack がアンインストールされると、オブジェクトもアンインストールされます。
+
+* AWS StackPack インスタンス間で共有されるチェック関数 AWS Event Run State：
+ ** `urn:stackpack:aws:shared:check-function:aws-event-run-state`
+* ServiceNow StackPack のコンポーネントタイプ cmdb_ci_netgear：
+ ** `urn:stackpack:servicenow:componenttype:cmdb_ci_netgear`

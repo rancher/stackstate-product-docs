@@ -1,0 +1,88 @@
+= 为Slack通知配置SUSE Observability
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: 自托管的SUSE Observability
+
+[CAUTION]
+====
+SUSE Observability 的SaaS用户可以在无需额外配置的情况下使用Slack通知。本指南仅适用于计划使用Slack通知通道的自托管SUSE Observability安装。
+====
+
+
+在您可以在SUSE Observability中使用Slack通知通道之前，您需要首先按照以下步骤设置Slack和SUSE Observability：
+
+. 在您的工作区为SUSE Observability创建一个Slack应用
+. 使用该Slack应用的凭据配置SUSE Observability。
+
+== 为SUSE Observability创建Slack应用
+
+[NOTE]
+====
+您需要在Slack中拥有管理工作区Slack应用的权限。
+====
+
+
+访问https://api.slack.com/apps[Slack API页面]并单击*创建新应用*按钮。
+
+* 在弹出的对话框中选择“从应用清单”选项。
+* 选择您想要发送通知的工作区，然后单击下一步。
+* 复制下面的Slack应用清单内容并粘贴到文本区域。确保用您的SUSE Observability实例的URL替换`redirect_urls`中的值。单击下一步。
+* 验证URL是否正确，并确保列出的“机器人范围”是`channels:join, channels:read, chat:write, groups:read`，然后单击创建按钮以创建应用。
+* 在应用的“基本信息”页面，可以更改图标（在显示信息部分），您可以将其替换为例如SUSE Observability徽标image:logo/stackstate-logo.png[SUSE Observability徽标,25,25]。
+
+.SUSE Observability的Slack应用清单
+[,json]
+----
+{
+    "display_information": {
+        "name": "SUSE Observability",
+        "description": "Receive notification messages from SUSE Observability",
+        "background_color": "#000000"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "SUSE Observability",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://the.url.of.your.stackstate.installation"
+        ],
+        "scopes": {
+            "bot": [
+                "channels:join",
+                "channels:read",
+                "chat:write",
+                "groups:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+----
+
+
+== 使用该Slack应用的凭据配置SUSE Observability
+
+SUSE Observability需要使用您创建的Slack应用的凭据进行配置。您可以通过将以下内容添加到您的SUSE Observability安装的`values.yaml`文件中来实现：
+
+[,yaml]
+----
+stackstate:
+  components:
+    all:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientId: "<app client id>"
+        secret:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientSecret: "<app client secret>"
+----
+
+在您创建的Slack应用的“基本信息”页面上的“应用凭据”部分可以找到`<app client id>`和`<app client secret>`的值.通过运行在安装SUSE Observability时使用的相同 Helm 命令来应用这些配置更改（xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[用于 Kubernetes] 或 xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift]）。
+
+您现在可以使用Slack通知通道！

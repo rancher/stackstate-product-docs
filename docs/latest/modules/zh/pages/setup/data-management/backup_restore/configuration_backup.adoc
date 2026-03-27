@@ -1,0 +1,87 @@
+= 配置备份
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+SUSE Observability 具有专门用于配置（也称为设置）的备份机制。这包括已安装的堆栈包及其配置，以及用户创建的任何其他自定义。例如，已禁用或自定义的监视器、自定义视图、服务词元等。
+
+配置备份的主要优点是它非常小（通常只有几兆字节），并且可以快速轻松地恢复，停机时间最小。恢复配置备份后，新数据将像以前一样处理，重新创建拓扑、健康状态和警报。然而，拓扑历史（包括健康状态）不会被保留。为此，有 xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[StackGraph 备份]，但是这些备份要大得多，创建和恢复所需的时间也更长。
+
+配置备份默认启用。在默认设置下，它会每晚进行一次备份，但备份仅存储在其自己的名称空间中的持久卷上，并且最多保留最近的 10 个备份。
+
+== 处理配置备份
+
+用于处理配置备份（以及所有其他备份）的脚本可以从 https://github.com/StackVista/helm-charts/releases/latest[最新版本的 SUSE Observability Helm chart] 下载。下载并提取 `backup-scripts-<version>.tar.gz` 以开始使用。
+
+*在使用脚本之前，请确保* 已安装 `kubectl` 二进制文件，并且已使用 SUSE Observability 安装的上下文和名称空间进行配置。例如，运行此命令以连接到上下文 `observability-cluster` 和名称空间 `suse-observability`：
+
+----
+kubectl config use-context observability-cluster
+kubectl config set-context --current --namespace=suse-observability
+----
+
+与备份交互的命令行工具都是通过在集群中创建 Kubernetes 作业并与该作业交互来工作的。工具完成后，作业会自动去除。启动作业可能需要一些时间（拉取 Docker 镜像、在集群中调度作业等都需要一些时间），因此命令不会立即产生结果。
+
+=== 恢复备份
+
+[CAUTION]
+====
+恢复配置备份将删除所有拓扑，包括健康状态、警报和拓扑历史。这还将删除所有先前的配置，并需要 API、UI、监视器、通知和拓扑同步的停机时间（可以限制在几分钟内）。在恢复期间，数据收集和摄取保持活动状态。
+====
+
+
+要恢复备份：
+
+. 确保连接到 SUSE Observability 的上下文和名称空间，<<_working_with_configuration_backups,请参见此处>>
+. 使用以下命令获取可用备份的列表
++
+----
+./list-configuration-backups.sh
+----
+
+. 从备份文件列表中选择要恢复的备份
+. 恢复将首先缩减与 StackGraph 交互的部署，然后将恢复备份。可以通过恢复命令的输出跟踪此过程。使用以下命令恢复备份（回答 `yes` 以确认删除 SUSE Observability 的所有拓扑和设置）：
++
+----
+./restore-configuration-backup.sh sts-backup-your-choice.sty
+----
+
+. 恢复完成后，部署需要手动扩容：
++
+----
+./scale-up.sh
+----
+
+. 过一段时间后，所有部署都在运行并准备好，可以再次使用 SUSE Observability。
+
+=== 触发手动备份
+
+可以在任何时间创建备份，而不会中断服务。Github 仓库中的 `backup-configuration-now.sh` 脚本可以在任何时间触发备份。备份将遵循标准命名约定，包括备份的日期/时间。
+
+=== 自定义配置备份
+
+配置备份可以存储在对象存储中，这在配置 MinIO 并为拓扑、指标、事件和日志启用备份时会自动发生。请遵循 xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_enable_backups[Kubernetes 备份] 的说明。
+
+默认情况下保留 365 天的备份，可以通过 Helm 值进行修改。也可以完全禁用配置备份或自定义备份计划。备份的其他部分也可以自定义：
+
+[,yaml]
+----
+backup:
+  configuration:
+    # backup.configuration.bucketName -- Name of the bucket to store configuration backups (needs to be a globally unique bucket when using Amazon S3).
+    bucketName: 'sts-configuration-backup'
+    # backup.configuration.maxLocalFiles -- The maximum number of configuration backup files stored on the PVC for the configuration backup (which is only of limited size, see backup.configuration.scheduled.pvc.size)
+    maxLocalFiles: 10
+    scheduled:
+      # backup.configuration.scheduled.enabled -- Enable scheduled configuration backups (if `backup.enabled` is set to `true`).
+      enabled: true
+      #_ backup.configuration.scheduled.schedule __ Cron schedule for automatic configuration backups in [Kubernetes cron schedule syntax](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#cron-schedule-syntax).
+      schedule: '0 4 * * *'
+      # backup.configuration.scheduled.backupRetentionTimeDelta -- Time to keep configuration backups in object storage. The value is passed to GNU date tool to determine a specific date, and files older than this date will be deleted.
+      backupRetentionTimeDelta: '365 days ago'
+      pvc:
+        # backup.configuration.scheduled.pvc.size -- Size of volume for settings backup in the cluster
+        size: '1Gi'
+----

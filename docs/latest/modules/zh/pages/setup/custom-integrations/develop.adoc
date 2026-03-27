@@ -1,0 +1,267 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= 教程：开发自定义集成（StackPack）
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description:  开发自定义集成（StackPack）
+
+[IMPORTANT]
+====
+此功能为预生产状态，尚未发布。仅在设置了环境变量 `STS_EXPERIMENTAL_STACKPACK` 时可用。可能会发生重大更改。
+====
+
+== 目标
+
+作为开发者，您希望通过构建自定义StackPack将您的技术与{stackstate-product-name}集成。本教程将指导您使用StackPack CLI完成该过程。
+
+== 先决条件
+
+- 访问xref:/setup/cli/cli-sts.adoc[StackPack CLI]
+- 功能标志已启用：
++
+[source,bash]
+----
+export STS_EXPERIMENTAL_STACKPACK=true
+----
+
+
+== 如何开发自定义集成（StackPack）
+
+=== 搭建一个新的StackPack
+
+`scaffold`子命令从可配置模板创建新的StackPack项目结构，简化StackPack开发的初始设置过程。该命令支持本地目录模板和GitHub托管模板。
+
+- 使用CLI创建一个新的StackPack项目：
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack
+----
+
+- 要使用特定的GitHub模板（默认：https://github.com/StackVista/stackpack-templates[stackvista/stackpack-templates]）：
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack --template-github-repo stackvista/stackpack-templates --template-name microservice --destination-dir stackpack
+✓ Validating arguments...
+✓ Checking destination directory...
+✓ Fetching template from github:stackvista/stackpack-templates@main:templates
+✓ Rendering templates...
+✓ Validating rendered templates...
+✓ Copying files to destination...
+Files copied:
+  README.md
+  provisioning/dashboard.sty
+  provisioning/metricbindings.sty
+  provisioning/monitors.sty
+  provisioning/remediation-hints/node-memory-pressure.md.hbs
+  provisioning/stackpack.sty
+  resources/deprovisioning.md
+  resources/error.md
+  resources/installed.md
+  resources/logo.png
+  resources/notinstalled.md
+  resources/overview.md
+  resources/provisioning.md
+  resources/waitingfordata.md
+  stackpack.yaml
+
+✅ ✓ Scaffold complete!
+
+Next steps:
+1. Review the generated files in: ./my-stackpack
+2. Check the ./my-stackpack/README.md for instructions on what to do next.
+...
+----
+
++
+- 要使用本地模板：
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack --template-local-dir ./templates --template-name webapp
+----
+
+
+=== 审查和自定义
+
+- 审查目标目录中的生成文件。
+- 编辑`stackpack.yaml`和其他文件以定义您的集成逻辑。
+  * 集成数据。要映射组件并摄取指标，请参见xref:setup/custom-integrations/otelmappings/README.adoc[添加Otel遥测映射]
+  * xref:use/alerting/k8s-add-monitors-cli.adoc[使用CLI添加监视器]
+  * xref:setup/custom-integrations/metric-bindings/index.adoc[添加指标绑定]
+
+[NOTE]
+====
+默认的：https://github.com/StackVista/stackpack-templates[stackvista/stackpack-templates]模板是一个很好的起点，因为它包含了大多数扩展点（如监视器和指标绑定）的示例。
+====
+
+=== 测试您的StackPack
+
+`test`子命令简化了StackPack开发工作流程，通过自动化包 → 上传 → 安装/升级序列，并自动管理版本以进行测试迭代。
+
+- 在预生产环境中快速测试您的StackPack（需要运行的SUSE Observability实例）：
++
+[source,bash]
+----
+sts stackpack test -d ./my-stackpack --yes
+✅ Starting stackpack test sequence...
+  Stackpack: my-stackpack (current version: 0.0.1)
+
+Step 1/5: Checking installed version...
+
+Step 2/5: Creating temporary copy for testing...
+✅ ✓ Temporary copy created
+
+Step 3/5: Bumping version for testing...
+✅ ✓ Version bumped to: 0.0.1-cli-test.10000
+
+Step 4/5: Packaging stackpack...
+✅ ✓ Stackpack packaged successfully!
+
+Stackpack: my-stackpack (v0.0.1-cli-test.10000)
+Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.10000.zip
+✅ ✓ Stackpack packaged successfully
+
+Step 5/5: Uploading and installing/upgrading stackpack...
+✅ Uploaded StackPack: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.10000.zip
+NAME              | DISPLAY NAME      | VERSION
+my-stackpack | my-stackpack | 0.0.1-cli-test.10000
+✅ ✓ Stackpack uploaded successfully
+✅ StackPack instance installed
+ID             | NAME | STATUS      | VERSION         | LAST UPDATED
+274027256960772 | -    | PROVISIONING | 0.0.1-cli-test.1 | Fri Aug 29 09:10
+                |      |              | 0000             | :26 2025 CEST
+✅ ✓ Stackpack installed successfully
+
+✅ 🎉 Test sequence completed successfully!
+----
+
+- `test`子命令打包、上传并安装您的StackPack，并带有测试版本后缀。
+- 在您的StackPack上进行迭代，使用`test`命令快速反馈，进行更改并观察安装/升级过程是否成功执行。在SUSE Observability UI中查看摄取的拓扑和遥测。
+
+=== 打包您完成的StackPack版本
+
+`package`子命令从StackPack目录创建一个zip文件。此命令将所有必需的StackPack文件和目录打包成一个适当命名的zip档案，以便分发和部署。
+
+- 将您的StackPack打包成可分发的zip：
++
+[source,bash]
+----
+sts stackpack package -d ./my-stackpack
+✅ ✓ Stackpack packaged successfully!
+
+Stackpack: stackpack (v0.0.1)
+Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.zip
+----
+
+- 要指定输出文件：
++
+[source,bash]
+----
+sts stackpack package -d ./my-stackpack -f my-custom-archive.zip
+----
+
+=== 验证您的StackPack
+
+在上传和安装您的StackPack之前，您可以验证它以确保其正确配置（以获得更紧密的反馈循环）。根据您的工作流程，有两种方法：
+
+==== 使用实时后端的本地验证
+
+`validate`子命令验证StackPack与运行中的{stackstate-product-name}实例。这对于在开发过程中验证您的 StackPack 非常有用。
+
+- 验证 StackPack 目录（自动打包并上传）：
++
+[source,bash]
+----
+sts stackpack validate -d ./my-stackpack
+✅ Stackpack validation successful!
+----
+
+- 验证预打包的 `.sts` 文件：
++
+[source,bash]
+----
+sts stackpack validate -f ./my-stackpack-0.0.1.sts
+✅ Stackpack validation successful!
+----
+
+[NOTE]
+====
+`sts stackpack validate` 命令需要在您的 CLI 上下文中配置的运行中的 {stackstate-product-name} 实例。如果您没有可用的实时实例，请改用 CI 验证。
+====
+
+==== CI/CD 管道中的验证
+
+对于可能没有运行中的 {stackstate-product-name} 实例的 CI/CD 管道，请使用 StackState Server Docker 镜像中的 `stack-pack-validator` 工具。这可以在不需要实时后端连接的情况下进行验证。
+
+===== GitLab CI 示例
+
+在您的 GitLab CI 管道中直接使用 StackState Server Docker 镜像：
+
+[source,yaml]
+----
+.validate-stackpack: &validate-stackpack
+  stage: validate
+  image: registry.rancher.com/stackstate/stackstate-server:<latest-tag>
+  script:
+    - |
+      echo "Validating stackpack source: stackpacks/$STACKPACK"
+      /opt/docker/bin/stack-pack-validator -directory "$CI_PROJECT_DIR/stackpacks/$STACKPACK" || {
+        echo "ERROR: Stackpack validation failed for stackpacks/$STACKPACK"
+        exit 1
+      }
+      echo "Stackpack validation passed for stackpacks/$STACKPACK"
+  dependencies: []
+
+validate-my-stackpack:
+  <<: *validate-stackpack
+  variables:
+    STACKPACK: my-stackpack
+----
+
+===== Docker 命令行
+
+如果在本地或其他 CI/CD 系统中运行验证，请使用 `docker run` 命令：
+
+- 验证打包的 `.sts` 文件：
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack-0.0.1.sts:/stackpack.sts \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -file /stackpack.sts
+----
+
+- 验证 StackPack 目录：
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack:/stackpack \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -directory /stackpack
+----
+
+[TIP]
+====
+在您的 CI/CD 管道中使用 `stack-pack-validator` 脚本和 `stackstate-server` 镜像来验证 StackPacks，然后再发布它们。这确保您的 StackPack 满足所有要求，而无需运行 {stackstate-product-name} 实例。
+====
+
+=== 上传您的 StackPack
+
+`upload` 子命令将 zip 存档推送到运行中的 {stackstate-product-name} 实例。
+
+- 将存档上传到 {stackstate-product-name}：
++
+[source,bash]
+----
+sts stackpack upload -f ./my-stackpack-0.0.1.zip
+✅ ✓ Stackpack uploaded successfully!
+----
+
+=== 安装 StackPack
+
+xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[安装或升级您的 StackPack] 通过 {stackstate-product-name} StackPacks 界面。
+
+endif::ss-ff-stackpacks2_enabled[]

@@ -1,0 +1,87 @@
+= Backup da configuração
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Auto-hospedado
+
+== Visão Geral
+
+O SUSE Observability possui um mecanismo de backup específico para configuração (também conhecido como configurações). Isso inclui stackpacks instalados com sua configuração, mas também quaisquer outras personalizações criadas pelo usuário. Por exemplo, monitores que foram desativados ou personalizados, visualizações personalizadas, tokens de serviço, etc.
+
+A principal vantagem do backup de configuração é que ele é muito pequeno (geralmente apenas alguns megabytes) e fácil e rápido de restaurar com um tempo de inatividade mínimo. Após o backup de configuração ser restaurado, novos dados serão processados como antes, recriando topologia, estados de saúde e alertas. No entanto, o histórico de topologia (incluindo saúde) não é preservado. Para esse propósito, existe o xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[backup do StackGraph], no entanto, esses backups são muito maiores e levam muito mais tempo para serem criados e restaurados.
+
+O backup de configuração é habilitado por padrão. Em sua configuração padrão, ele fará um backup todas as noites, mas os backups são armazenados apenas em um volume persistente em seu próprio namespace e, no máximo, os 10 backups mais recentes são mantidos.
+
+== Trabalhando com backups de configuração
+
+Scripts para trabalhar com backups de configuração (mas também todos os outros backups) podem ser baixados da https://github.com/StackVista/helm-charts/releases/latest[última versão do Helm chart do SUSE Observability]. Baixe e extraia o `backup-scripts-<version>.tar.gz` para começar.
+
+*Antes de usar os scripts, certifique-se de que* o binário `kubectl` está instalado e configurado com o contexto e namespace onde o SUSE Observability está instalado. Por exemplo, execute este comando para se conectar ao contexto `observability-cluster` e namespace `suse-observability`:
+
+----
+kubectl config use-context observability-cluster
+kubectl config set-context --current --namespace=suse-observability
+----
+
+As ferramentas de linha de comando para interagir com os backups funcionam criando um job do Kubernetes no cluster e interagindo com esse job. Após a conclusão da ferramenta, o job é removido automaticamente. Iniciar o job pode levar algum tempo (baixando a imagem do docker, agendando o job no cluster, etc., tudo leva algum tempo), então os comandos não produzirão um resultado imediatamente.
+
+=== Restaurar um backup
+
+[CAUTION]
+====
+Restaurar um backup de configuração removerá toda a topologia, incluindo estados de saúde, alertas e o histórico de topologia. Isso também removerá toda a configuração anterior e requer tempo de inatividade para a API, UI, monitores, notificações e sincronização de topologia (pode ser limitado a alguns minutos). A coleta e ingestão de dados permanecem ativas durante a restauração.
+====
+
+
+Para restaurar um backup:
+
+. Certifique-se de conectar ao contexto e namespace para SUSE Observability, <<_working_with_configuration_backups,veja aqui>>
+. Obtenha a lista de backups disponíveis usando
++
+----
+./list-configuration-backups.sh
+----
+
+. Na lista de arquivos de backup, escolha o backup que deseja restaurar
+. A restauração reduzirá primeiro a escala das implantações que interagem com o StackGraph e, em seguida, o backup será restaurado. Isso pode ser acompanhado pela saída do comando de restauração. Restaure o backup com o comando abaixo (responda `yes` para confirmar a exclusão de toda a topologia e configuração do SUSE Observability):
++
+----
+./restore-configuration-backup.sh sts-backup-your-choice.sty
+----
+
+. Após a conclusão da restauração, as implantações precisam ser escaladas manualmente:
++
+----
+./scale-up.sh
+----
+
+. Após um curto período, todas as implantações estão em execução e prontas, e o SUSE Observability pode ser usado novamente
+
+=== Acione um backup manual
+
+Um backup pode ser criado a qualquer momento sem qualquer interrupção de serviço. O script `backup-configuration-now.sh` no repositório do Github pode ser usado para acionar um backup a qualquer momento. O backup seguirá a convenção de nomenclatura padrão, incluindo a data/hora do backup.
+
+=== Personalizando backups de configuração
+
+Os backups de configuração podem ser armazenados em armazenamento de objetos, isso acontece automaticamente ao configurar o MinIO e habilitar backups para topologia, métricas, eventos e logs. Por favor, siga as instruções para o xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_enable_backups[backup do Kubernetes].
+
+Por padrão, 365 dias de backups são retidos, isso pode ser modificado via os valores do Helm. Também é possível desativar completamente o backup de configuração ou personalizar o cronograma de backup. Algumas outras partes do backup também podem ser personalizadas:
+
+[,yaml]
+----
+backup:
+  configuration:
+    # backup.configuration.bucketName -- Name of the bucket to store configuration backups (needs to be a globally unique bucket when using Amazon S3).
+    bucketName: 'sts-configuration-backup'
+    # backup.configuration.maxLocalFiles -- The maximum number of configuration backup files stored on the PVC for the configuration backup (which is only of limited size, see backup.configuration.scheduled.pvc.size)
+    maxLocalFiles: 10
+    scheduled:
+      # backup.configuration.scheduled.enabled -- Enable scheduled configuration backups (if `backup.enabled` is set to `true`).
+      enabled: true
+      #_ backup.configuration.scheduled.schedule __ Cron schedule for automatic configuration backups in [Kubernetes cron schedule syntax](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#cron-schedule-syntax).
+      schedule: '0 4 * * *'
+      # backup.configuration.scheduled.backupRetentionTimeDelta -- Time to keep configuration backups in object storage. The value is passed to GNU date tool to determine a specific date, and files older than this date will be deleted.
+      backupRetentionTimeDelta: '365 days ago'
+      pvc:
+        # backup.configuration.scheduled.pvc.size -- Size of volume for settings backup in the cluster
+        size: '1Gi'
+----

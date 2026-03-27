@@ -1,0 +1,36 @@
+= v2.6.1 - 13/Oct/2025
+:revdate: 2025-10-13
+:page-revdate: {revdate}
+:description: SUSE Observability en mode auto-hébergé
+
+== Notes de mise à jour : {stackstate-product-name} Tableau de bord v2.6.1
+
+== Nouvelles fonctionnalités et améliorations
+
+* *Application du schéma d'URL de base :* Les diagrammes de Helm `suse-observability` et `suse-observability-values` imposent désormais strictement que la valeur `baseUrl` soit fournie et qu'elle comprenne un schéma ( `http://` ou `https://`).
+* *Amélioration de la fiabilité de Kafka :* La fiabilité du redémarrage des pods Kafka a été améliorée par l'introduction d'une sonde de démarrage et l'augmentation de la période de grâce de terminaison.
+* *Support SMTP anonyme :* Ajout d'un support pour la configuration d'un SMTP anonyme pour les notifications.
+* *Configuration cohérente du travail et du CronJob :* S'est assuré que `podAnnotations`, `podLabels`, `nodeSelectors`, `affinity`, et `tolerations` s'appliquent désormais à tous les Jobs et CronJobs.
+** Tous les Jobs et CronJobs prennent désormais en charge la configuration `global.imagePullSecrets`.
+* *Conditions de déploiement de HBase :* Correction des conditionnels du mode de déploiement de HBase afin d'éviter que les ressources destinées uniquement au mode distribué (par exemple, PodDisruptionBudgets, Secrets, ServiceMonitors, ConfigMaps) ne soient déployées en mode Mono.
+* *Sonde de démarrage Elasticsearch :* Ajout d'une sonde de démarrage pour Elasticsearch, lui donnant jusqu'à 10 minutes pour démarrer avec succès.
+* *Améliorations de la restauration d'Elasticsearch :*
+** Ajout de l'option `--delete-all-indices` à `restore-elasticsearch-snapshot.sh` pour supprimer automatiquement tous les index Elasticsearch existants avant la restauration.
+** Une documentation expliquant comment restaurer les données Elasticsearch si le volume persistant Elasticsearch est accidentellement supprimé a été fournie.
+
+
+== Corrections de bugs
+
+* *Accès à l'extension de l'interface utilisateur Rancher :* Les utilisateurs non administrateurs de Rancher peuvent désormais visualiser correctement l'état de santé des clusters et des ressources dans le cluster via l'extension de l'interface utilisateur.
+* *Installation d'OpenShift :* Correction des problèmes d'installation des clusters OpenShift en configurant correctement `SecurityContextConstraints` avec `seccompProfiles`.
+** La xref:setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[documentation d'installation d'OpenShift] a été mise à jour.
+* *Rétention des données de StackGraph :* Restauration des données de StackGraph pour utiliser la fenêtre de rétention complète au lieu de la limiter à 8 jours lors d'une restauration.
+* *Restauration de la configuration (RBAC) :* Ajout de sujets et de permissions au processus de restauration de la configuration, garantissant que toutes les permissions RBAC configurées et les jetons de service sont effectivement préservés.
+* *Correction du modèle d'accès de base :* Correction d'un problème où les modèles `basic-access` appliquaient incorrectement les rôles `k8sAuthorization` même lorsque cette fonctionnalité était désactivée.
+* *Correction de l'altération des données HA (désalignement de l'horloge) :* Résolution d'un problème de corruption de données dans les configurations HA qui se produisait en raison d'un désalignement d'horloge entre les nœuds exécutant Tephra.
+
+=== Correction des bugs de l'agent
+
+* *Collecte de données sur les conteneurs :* L'agent n'arrête plus la collecte des métriques des conteneurs à cause de `EPERM` sur un seul répertoire.
+* *Descripteurs de fichiers de l'agent de traitement :* Correction d'un problème de fuite de mémoire lié aux descripteurs de fichiers dans l'agent de processus.
+* *Traçage du protocole de l'agent de processus :* L'agent {stackstate-product-name} Helm chart supporte désormais la configuration `processAgent.disabledProtocols`, vous permettant de spécifier les protocoles réseau qui *ne* doivent *pas* être tracés.

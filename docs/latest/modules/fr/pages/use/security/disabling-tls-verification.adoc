@@ -1,0 +1,61 @@
+= Désactivation de la vérification TLS
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergé
+
+== SUSE Observability Agent
+
+Pour désactiver la validation SSL pour votre xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent], vous devez configurer la valeur de chaîne Helm comme indiqué ci-dessous :
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+Pour désactiver la validation SSL depuis le xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability CLI], vous devez spécifier l'option `--skip-ssl` avec les commandes `sts CLI`. Cela peut être fait en utilisant l'une des deux méthodes ci-dessous :
+
+*Méthode 1* : 
+
+Spécifiez l'option `--skip-ssl` dans le fichier de certificat CA encodé en PEM pour une configuration persistante :
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip-ssl
+----
+
+*Méthode 2* :
+
+Spécifiez l'option `--skip-ssl` dans toute commande CLI utilisée pour une validation de certificat ponctuelle :
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+----
+
+[WARNING]
+====
+L'utilisation de l'option `--skip-ssl` ignorera les paramètres `STS_CA_CERT_PATH` et `STS_CA_CERT_BASE64_DATA`. À utiliser avec précaution car cela réduit la sécurité.
+====
+
+== Extension de l'interface utilisateur Rancher pour SUSE Observability
+
+Pour désactiver la validation SSL depuis l'extension de l'interface utilisateur Rancher, vous devez modifier le paramètre `agent-tls-mode`. 
+
+Pour changer la valeur du paramètre via l'interface utilisateur, accédez à la page des paramètres globaux et trouvez le paramètre `agent-tls-mode` en bas de la page. Après avoir modifié le paramètre via l'interface utilisateur, les clusters sont vérifiés pour s'assurer que la condition `AgentTlsStrictCheck` est définie sur 'True' avant d'autoriser la demande. Cela empêche les pannes dues à une incompatibilité de certificat.

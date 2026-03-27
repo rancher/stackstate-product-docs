@@ -1,0 +1,103 @@
+= Überschreiben Sie die Schwellenwertargumente des Monitors über Kubernetes-Annotationen
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+SUSE Observability bietet xref:/use/alerting/k8s-monitors.adoc[Monitore sofort einsatzbereit], die eine Überwachung häufiger Probleme in einem Kubernetes-Cluster ermöglichen. Diese Monitore arbeiten mit bestimmten Standardargumenten, die für die meisten Anwendungsfälle geeignet sind, aber manchmal ist es notwendig, ihr Verhalten anzupassen, indem einige dieser Standardargumente wie `threshold` oder `failureState` überschrieben werden.
+Der Mechanismus zur Deklaration der Überschreibungen erfolgt über Kubernetes-Ressourcenannotationen, die angeben, auf welchen Monitor und welche Komponente sie angewendet werden sollen. Zum Beispiel könnten wir das `failureState` für den `Available service endpoints`-Monitor für einen bestimmten Dienst überschreiben, bei dem wir einen `CRITICAL`-Zustand signalisieren möchten, wenn er fehlschlägt, anstatt des Standardwerts `DEVIATING`.
+
+== Anleitung
+
+* <<_how_to_build_my_annotation,Wie erstelle ich meine Annotation>>
+* <<_what_monitors_allow_overriding_arguments,Welche Monitore erlauben das Überschreiben von Argumenten?>>
+* <<_build_an_override_for_a_custom_monitor,Erstellen Sie eine Überschreibung für einen benutzerdefinierten Monitor>>
+
+Als Beispiel werden die Schritte die Argumente für den `Available service endpoints`-Monitor von Kubernetes-HTTP-Diensten überschreiben.
+
+== Wie erstelle ich meine Annotation
+
+Die Schlüssel für die Überschreibungsannotationen der SUSE Observability-Monitore folgen der folgenden Konvention:
+
+----
+monitor.${owner}.stackstate.io/${monitorShorName}
+----
+
+Die `owner`-Eigenschaft gibt an, wer einen solchen Monitor erstellt hat; für die sofort einsatzbereiten Monitore ist dies `kubernetes-v2`, und die `monitorShorName`-Eigenschaft stellt die ID des Monitors dar und kann aus der `identifier`-Eigenschaft eines Monitors extrahiert werden, die über die Kommandozeilenschnittstelle beim Auflisten oder Inspizieren von Monitoren gelesen werden kann.
+
+----
+sts monitor list
+
+ID              | STATUS  | IDENTIFIER                                                                          | NAME                                        | FUNCTION ID     | TAGS
+8051105457030   | ENABLED | urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint | Available service endpoints                 | 233276809885571 | [services]
+----
+
+In unserem Beispiel ist der Bezeichner `urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint` und die `monitorShorName` entspricht dem letzten Segment wie in `service-available-endpoint`, daher lautet der Annotationsschlüssel:
+
+[,bash]
+----
+monitor.kubernetes-v2.stackstate.io/service-available-endpoint
+----
+
+Die Annotationspayload ist ein JSON-Objekt, in dem die folgenden optionalen Argumente definiert werden können:
+
+* `threshold`: optional. Ein numerischer Schwellenwert zum Vergleichen.
+* `failureState`: optional. Entweder "KRITISCH" oder "ABWEICHEND". "KRITISCH" wird in SUSE Observability als rot und "ABWEICHEND" als orange angezeigt, um unterschiedliche Schweregrade zu kennzeichnen.
+* `enabled`: optional. Boolescher Datentyp, der bestimmt, ob der Monitor einen Gesundheitszustand für diese Komponente erzeugen würde.
+
+Die vollständige Annotation würde dann wie folgt aussehen
+
+[,bash]
+----
+    monitor.kubernetes-v2.stackstate.io/service-available-endpoint: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL",
+        "enabled": true
+      }
+----
+
+== Welche Monitore erlauben das Überschreiben von Argumenten?
+
+* xref:/use/alerting/kubernetes-monitors.adoc#_available_service_endpoints[Verfügbare Dienstendpunkte]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_limits_resourcequota[CPU-Limits Ressourcenkontingent]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_requests_resourcequota[CPU-Anfragen Ressourcenkontingent]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_limits_resourcequota[Speicherlimits Ressourcenkontingent]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_requests_resourcequota[Speicheranfragen Ressourcenkontingent]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_disk_pressure[Knoten-Diskdruck]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_memory_pressure[Knoten-Speicherdruck]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_pid_pressure[Knoten-PID-Druck]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_readiness[Knoten-Bereitschaft]
+* xref:/use/alerting/kubernetes-monitors.adoc#_orphaned_persistent_volumes[Verwaiste persistente Volumes] (Nur die `enabled`-Eigenschaft)
+* xref:/use/alerting/kubernetes-monitors.adoc#_out_of_memory_for_containers[Speicherengpass für Container]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_5xx_error_ratio[HTTP - 5xx Fehlerquote]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_response_time_q95_is_above_3_seconds[HTTP - Antwortzeit - Q95 liegt über 3 Sekunden]
+
+== Erstellen Sie eine Überschreibung für einen benutzerdefinierten Monitor
+
+Jeder benutzerdefinierte Schwellenwertmonitor, der mithilfe der Anleitung unter xref:/use/alerting/k8s-add-monitors-cli.adoc[Fügen Sie einen Schwellenwertmonitor zu Komponenten mit der Kommandozeilenschnittstelle hinzu] erstellt wurde, eignet sich zum Überschreiben von Argumenten. Wie xref:/use/alerting/k8s-add-monitors-cli.adoc#_write_the_outline_of_the_monitor[das Beispiel zeigt], ist ein Bezeichner für einen benutzerdefinierten Monitor wie folgt aufgebaut: ``urn:custom:monitor:{monitorShortName}`` und der Schlüssel für die Überschreibungsannotation für einen solchen Bezeichner ist wie folgt zu erwarten:
+
+[,bash]
+----
+monitor.custom.stackstate.io/${monitorShortName}
+----
+
+Das Beispiel verwendet den Bezeichner `urn:custom:monitor:deployment-has-replicas`, daher wäre der Schlüssel für die Annotation
+
+[,bash]
+----
+monitor.custom.stackstate.io/deployment-has-replicas
+----
+
+Und die vollständige Annotation würde so aussehen
+
+[,bash]
+----
+    monitor.custom.stackstate.io/deployment-has-replicas: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL"
+        "enabled": true
+      }
+----

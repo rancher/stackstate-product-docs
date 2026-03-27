@@ -1,0 +1,61 @@
+= Desabilitando a verificação TLS
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability Auto-hospedado
+
+== SUSE Observability Agent
+
+Para desabilitar a validação SSL para o seu xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent], você precisa configurar o valor da string Helm conforme mostrado abaixo:
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+Para desabilitar a validação SSL do xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability CLI], você precisa especificar a flag `--skip-ssl` com os comandos `sts CLI`. Isso pode ser feito usando um dos dois métodos abaixo:
+
+*Método 1*: 
+
+Especifique a flag `--skip-ssl` no arquivo de certificado CA codificado em PEM para configuração persistente:
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip-ssl
+----
+
+*Método 2*:
+
+Especifique a flag `--skip-ssl` em qualquer comando CLI que seja usado para a validação única de certificado:
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+----
+
+[WARNING]
+====
+Usar a flag `--skip-ssl` ignorará as configurações `STS_CA_CERT_PATH` e `STS_CA_CERT_BASE64_DATA`. Use com cautela, pois isso reduz a segurança.
+====
+
+== Extensão da interface do Rancher para SUSE Observability
+
+Para desabilitar a validação SSL a partir da extensão da interface do Rancher, você precisa alterar a configuração `agent-tls-mode`. 
+
+Para alterar o valor da configuração através da interface, navegue até a página de Configurações Globais e encontre a configuração `agent-tls-mode` na parte inferior da página. Após alterar a configuração através da interface, os clusters são verificados para ter a condição `AgentTlsStrictCheck` definida como 'True' antes de permitir a solicitação. Isso previne interrupções devido a uma incompatibilidade de certificado.

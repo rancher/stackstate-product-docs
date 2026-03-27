@@ -1,0 +1,77 @@
+= Metrikreferenzen 
+:revdate: 2025-11-07
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Diese Seite definiert gängige Kubernetes-bezogene Metriken, die von SUSE Observability gesammelt werden, und erklärt, wie sie berechnet werden.
+
+=== container_memory_usage
+
+[horizontal]
+Name:: `container_memory_usage`
+Typ:: Messwert
+Einheit:: Byte
+Quelle:: Direktes Lesen aus der Container-Cgroup-Hierarchie.
+
+[cols="1,3"]
+|===
+|Cgroup-Version | Ursprungsdatei
+
+|v1 | `memory.usage_in_bytes`
+|v2 | `memory.current`
+|===
+
+Zusammenfassung:: Die gesamte Menge an Speicher, die derzeit von der Cgroup und ihren Nachkommen verwendet wird. Dies ist eine Summe, die anonymen Speicher (RSS), Seiten-Cache und Kernel-Speicher umfasst. Verwenden Sie eine der folgenden Metriken, um weitere Details zu einem bestimmten Speicherbereich zu erhalten.
+
+=== container_memory_kernel
+
+[horizontal]
+Name:: `container_memory_kernel`
+Typ:: Messwert
+Einheit:: Byte
+Quelle:: Direktes Lesen aus der Container-Cgroup-Hierarchie.
+
+[cols="1,3"]
+|===
+|Cgroup-Version | Ursprungsdatei
+
+|v1 | `memory.kmem.usage_in_bytes`
+|v2 | `memory.stat` -> `kernel` Feld innerhalb der Datei
+|===
+Zusammenfassung:: Menge des gesamten Kernel-Speichers, einschließlich (kernel_stack, pagetables, percpu, vmalloc, slab)
+
+=== container_memory_rss
+
+[horizontal]
+Name:: `container_memory_rss`
+Typ:: Messwert
+Einheit:: Byte
+Quelle:: Direktes Lesen aus der Container-Cgroup-Hierarchie.
+
+[cols="1,3"]
+|===
+|Cgroup-Version | Ursprungsdatei
+
+|v1 | `memory.stat` -> `total_rss` Feld innerhalb der Datei
+|v2 | `memory.stat` -> `anon` Feld innerhalb der Datei
+|===
+Zusammenfassung:: Die Resident Set Size (RSS) des anonymen Speichers. Dies ist der nicht dateigebundene Speicher (Heap und Stack), der aktiv von den Prozessen innerhalb der Cgroup verwendet wird. Dieser Wert spiegelt oft das tatsächliche "Working Set" der Anwendung wider. 
+
+=== container_memory_cache
+
+[horizontal]
+Name:: `container_memory_cache`
+Typ:: Messwert
+Einheit:: Byte
+Quelle:: Direktes Lesen aus der Container-Cgroup-Hierarchie.
+
+[cols="1,3"]
+|===
+|Cgroup-Version | Ursprungsdatei
+
+|v1 | `memory.stat` -> `total_cache` Feld innerhalb der Datei
+|v2 | `memory.stat` -> `file` Feld innerhalb der Datei
+|===
+Zusammenfassung:: Der Seiten-Cache (Speicher, der verwendet wird, um Dateisystemdaten zu cachen, einschließlich tmpfs und gemeinsam genutztem Speicher).

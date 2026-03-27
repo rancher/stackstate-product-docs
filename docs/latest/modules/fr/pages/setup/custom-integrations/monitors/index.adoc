@@ -1,0 +1,120 @@
+= Ajouter un moniteur aux composants
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Vue d'ensemble
+
+{stackstate-product-name} fournit des xref:/use/alerting/k8s-monitors.adoc[moniteurs prêts] à l xref:/use/alerting/k8s-monitors.adoc['emploi], qui permettent de surveiller les problèmes courants pouvant survenir dans un cluster Kubernetes. Il est également possible de configurer des moniteurs personnalisés pour les mesures collectées par {stackstate-product-name} ou les mesures d'application ingérées xref:/use/metrics/k8s-prometheus-remote-write.adoc[par Prometheus].
+
+== Création d'un moniteur
+
+Étapes de la création d'un moniteur :
+
+. <<_write_the_outline_of_the_monitor,Rédiger le plan du moniteur>>
+. <<_bind_the_results_of_the_monitor_to_the_correct_components,Lier les résultats du moniteur au composant approprié>>
+. <<_write_the_remediation_hint,Rédiger l'indice de remédiation>>
+
+A titre d'exemple, les étapes ajouteront un moniteur pour le `Replica counts` des déploiements Kubernetes.
+
+=== Rédiger le plan du moniteur
+
+Ouvrez le fichier `monitors.yaml` YAML de votre StackPack dans votre éditeur de code préféré pour le modifier tout au long de ce guide. Vous pouvez utiliser le CLI pour xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[tester votre StackPack].
+
+Par exemple, il peut s'agir du début d'un moniteur qui surveille les répliques disponibles d'un déploiement :
+
+----
+- _type: Monitor
+  arguments:
+    metric:
+      query: "kubernetes_state_deployment_replicas_available"
+      unit: "short"
+      aliasTemplate: "Deployment replicas"
+    comparator: "LTE"
+    threshold: 0.0
+    failureState: "DEVIATING"
+    urnTemplate:
+  description: "Monitor whether a deployment has replicas.
+  function: {{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}
+  identifier: urn:stackpack:my-stackpack:monitor:deployment-has-replicas
+  intervalSeconds: 30
+  name: Deployment has replicas
+  remediationHint:
+  status: "ENABLED"
+  tags:
+  - "deployments"
+----
+
+Les adresses `urnTemplate` et `remediationHint` seront renseignées dans les prochaines étapes.
+
+=== Lier les résultats du moniteur aux composants appropriés
+
+Les résultats d'un moniteur doivent être liés aux composants du site {stackstate-product-name}, pour être visibles et utilisables. Le résultat d'un moniteur est lié à un composant à l'aide du composant `identifiers`. Chaque composant du site {stackstate-product-name} possède un ou plusieurs identifiants qui permettent de l'identifier de manière unique. Pour lier le résultat d'un moniteur à un composant, il est nécessaire de fournir l'adresse `urnTemplate`. Le site `urnTemplate` substitue les étiquettes de la série temporelle du résultat du moniteur dans le modèle, produisant ainsi un identifiant correspondant à un composant. L'exemple suivant en est la meilleure illustration :
+
+La mesure utilisée dans cet exemple est la mesure `kubernetes_state_deployment_replicas_available`. Exécutez la métrique dans l'explorateur de métriques pour observer les étiquettes disponibles sur la série temporelle :
+
+image::k8s/available-replicas-metric-inspector.png[Les répliques disponibles dans l'explorateur de métriques]
+
+Le tableau ci-dessus montre que la métrique a des étiquettes telles que `cluster_name`, `namespace` et `deployment`.
+
+La métrique étant observée sur les déploiements, il est plus logique de lier les résultats du moniteur aux composants de déploiement. Pour ce faire, il est nécessaire de comprendre comment les identifiants des déploiements sont construits :
+
+. Dans l'interface utilisateur, accédez à la vue `deployments` et sélectionnez un déploiement unique.
+. Ouvrez la vue `Topology` et cliquez sur le composant de déploiement.
+. Lorsque vous développez le site `Properties` dans le panneau droit de l'écran, les identificateurs s'affichent au survol, comme indiqué ci-dessous :
+
+image::k8s/component-identifier.png[Recherche d'un identifiant de composant]
+
+L'identifiant est représenté par `urn:kubernetes:/preprod-dev.preprod.stackstate.io:calico-system:deployment/calico-typha`. Cela montre que l'identifiant est construit sur la base du nom du cluster, de l'espace de noms et du nom du déploiement. Sachant cela, il est maintenant possible de construire le site `urnTemplate`:
+
+----
+  ...
+  urnTemplate: "urn:kubernetes:/${cluster_name}:${namespace}:deployment/${deployment}"
+  ...
+----
+
+La <<_verifying_the_results_of_a_monitor,vérification de>> l'exactitude du site `urnTemplate` est expliquée plus loin.
+
+=== Rédiger l'indice de remédiation
+
+L'indice de remédiation est là pour aider les utilisateurs à trouver la cause d'un problème lorsqu'un moniteur se déclenche. Le conseil de remédiation est écrit en https://en.wikipedia.org/wiki/Markdown[markdown]. Il est également possible d'utiliser les étiquettes qui se trouvent sur la série temporelle du résultat du moniteur à l'aide d'un modèle de guidon, comme dans l'exemple suivant :
+
+----
+  ...
+  remediationHint: |-
+    To remedy this issue with the deployment {{ labels.deployment }}, consider taking the following steps:
+
+    1. Look at the logs of the pods created by the deployment
+  ...
+----
+
+Pour offrir une expérience de remédiation conforme à celle offerte par les moniteurs standard {stackstate-product-name}, suivez les xref:/setup/custom-integrations/monitors/remediation-guide.adoc#_guidelines[directives du guide de remédiation].
+
+== Test du moniteur
+
+Après avoir créé un moniteur, vérifiez s'il produit les résultats escomptés. Les mesures suivantes peuvent être prises :
+
+. <<_create_or_update_the_monitor_in_suse_observability,Créer ou mettre à jour le moniteur dans {stackstate-product-name}>>
+. <<_verifying_the_results_of_a_monitor,Vérifier que le moniteur produit le résultat escompté>>
+
+=== Créer ou mettre à jour le moniteur dans {stackstate-product-name}
+
+- Utilisez la commande xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[Test Your StackPack] pour déployer le StackPack.
++
+[source,bash]
+----
+sts stackpack test -d ./my-stackpack --yes
+----
+
+=== Vérifier les résultats d'un moniteur
+
+==== Vérifier l'exécution du moniteur
+
+Allez à la page de présentation du moniteur (http://your-instance/#/monitors) et trouvez votre moniteur.
+
+. Vérifiez que la colonne `Status` est dans l'état `Enabled`. Si le moniteur est dans l'état `Disabled`, xref:/setup/custom-integrations/monitors/cli.adoc#_enable_or_disable_the_monitor[activez-le]. Si l'état est `Error`, vous pouvez xref:/setup/custom-integrations/monitors/troubleshooting.adoc#_the_monitor_is_showing_an_error_in_the_monitor_status_overview[résoudre l'erreur] à l'aide de l'interface de communication.
+. Vérifiez que vous voyez le nombre prévu d'états dans la colonne `Clear`/`Deviating`/`Critical`. Si ce nombre est nettement inférieur ou supérieur au nombre de composants que vous vouliez surveiller, il se peut que la requête PromQL donne trop de résultats.
+
+==== Vérifier la liaison du moniteur
+
+Observez si le moniteur produit un résultat sur l'un des composants qu'il est censé surveiller. Si le moniteur ne s'affiche pas, suivez xref:/setup/custom-integrations/monitors/troubleshooting.adoc#_the_result_of_the_monitor_isnt_showing_on_a_component[les étapes suivantes] pour y remédier.

@@ -1,0 +1,107 @@
+= Écriture de requêtes PromQL pour des graphiques représentatifs
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Autres indications
+
+Lorsque {stackstate-product-name} affiche des données dans un graphique, il est presque toujours nécessaire de modifier la résolution des données stockées pour les adapter à l'espace disponible pour le graphique. Pour obtenir les graphiques les plus représentatifs possibles, suivez ces directives :
+
+* N'interrogez pas la métrique brute, mais agrégez-la toujours dans le temps (en utilisant les fonctions `*_over_time` ou `rate`).
+* Utilisez le paramètre `${__interval}` comme plage pour les agrégations dans le temps, il s'ajustera automatiquement avec la résolution du graphique.
+* Utilisez le paramètre `${__rate_interval}` comme plage pour les agrégations `rate`, il s'ajustera également automatiquement avec la résolution du graphique, mais prend en compte des comportements spécifiques de `rate`.
+* Projetez les métriques uniquement sur les étiquettes utilisées en agrégeant différentes séries temporelles.
+
+Appliquer une agrégation signifie souvent qu'un compromis est fait pour mettre en avant certains modèles dans les métriques plus que d'autres. Par exemple, pour de grandes fenêtres temporelles, `max_over_time` montrera tous les pics, mais ne montrera pas tous les creux. Alors que `min_over_time` fait exactement l'opposé et `avg_over_time` lisse à la fois les pics et les creux. Pour montrer ce comportement, voici un exemple de liaison de métriques utilisant l'utilisation de l'UC des pods. Pour essayer par vous-même, copiez-le dans un fichier YAML et utilisez le xref:/setup/custom-integrations/metric-bindings/index.adoc#_create_or_update_the_metric_binding_in_stackstate[CLI pour l'appliquer] dans votre propre {stackstate-product-name} (vous pouvez le supprimer plus tard).
+
+Projeter potentiellement plusieurs séries temporelles sur un sous-ensemble de leurs étiquettes regroupe des séries temporelles qui diffèrent par un détail non pertinent.  Lors de la création d'une liaison de métriques, seules les étiquettes utilisées dans la légende sont pertinentes.  De même, lors de la création de moniteurs, seules les étiquettes nécessaires pour être associées à un composant (affichant le statut du moniteur) doivent être retournées par la requête.
+
+----
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: CPU Usage (different aggregations and intervals)
+  priority: HIGH
+  identifier: urn:stackpack:my-stackpack:metric-binding:pod-cpu-usage-a
+  queries:
+    - expression: sum(max_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: max_over_time dynamic interval
+    - expression: sum(min_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: min_over_time dynamic interval
+    - expression: sum(avg_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: avg_over_time dynamic interval
+    - expression: sum(last_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: last_over_time dynamic interval
+    - expression: sum(max_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: max_over_time 1m interval
+    - expression: sum(min_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: min_over_time 1m interval
+    - expression: sum(avg_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: avg_over_time 1m interval
+    - expression: sum(last_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: last_over_time 1m interval
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+----
+
+Après l'avoir appliqué, ouvrez la perspective des métriques pour un pod dans {stackstate-product-name} (de préférence un pod avec des pics et des creux dans l'utilisation de l'UC). Agrandissez le graphique en utilisant l'icône dans le coin supérieur droit pour obtenir une meilleure vue. Vous pouvez également changer la fenêtre temporelle pour voir quels sont les effets des différentes agrégations (30 minutes contre 24 heures par exemple).
+
+[CAUTION]
+====
+Lorsque la liaison de métriques ne spécifie pas d'agrégation, {stackstate-product-name} utilisera automatiquement l'agrégation `last_over_time` pour réduire le nombre de points de données pour un graphique. Voir aussi xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc#_why_is_aggregation_necessary[Pourquoi l'agrégation est-elle nécessaire ?] pour une explication.
+====
+
+
+image::k8s/metric-aggregation-differences-30m.png[Le graphique pour cette liaison de métriques pour les 30 dernières minutes, there are only a few lines in the chart visible because most time series are on top of each other]
+image::k8s/metric-aggregation-differences-24h.png[Le même graphique, same component and same end time, but now for the last 24h. It shows, sometimes completely, different results for the different aggregations]
+
+== Pourquoi l'agrégation est-elle nécessaire ?
+
+Tout d'abord, pourquoi devriez-vous utiliser une agrégation ? Il n'est pas logique de récupérer plus de points de données du magasin de métriques que ce qui peut tenir dans le graphique. Par conséquent, {stackstate-product-name} détermine automatiquement l'étape nécessaire entre deux points de données pour obtenir un bon résultat. Pour des fenêtres de temps courtes (par exemple, un graphique montrant seulement une heure de données), cela se traduit par une petite étape (environ 10 secondes). Les métriques ne sont souvent collectées que toutes les 30 secondes, donc pour des étapes de 10 secondes, la même valeur se répétera pendant trois étapes avant de changer pour la valeur suivante. En zoomant sur une fenêtre de temps d'une semaine, une étape beaucoup plus grande sera nécessaire (environ une heure, selon la taille exacte du graphique à l'écran).
+
+Lorsque les étapes deviennent plus grandes que la résolution des points de données collectés, une décision doit être prise sur la manière de résumer les points de données de la plage horaire d'une heure en une seule valeur. Lorsqu'une agrégation dans le temps est déjà spécifiée dans la requête, elle sera utilisée pour cela. Cependant, si aucune agrégation n'est spécifiée, ou lorsque l'intervalle d'agrégation est plus petit que l'étape, l'agrégation `last_over_time` est utilisée, avec la taille `step` comme intervalle. Le résultat est que seul le dernier point de données pour chaque heure est utilisé pour "résumer" tous les points de données de cette heure.
+
+Pour résumer, lors de l'exécution d'une requête PromQL pour une plage de temps d'une semaine avec une étape d'une heure, cette requête :
+
+----
+container_cpu_usage /1000000000
+----
+
+est automatiquement convertie en :
+
+----
+last_over_time(container_cpu_usage[1h]) /1000000000
+----
+
+Essayez-le par vous-même sur le https://observability.suse.com/#/metrics?alias=Pod%20%24%7Bpod_name%7D&promql=last_over_time%28container_cpu_usage%7Bnamespace%3D%22sock-shop%22%2Cpod_name%3D~%22carts.%2A%22%7D%5B1h%5D%29%20%2F1000000000&timeRange=LAST_7_DAYS[{stackstate-product-name} terrain de jeu].
+
+image::k8s/k8s-metric-queries-for-chart-last-over-time.png[Dernier au fil du temps]
+image::k8s/k8s-metric-queries-for-chart-max-over-time-fixed-range.png[Max au fil du temps avec plage fixe]
+image::k8s/k8s-metric-queries-for-chart-max-over-time-interval.png[Max au fil du temps avec plage automatique]
+
+Souvent, ce comportement n'est pas intentionnel et il est préférable de décider vous-même quel type d'agrégation est nécessaire. En utilisant différentes fonctions d'agrégation, il est possible de mettre en évidence certains comportements (au détriment de masquer d'autres comportements). Est-il plus important de voir des pics, des creux, un graphique lisse, etc. ? Utilisez alors le paramètre `${__interval}` pour la plage, car il est automatiquement remplacé par la taille `step` utilisée pour la requête. Le résultat est que tous les points de données dans l'étape sont utilisés.
+
+image::k8s/k8s-metric-queries-small-range.png[Une plage fixe, shorter than the data resolution]
+image::k8s/k8s-metric-queries-interval-for-range.png[Plage automatique, based on step but with a lower limit]
+
+Le paramètre `${__interval}` empêche un autre problème. Lorsque la taille `step` et donc la valeur `${__interval}` se réduisent à une taille plus petite que la résolution des données métriques stockées, cela entraînerait des lacunes dans le graphique.
+
+Par conséquent, `${__interval}` ne sera jamais plus petit que 2 fois l'intervalle de collecte par défaut (l'intervalle de collecte par défaut est de 30 secondes) de l'agent {stackstate-product-name}.
+
+Enfin, la fonction `rate()` nécessite au moins deux points de données dans l'intervalle pour calculer un taux. Avec moins de deux points de données, le taux n'aura pas de valeur. Par conséquent, `${__rate_interval}` est garanti d'être toujours au moins 4 fois l'intervalle de collecte. Cela garantit qu'il n'y a pas de lacunes inattendues ou d'autres comportements étranges dans les graphiques de taux, sauf si des données sont manquantes.
+
+Il existe d'excellents articles de blog sur Internet qui expliquent cela plus en détail :
+
+* https://www.robustperception.io/step-and-query_range/[Étape et plage de requête]
+* https://www.robustperception.io/what-range-should-i-use-with-rate/[Quelle plage devrais-je utiliser avec rate() ?]
+* https://grafana.com/blog/2020/09/28/new-in-grafana-7.2-%5F%5Frate_interval-for-prometheus-rate-queries-that-just-work/[Introduction de __rate_interval dans Grafana]
+
+== Reportez-vous également à la section
+
+Quelques ressources supplémentaires pour comprendre les requêtes PromQL :
+
+* https://promlabs.com/blog/2020/06/18/the-anatomy-of-a-promql-query/[Anatomie d'une requête PromQL]
+* https://promlabs.com/blog/2020/07/02/selecting-data-in-promql/[Sélection des données dans PromQL]
+* https://iximiuz.com/en/posts/prometheus-vector-matching/[Comment joindre plusieurs métriques]
+* https://iximiuz.com/en/posts/prometheus-functions-agg-over-time/[Agrégation dans le temps]

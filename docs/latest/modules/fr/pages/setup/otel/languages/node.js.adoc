@@ -1,0 +1,49 @@
+= Instrumentation des applications Node.js
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Instrumentation automatique
+
+L'instrumentation automatique pour Node.js se fait en incluant les bibliothèques Javascript d'instrumentation automatique avec votre application. Une large gamme de https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/metapackages/auto-instrumentations-node#_supported_instrumentations[bibliothèques et frameworks est prise en charge].
+
+L'instrumentation automatique ne nécessite aucune modification de l'application. Pour le configurer, suivez ces étapes :
+
+. Ajoutez le SDK d'instrumentation Open Telemetry à votre application:
++
+[,bash]
+----
+npm install --save @opentelemetry/api
+npm install --save @opentelemetry/auto-instrumentations-node
+----
+
+. Mettez à jour la commande qui démarre votre application pour charger le SDK, soit en mettant à jour le point d'entrée ou la commande de l'image docker, soit en mettant à jour le `command` dans le manifeste Kubernetes de votre application. Ajoutez `--require @opentelemetry/auto-instrumentations-node/register` :
++
+[,bash]
+----
+node --require @opentelemetry/auto-instrumentations-node/register app.js
+----
+
+. Déployez votre application avec les variables d'environnement supplémentaires xref:/setup/otel/languages/sdk-exporter-config.adoc[pour configurer le nom du service et le point de terminaison de l'exportateur].
+. xref:/setup/otel/languages/verify.adoc[Vérifiez] que SUSE Observability reçoit des traces et/ou des métriques
+
+Pour plus de détails, veuillez vous référer à la https://opentelemetry.io/docs/languages/js/automatic/[documentation Open Telemetry].
+
+[CAUTION]
+====
+L'instrumentation automatique configurée via des variables d'environnement ne prend en charge que les traces jusqu'à ce que ce https://github.com/open-telemetry/opentelemetry-js/issues/4551[problème Open Telemetry] soit résolu. Pour activer les métriques, des modifications du code d'instrumentation automatique sont nécessaires. Veuillez suivre les instructions dans la https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[documentation Open Telemetry] pour effectuer ces modifications.
+====
+
+
+== Instrumentation manuelle
+
+L'instrumentation manuelle peut être utilisée lorsque vous avez besoin de métriques, de traces ou de journaux provenant de parties du code qui ne sont pas prises en charge par l'instrumentation automatique. Par exemple, des bibliothèques non prises en charge, du code interne ou des métriques métier.
+
+Pour capturer ces données, vous devez modifier votre application.
+
+. Incluez le SDK Open Telemetry comme dépendance
+. Ajoutez du code à votre application pour capturer des métriques, des spans ou des journaux si nécessaire
+
+Il existe une documentation détaillée à ce sujet sur les pages de documentation du https://opentelemetry.io/docs/languages/js/instrumentation/[SDK Javascript Open Telemetry].
+
+Assurez-vous d'utiliser l'exportateur OTLP et de configurer correctement le point de terminaison de l'exportateur dans le code. Voir aussi la https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[documentation Open Telemetry]. En supposant que vous ayez configuré l'exportateur comme xref:/setup/otel/collector.adoc[documenté], le point de terminaison à configurer est `http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317`, en utilisant gRPC. Voir aussi xref:/setup/otel/languages/sdk-exporter-config.adoc#_grpc_vs_http[gRPC vs HTTP] au cas où gRPC poserait problème.

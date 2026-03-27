@@ -1,0 +1,45 @@
+= Dépannage des graphiques de métriques personnalisées
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+* <<_the_metric_chart_doesnt_show_on_the_highlights_page_of_a_component,Le graphique de métriques ne s'affiche pas sur la page des points forts d'un composant>>
+* <<_the_metric_chart_doesnt_show_on_the_metrics_perspective_of_a_component,Le graphique de métriques ne s'affiche pas dans la perspective des métriques d'un composant>>
+* <<_the_metric_chart_on_a_component_remains_empty_no_data,Le graphique de métriques d'un composant reste vide ("pas de données")>>
+
+== Le graphique de métriques ne s'affiche pas sur la page des points forts d'un composant
+
+Pour le moment, il n'est pas possible de personnaliser les graphiques de métriques affichés sur la page des points forts d'un composant. Les graphiques pour les liaisons de métriques personnalisées ne seront affichés que dans la perspective des métriques.
+
+== Le graphique de métriques ne s'affiche pas dans la perspective des métriques d'un composant
+
+La requête `scope` sur une liaison de métriques est utilisée pour déterminer si un composant affiche la liaison de métriques. Si un composant n'affiche pas une liaison de métriques, vérifiez que la requête de topologie dans le périmètre correspond au composant.
+
+Vérifiez d'abord que le composant a bien les étiquettes et/ou le type de composant attendus sur la page des points forts du composant, le nom et le type se trouvent en haut, les étiquettes sont dans la section "À propos". Assurez-vous qu'il n'y a pas de fautes d'orthographe dans les noms ou valeurs des étiquettes.
+
+Vérifiez que la requête de périmètre a la syntaxe correcte :
+
+. Ouvrez la vue d'exploration, via Vues dans le menu et le bouton bleu "Explorer" à droite. Ou directement via l'URL : `https://<your-stackstate-instance>/#/views/explore`
+. Ouvrez les filtres et sélectionnez `switch to STQL`
+. Maintenant, copiez/collez la requête du périmètre dans le champ STQL et exécutez la requête
+
+L'aperçu affiche maintenant tous les composants qui correspondent à la requête et qui recevront le graphique.
+
+== Le graphique de métriques d'un composant reste vide ("pas de données")
+
+Pour le graphique de métriques qui n'a pas de données alors que des données étaient attendues, ouvrez l'inspecteur (l'icône en haut à droite du graphique). Activez le bouton "Afficher la requête" pour afficher les requêtes.
+
+Assurez-vous que la requête ne contient plus aucun des paramètres (c'est-à-dire que toutes les valeurs comme `${tags.cluster-name}` ou `${name}` ont été remplacées par les valeurs pour le composant). Si certains paramètres ont été laissés dans la requête, les étiquettes n'étaient pas disponibles sur ce composant. Vérifiez donc les noms utilisés (dans cet exemple `cluster-name`) par rapport aux étiquettes disponibles sur le composant. Assurez-vous également qu'il n'y a pas de fautes de frappe dans les noms.
+
+Si tous les paramètres sont remplis, il peut y avoir un problème avec la requête PromQL. Pour enquêter, copiez la requête PromQL et ouvrez l'explorateur de métriques (via le menu principal de {stackstate-product-name}). Collez la requête dans l'explorateur de métriques et exécutez-la. Cela devrait toujours donner un résultat vide.
+
+Soit la métrique n'existe pas, soit elle n'a pas l'une des étiquettes, soit l'étiquette existe mais il n'y a pas de séries temporelles correspondant à la valeur. La méthode la plus rapide pour résoudre cela est de réécrire la requête uniquement avec son nom de métrique et de l'exécuter ; s'il y a des résultats, la métrique existe (donc pas de fautes de frappe). Le résultat du tableau peut également être utilisé pour vérifier que toutes les étiquettes utilisées existent. Assurez-vous qu'il n'y a pas de fautes de frappe ici non plus.
+
+S'il y a des résultats, mais juste pas pour une valeur spécifique d'une étiquette (par exemple pour l'étiquette `pod_name`), la requête est correcte mais il n'y a pas de séries temporelles pour cette métrique spécifique pour ce composant spécifique. Choses à vérifier dans ce cas :
+
+* Les données sont-elles collectées pour ce composant (soit via l'agent {stackstate-product-name} ou par d'autres moyens) ?
+* Le composant rapporte-t-il même la métrique ?
+
+La procédure à suivre dépend de la façon dont la collecte de données est configurée.

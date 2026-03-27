@@ -1,0 +1,201 @@
+= アフィニティ値の設定
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} アフィニティ設定
+
+アフィニティ設定は、{stackstate-product-name} におけるポッドのスケジューリング動作を制御します。アフィニティ値は、ポッドのスケジューリング場所を制御することによって、リソースの利用を最適化し、高可用性を確保するのに役立ちます。
+
+== 利用可能な設定オプション
+
+=== ノードアフィニティ
+
+ノードアフィニティを使用して、特定のノードやインスタンスグループ（同じアベイラビリティゾーンにデプロイされたEC2ノードなど）にポッドをスケジュールできます。
+
+[,yaml]
+----
+affinity:
+  # Node Affinity settings - applied to all components when configured
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== ポッドアンチアフィニティ
+
+ポッドアンチアフィニティを使用して、データサービスのレプリカを異なるノードにスケジュールし、高可用性を確保できます。デフォルトでは、スケジューリングは必須です（ハードアンチアフィニティ）であり、`topologyKey` は `kubernetes.io/hostname` です。
+
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    # Enable required pod anti-affinity (true = hard, false = soft)
+    requiredDuringSchedulingIgnoredDuringExecution: true
+    # Topology key for pod anti-affinity
+    topologyKey: "kubernetes.io/hostname"
+----
+
+== 動作
+
+=== ノードアフィニティ
+
+* **設定された場合**:すべてのコンポーネントに適用
+
+=== ポッドアンチアフィニティ
+
+* **設定された場合**:`sizing.profile` が `-ha` で終わる場合にのみ適用されます（高可用性プロファイル）
+* **HAプロファイル**: `150-ha`, `250-ha`, `500-ha`, `4000-ha`
+* **影響を受けるコンポーネント**:Clickhouse、Kafka、Zookeeper、VictoriaMetrics、StackGraph、Elasticsearchを含むすべてのステートフルデータサービス
+
+== サンプル設定
+
+=== 基本ノードアフィニティ（同じアベイラビリティゾーン） + 高可用性デプロイメントのためのハードポッドアンチアフィニティ
+
+`sizing.profile` をHAプロファイルの1つに設定したと仮定します。以下の値は、{stackstate-product-name} のコンポーネントを `us-west-2a` ゾーンにスケジュールするためのノードアフィニティを設定し、同じデータサービスのレプリカを異なるホストにスケジュールすることを強制します（デフォルトでは `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true`）。
+[,yaml]
+----
+affinity:
+  # Schedule all pods to nodes in the same AZ
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== HAデプロイメントのためのソフトポッドアンチアフィニティ
+データサービスを異なるノードにスケジュールすることが望ましくない場合は、ポッドアンチアフィニティを「ソフト」モードで構成できます：
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: false
+----
+
+== 使用方法
+
+[tabs]
+====
+推奨方法::
++
+--
+[NOTE]
+=====
+`global.suseObservability`設定方法は`2.8.0`バージョンから利用可能です。以前のバージョンでは、レガシー方法を使用してください。
+=====
+
+`values.yaml`の下にある`global.suseObservability.affinity`ファイルにアフィニティ設定を直接追加します：
+
+[source,yaml]
+----
+global:
+  suseObservability:
+    # Your existing configuration
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    sizing:
+      profile: "150-ha"
+    adminPassword: "your-password"
+
+    # Affinity configuration
+    affinity:
+      # Node affinity - schedule all pods to nodes in the same AZ
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        # true = hard anti-affinity, false = soft anti-affinity
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+----
+
+次に、単一のコマンドでインストールまたはアップグレードします：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+TIP: HAプロファイルの場合、ポッドアンチアフィニティはすべてのステートフルデータサービスに自動的に適用されます。デフォルトの動作を変更したい場合のみ、構成する必要があります。
+
+レガシー方法からの移行に関する詳細は、xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[移行ガイド]を参照してください。
+--
+レガシー方法（廃止）::
++
+--
+[WARNING]
+=====
+この方法は廃止されています。新しいインストールの場合は、上記の推奨方法を使用してください。この方法を使用している既存のインストールについては、新しい設定形式に移行するためにxref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[移行ガイド]を参照してください。
+=====
+
+==== 手順1:アフィニティ値ファイルを作成する
+
+希望するアフィニティ設定を持つ別の値ファイルを作成します。例えば、次の内容を`suse-observability-values-values.yaml`として保存します：
+
+[,yaml]
+----
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: true
+----
+
+==== ステップ2:アフィニティテンプレート値を生成する
+
+次のコマンドを実行してアフィニティ値テンプレートを生成します：
+
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  --values suse-observability-values-values.yaml \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+==== ステップ3:Helmインストールで生成された値を使用する
+
+生成されたアフィニティ値をHelmのインストールに含めてください。
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+--
+====

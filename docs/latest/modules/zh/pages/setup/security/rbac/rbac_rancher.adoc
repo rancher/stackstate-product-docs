@@ -1,0 +1,199 @@
+= Rancher RBAC
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+SUSE Rancher Prime Observability 扩展使用 Kubernetes RBAC 来授予 SUSE Observability 中的 Rancher 用户访问权限。
+如果您不使用 Rancher，请查看 xref:/setup/security/rbac/rbac_roles.adoc[如何在独立安装中设置角色]。
+
+[NOTE]
+====
+为了使 Rancher RBAC 正常工作，
+
+* 必须使用 xref:setup/security/authentication/oidc.adoc#_rancher[Rancher OIDC 提供者] 配置 {stackstate-product-name} 的身份验证。
+* {stackstate-product-name} 代理必须启用 RBAC 代理，并且必须使用服务词元进行身份验证。
+====
+
+每个经过身份验证的用户都有 *实例基本访问* 角色，允许他们使用系统。 这些权限提供对视图、设置、指标绑定的访问，并允许用户查看系统通知。 它们不授予对任何 {stackstate-product-name} 数据的访问权限。 为了查看任何数据，用户需要被授予额外的角色。扩展 *实例基本访问* 角色的两个方向与 Rancher *角色模板* 一起提供：
+
+实例角色:: 使您能够配置或个性化 {stackstate-product-name}。
+范围角色:: 授予对观察到的集群中 {stackstate-product-name} 数据的访问权限。
+
+== 实例角色
+
+您可以将 *角色模板* 分配给运行 {stackstate-product-name} 的 *项目* 中的用户或组。如果没有明确分配实例角色给项目的成员，则他们将拥有 *实例基本访问* 角色的权限。
+
+=== 具有访问 {stackstate-product-name} 数据的实例角色
+
+几个 "全局" 角色允许访问所有 {stackstate-product-name} 数据 - 在任何观察到的集群中。 这些角色旨在用于设置系统和排除系统级问题。 对于拥有这些角色的用户，无需配置 xref:scoped[范围角色]。
+
+实例管理员:: 授予对所有视图和所有权限的完全访问权限。
+实例故障排除者:: 授予使用 SUSE Observability 进行故障排除所需的所有权限，包括启用/禁用监视器、创建自定义视图和使用 CLI 的能力。
+实例观察者:: 授予对 SUSE Observability 实例中所有数据的访问权限。
+
+=== 没有访问 {stackstate-product-name} 数据的实例角色
+
+这些角色需要与 *实例观察者* 角色或其中一个 xref:scoped[范围角色] 结合使用（见下文）。 否则，将无法访问任何 {stackstate-product-name} 数据，用户界面将显示 "未找到组件" 消息。 这适用于所有 Rancher 用户，包括项目所有者等用户。
+
+实例推荐访问:: 授予使用 SUSE Observability 的推荐权限。 此角色包括一些不是严格必要的权限，但提供（有限的）个性化手段 {stackstate-product-name}。
+实例基本访问:: 授予使用 {stackstate-product-name} 的最小权限。此角色无需显式分配，也没有 *角色模板*；每个登录用户都有此角色。
+
+您可以在下面找到分配给每个预定义 SUSE Observability 角色的权限。有关不同权限的详细信息以及如何使用 `sts` CLI 管理它们，请参见 xref:/setup/security/rbac/rbac_permissions.adoc[基于角色的访问控制 (RBAC) 权限]。
+
+[tabs]
+====
+基本访问::
++
+--
+基本访问授予使用 SUSE Observability 的最小权限。与观察者（实例、集群或项目）结合使用。
+这些权限授予所有用户。
+
+|===
+|资源 |动词 
+
+|指标绑定 |获取
+|设置 |获取
+|system-notifications |获取
+|视图 |获取
+|===
+
+--
+推荐访问::
++
+--
+推荐访问授予的权限并非严格必要，但使 SUSE Observability 更加实用。它提供了一定程度的个性化。
+与观察者（实例、集群或项目）结合使用。
+
+|===
+|资源 |动词 
+
+|api-tokens |获取
+|favorite-dashboards |创建、删除
+|favorite-views |创建、删除
+|堆栈包 |获取 
+|visualization-settings |update
+|===
+
+--
+观察者::
++
+--
+观察者授予对 SUSE Observability 实例中所有可观察数据的访问权限。 与 *推荐访问* 结合使用以获得更好的体验。
+
+|===
+|资源 |动词 
+
+|拓扑 |获取
+|指标 |获取
+|追踪 |获取
+|===
+
+--
+故障排除者::
++
+--
+故障排除者角色可以访问 SUSE Observability 中的所有可用数据，并具有创建视图和启用/禁用监视器的能力。
+
+|===
+|资源 |动词 
+
+|代理 |获取 
+|api-tokens |获取
+|组件操作 |execute
+|仪表板 |获取、创建、更新、删除 
+|favorite-dashboards |创建、删除
+|favorite-views |创建、删除
+|指标绑定 |获取
+|指标 |获取 
+|监视器 |获取、创建、更新、删除、执行 
+|通知 |获取、创建、更新、删除 
+|设置 |获取 
+|stackpack-configurations |获取、创建、更新、删除
+|堆栈包 |获取 
+|system-notifications |获取
+|拓扑 |获取 
+|追踪 |获取 
+|视图 |获取、创建、更新、删除 
+|visualization-settings |获取
+|===
+
+--
+管理员::
++
+--
+管理员角色已分配所有权限。
+
+|===
+|资源 |动词 
+
+|代理 |获取 
+|api-tokens |获取
+|组件操作 |execute
+|仪表板 |获取、创建、更新、删除 
+|favorite-dashboards |创建、删除
+|favorite-views |创建、删除
+|数据摄取 API 密钥 |获取、创建、更新、删除
+|指标绑定 |获取
+|指标 |获取 
+|监视器 |获取、创建、更新、删除、执行 
+|通知 |获取、创建、更新、删除 
+|permissions |获取、创建、更新、删除 
+|受限脚本 |execute
+|service-tokens |获取、创建、更新、删除
+|设置 |获取、创建、更新、删除、解锁 
+|stackpack-configurations |获取、创建、更新、删除
+|堆栈包 |获取、创建 
+|sync-data |获取、更新、删除
+|system-notifications |获取
+|主题消息 |获取
+|拓扑 |获取 
+|追踪 |获取 
+|视图 |获取、创建、更新、删除 
+|visualization-settings |update
+|===
+
+--
+====
+
+[#scoped]
+== 范围角色
+
+您可以将以下 *角色模板* 分配给观察集群中的用户或组。 它们授予对 {stackstate-product-name}来自（一个 *项目* 在）*集群* 的数据的访问权限，允许用户读取拓扑、指标、日志和跟踪数据。
+
+观察者:: 授予对来自 *项目* 中名称空间的数据的访问权限。您可以在集群配置的 *项目成员资格* 部分使用此项。
+集群观察者:: 授予对来自 *集群* 的所有数据的访问权限。您可以在集群配置的 *集群成员资格* 部分使用此模板。
+
+这些角色中的资源对应于 xref:/setup/security/rbac/rbac_permissions.adoc#_scoped_permissions[范围权限]。它们在 `scope.observability.cattle.io` API 组中可用（仅具有动词 `get`，因为这些资源是只读的）：
+
+* `topology` - 来自集群或名称空间的组件（部署、Pod 等）
+* `traces` - 来自集群或名称空间的跨度
+* `metrics` - 来自集群或名称空间的指标数据
+
+请注意，访问日志由 `topology` 资源控制。
+
+通过在运行 {stackstate-product-name} 的 *项目* 上授予 *实例推荐访问* 角色，为具有这些观察者角色的用户启用个性化。
+
+== 自定义角色
+
+要授予超出推荐访问的额外权限，请在 Rancher 中创建一个自定义项目 *角色模板*，继承自 *SUSE Observability Instance Recommended Access*。 然后，例如，要授予查看监视器和指标图表的权限，请添加规则：
+
+* 动词：`get`
+* 资源：`metricbindings` 和 `monitors`
+* ApiGroup：`instance.observability.cattle.io`
+
+image::rancher-custom-role.png[自定义角色模板以获得更丰富的访问权限]
+
+您可以指定在 xref:/setup/security/rbac/rbac_permissions.adoc[RBAC 权限] 中定义的任何资源和动词组合。 请注意，资源名称中的破折号（`-`）被省略，因此权限 `get-metric-bindings` 变为 Kubernetes RBAC 资源 `metricbindings`，其动词为 `get`。
+
+
+== 查错
+
+* 验证集群的 Rbac Agent 是否能够与平台进行通信。
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[检查用户主体]（用户和角色）。
+  ** 验证 OIDC 提供者上的任何角色配置。
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[检查主体权限]
+  ** 验证与用户匹配的相关（集群）角色绑定（RoleBindings）是否存在。
+  ** 检查（集群）角色以验证其是否授予正确的权限。

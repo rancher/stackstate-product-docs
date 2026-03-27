@@ -1,0 +1,119 @@
+= メトリックバインディング用CLIの使用
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+{stackstate-product-name} CLIを使用してメトリックバインディングを検査および変更できます。 これらは`sts settings`コマンドを使用して他の設定と同様に処理されます。
+
+== メトリックバインディングの検査
+
+=== メトリックバインディングの一覧表示
+
+`sts settings`コマンドはすべてのメトリックバインディングを一覧表示できます：
+
+[,bash]
+----
+sts settings list --type MetricBinding
+TYPE          | ID              | IDENTIFIER         | NAME               | OWNED BY           | LAST UPDATED
+MetricBinding | 190567588459765 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:pod: |                    |                    |
+              |                 | dotnet-gc-allocate |                    |                    |
+              |                 | d                  |                    |                    |
+MetricBinding | 247972504900226 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:depl |                    |                    |
+              |                 | oyment:dotnet-gc-a |                    |                    |
+              |                 | llocated           |                    |                    |
+MetricBinding | 109239589408271 | urn:stackpack:open | .NET GC Allocated  | urn:stackpack:open | Wed Jan 7 00:20:48
+              |                 | -telemetry:shared: |                    | -telemetry:shared  |  2026 CET
+              |                 | metric-binding:ser |                    |                    |
+              |                 | vice:dotnet-gc-all |                    |                    |
+              |                 | ocated             |                    |                    |
+...
+----
+
+=== メトリックバインディングの説明
+
+`describe`コマンドを使用して既存のメトリックバインディングの定義を取得できます：
+
+[,bash]
+----
+sts settings describe --ids 190567588459765
+_version: 1.0.93
+nodes:
+- _type: MetricBinding
+  chartType: line
+  description: Bytes allocated to GC Heap
+  enabled: true
+  id: -1
+  identifier: urn:stackpack:kubernetes-v2:shared:metric-binding:pod:dotnet-gc-allocated
+  layout:
+    metricPerspective:
+      section: GC
+      tab: .NET
+      weight: 3
+  name: .NET GC Allocated
+  priority: high
+  queries:
+  - alias: allocated
+    expression: rate(process_runtime_dotnet_gc_allocations_size_bytes_total{k8s_cluster_name="${tags.cluster-name}", k8s_namespace_name="${tags.namespace}", k8s_pod_name="${name}"}[${__rate_interval}])
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+  unit: bytes(IEC)
+timestamp: 2026-01-14T13:11:07.575662922Z[Etc/UTC]
+----
+
+== メトリックバインディングの変更
+
+[NOTE]
+====
+推奨される作業方法は、メトリックバインディング（および{stackstate-product-name}で作成されたその他のカスタムリソース）をxref:/setup/custom-integrations/overview.adoc[a StackPack]としてYAMLファイルに保存することです。そこから変更を手動で適用することも、GitHub ActionsやGitLabパイプラインのようなCI/CDシステムでSUSE Observability CLIを使用して完全に自動化することも可能です。
+====
+
+=== メトリックバインディングを作成・更新する
+次のようになっているファイル`metric-bindings.yaml`を作成します：
+
+[source,bash]
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:stackpack:my-stackpack:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+メトリックバインディングを作成するには、xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]を使用します：
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+デプロイメントのメトリックビューを開いて、SUSE Observabilityで結果を確認します。結果に満足できない場合は、YAMLファイル内のメトリックバインディングを変更し、コマンドを再実行して更新してください。ノードのリストは、多くのメトリックバインディングを追加することをサポートしています。前と同じ手順を使用して、YAML配列に別のメトリックバインディングエントリを追加してください。
+
+[CAUTION]
+====
+識別子は、メトリックバインディングの一意のキーとして使用されます。識別子を変更すると、既存のものを更新するのではなく、新しいメトリックバインディングが作成されます。
+====
+
+=== メトリックバインディングを削除する
+
+最後に、メトリックバインディングを削除するには、次のコマンドを使用します。
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+このコマンドの`<id>`は識別子ではなく、`sts settings list`出力の`Id`列の番号です。
+

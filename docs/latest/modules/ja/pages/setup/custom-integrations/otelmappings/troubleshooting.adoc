@@ -1,0 +1,143 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Open Telemetry マッピングのトラブルシューティング
+:revdate: 2025-11-26
+:page-revdate: {revdate}
+:description:  Open Telemetry マッピングのトラブルシューティング
+
+== 概要
+
+xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]を使用して、Open Telemetry トポロジーの同期をトラブルシューティングし、トポロジーデータが正しく取り込まれて{stackstate-product-name}に表示されるのを妨げる問題を修正できます。このページでは、そのような問題をデバッグする際に取るべき一般的なトラブルシューティング手順について説明します。
+
+== 一般的なトラブルシューティング手順
+
+. xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_list_open_telemetry_component_mappings[Open Telemetry マッピングが存在することを確認してください]。
+** マッピングが存在しない場合は、Open Telemetry スタックパックのインストールを確認してください。
+. 特定のタイプのコンポーネントや関係が欠けている場合は、xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_show_an_open_telemetry_component_or_relation_mappings_status[マッピングのステータスを取得してください]。
+** レイテンシメトリクスを確認して、データが流れているか、Open Telemetry コレクターとプラットフォームの間に誤通信があるかを判断してください。
+** 報告されたマッピングエラーを修正してください。これらは一部のトポロジー要素が同期されるのを妨げています。
+** マッピングが期待通りに「静かに」処理されない潜在的な原因は、入力フィールドに適用される条件/フィルタリングかもしれません。例えば、条件が偽の場合、エラーはありませんが、マッピングは「スキップ」されます。
+
+== 役立つ CLI コマンド
+
+=== Open Telemetry コンポーネントマッピングのリスト
+
+現在のすべての Open Telemetry マッピングのリストを返します。
+
+[,sh]
+----
+$ sts otel-component-mapping list
+NAME                   | IDENTIFIER
+Database               | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:database
+Function Component     | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:function
+Host Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:host
+Kubernetes Namespace   | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:namespace
+Kubernetes Pod         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:pod
+OTel Service Component | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service-instance
+OTel Service Instance  | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+Task Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:task 
+----
+
+=== Open Telemetry 関係マッピングのリスト
+
+現在のすべての Open Telemetry マッピングのリストを返します。
+
+[,sh]
+----
+$ sts otel-relation-mapping list
+NAME                                               | IDENTIFIER
+Database Relation                                  | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+Executes Relation (Function)                       | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-function
+Executes Relation (Host)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-host
+Executes Relation (Task)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-task
+Kubernetes to OTEL Relation                        | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:kubernetes-to-otel
+OTel Async Relation (Consumer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-consumer-peer
+OTel Async Relation (Producer -> Consumer)         | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-consumer
+OTel Async Relation (Producer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-peer
+OTel Synchronous Relation                          | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:synchronous
+OTel service instance provided-by service relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:provided-by
+----
+
+
+=== Open Telemetry コンポーネントまたは関係マッピングのステータスを表示
+
+Open Telemetry コンポーネントマッピングステータスコマンドは、集約されたレイテンシ、スループットメトリクス、および作成されたトポロジー要素の数を返します。これは、トポロジーの特定の部分が同期されるのに時間がかかる理由をデバッグする際に役立ちます。出力には、Open Telemetry データにマッピングルールを適用する際に発生する問題を示すセクション `Mapping errors` が含まれています。
+
+[,sh]
+----
+$ sts otel-component-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+
+
+Otel Component Mapping:
+NAME                  | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+OTel Service Instance | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service | 9          | 0
+
+
+Otel Component Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 44.45    | 44.45         | 41.19
+----
+
+同様に、Open Telemetry の関係マッピングステータスがあります。
+[,sh]
+----
+$ sts otel-relation-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+
+
+Otel Relation Mapping:
+NAME              | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+Database Relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database | 0          | 2
+
+
+Otel Relation Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 43.404   | 43.404        | 39.978
+
+
+Otel Relation Mapping Errors:
+No otel relation mapping errors found.
+----
+
+=== 完全な Open Telemetry コンポーネントまたはマッピングを取得します。
+
+コンポーネントまたは関係マッピングの完全なマッピング定義を迅速に表示するには、`get` コマンドを使用してください。
+
+[,sh]
+----
+$ sts otel-component-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Output omitted for brevity
+----
+
+または関係マッピングの場合：
+
+[,sh]
+----
+$ sts otel-relation-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Output omitted for brevity
+----
+
+=== Open Telemetry コンポーネントまたは関係マッピングを編集します。
+
+マッピング定義に問題がある場合は、`edit` コマンドを使用して直接編集してください。これにより、デフォルトのテキストエディターでマッピングが開きます。
+
+[,sh]
+----
+$ sts otel-component-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Opens the mapping in your default text editor
+----
+
+または関係マッピングの場合：
+
+[,sh]
+----
+$ sts otel-relation-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Opens the mapping in your default text editor
+----
+
+マッピングが変更された場合、テキストエディターを保存して終了すると、変更が適用されます。
+
+[NOTE]
+====
+CLIを介して行われた変更とsyncを保つために、StackPackソースファイル内のマッピング定義を更新することを忘れないでください。
+====
+
+endif::ss-ff-stackpacks2_enabled[]

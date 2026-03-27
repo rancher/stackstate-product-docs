@@ -1,0 +1,325 @@
+= コンポーネントにカスタムチャートを追加する
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+SUSE Observabilityは、Kubernetesリソースを表すほとんどのタイプのコンポーネントに対して、デフォルトで多くのメトリックチャートを提供します。必要に応じて、任意のコンポーネントセットに追加のメトリックチャートを追加できます。コンポーネントにメトリックを追加する際には、2つのオプションがあります：
+
+. メトリックはすでにSUSE Observabilityによって収集されていますが、デフォルトではコンポーネントに視覚化されていません。
+. メトリックはまだSUSE Observabilityによって収集されておらず、したがってまだ利用できません。
+
+オプション1の場合、以下の手順に従って、特定のメトリックを特定のコンポーネントセットに追加するようにSUSE Observabilityを構成するメトリックバインディングを作成する方法を説明します。
+
+オプション2の場合、まず、メトリックがSUSE Observabilityで利用可能であることを確認し、xref:/use/metrics/k8s-prometheus-remote-write.adoc[Prometheusリモート書き込みプロトコル]を使用してSUSE Observabilityに送信します。その後、メトリックのチャートをコンポーネントに追加する作業を続けます。
+
+== 手順
+
+メトリックバインディングを作成する手順：
+
+. <<_write_the_outline_of_the_metric_binding,メトリックバインディングの概要を書く>>
+. <<_write_the_topology_query,コンポーネントを選択するためのトポロジークエリ（STQL）を書く>>
+. <<_write_the_promql_query,希望するメトリックのPromQLクエリを書く>>
+. <<_bind_the_correct_time_series_to_each_component,各コンポーネントに正しいタイムシリーズをバインドする>>
+. <<_create_or_update_the_metric_binding_in_suse_observability,SUSE Observabilityでメトリックバインディングを作成または更新する>>
+
+例として、これらの手順は、Kubernetesデプロイメントの`Replica counts`に対するメトリックバインディングを追加します。これは単なる例であり、このメトリックバインディングはデフォルトでSUSE Observabilityに既に存在します。
+
+== メトリックバインディングの概要を書く
+
+`metric-bindings.yaml`という新しいYAMLファイルを作成し、このYAMLテンプレートを追加して独自のメトリックバインディングを作成します。お気に入りのコードエディタで開いて、このガイド全体で変更してください。最後に、SUSE Observability CLIを使用して、SUSE Observability内のメトリックバインディングを作成および更新します。
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit:
+  name:
+  description:
+  priority:
+  identifier: urn:custom:metric-binding:...
+  queries:
+    - expression:
+      alias:
+  scope:
+  layout:
+    metricPerspective:
+      tab:
+      section:
+      weight:
+    componentSummary:
+      weight:
+----
+
+このテンプレートのフィールドは次のとおりです：
+
+* `_type`:SUSE Observabilityは、これがメトリックバインディングであることを知る必要があるため、値は常に`MetricBinding`である必要があります。
+* `chartType`:SUSE Observabilityは、異なるチャートタイプ（`line`、`bar`など）をサポートしますが、現在は`line`のみがサポートされています。
+* `enabled`:メトリックバインディングを保持するために`false`に設定しますが、ユーザーには表示しません。
+* `tags`:ユーザーインターフェースでメトリックを整理するために使用され、`{}`を使用して空のままにすることができます。
+* `unit`:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を描画するために使用されます。すべての単位については、xref:/develop/reference/k8sTs-chart-units.adoc[サポートされている単位]のリファレンスを参照してください。
+* `name`:メトリックバインディングの名前
+* `description`:オプションの説明で、名前の上にマウスを置いたときに表示されます。
+* `priority`: [廃止予定] `HIGH`、`MEDIUM`、または`LOW`のいずれか。コンポーネント上のメトリックの主なソート順（ここで言及されている順序）、二次ソート順は`name`です。
+* `identifier`:メトリックバインディングの一意の識別子として使用されるURN（ユニバーサルリソース識別子）。`urn:custom:metric-binding:`で始まる必要があり、残りはすべてのメトリックバインディングの中で一意である限り、自由形式です。
+* `queries`:メトリックバインディングのチャートに表示するクエリのリスト（次のセクションも参照）。
+* `scope`:メトリックバインディングのトポロジースコープで、これが表示されるコンポーネントを選択するトポロジークエリです。
+* `layout`:異なる視点ビューでチャートをグループ化する方法、例えばxref:/use/views/k8s-metrics-perspective.adoc[メトリックの視点]で。
+
+最初に既に知られているすべての部分を埋めてください（デプロイメントレプリカ数を例として）。
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression:
+    alias:
+scope:
+----
+
+クエリとスコープのセクションは、次のステップで記入されます。使用される単位は`short`であり、これは単に数値を表示します。メトリックの単位についてまだ確信がない場合は、オープンにしておき、PromQLクエリを書く際に正しい単位を決定できます。
+
+== トポロジークエリを書いてください。
+
+xref:/use/views/k8s-topology-perspective.adoc[トポロジーの視点]の探索ビューを使用し、http://your-instance/#/views/explore,で新しいメトリックを表示する必要があるコンポーネントを選択してください。基本ビューと高度なビューの両方を使用して選択を行うことができます。メトリックバインディングのためにトポロジーを選択する際に最も一般的なフィールドは、コンポーネントタイプのための`type`と、すべてのラベルを選択するための`label`です。例えば、デプロイメントの場合：
+
+----
+type = "deployment" and label = "stackpack:kubernetes"
+----
+
+タイプフィルターはすべてのデプロイメントを選択し、ラベルフィルターはKubernetesスタックパックによって作成されたコンポーネントのみを選択します（ラベル名は`stackpack`で、ラベル値は`kubernetes`です）。後者を省略しても同じ結果が得られます。
+
+高度なモードに切り替えて、結果のトポロジークエリをコピーし、メトリックバインディングの`scope`フィールドに貼り付けてください。
+
+[NOTE]
+====
+メトリックバインディングはクエリフィルターのみをサポートしており、`withNeighborsOf`のようなクエリ関数はサポートされておらず、使用できません。
+====
+
+
+== PromQLクエリを書いてください。
+
+SUSE Observabilityインスタンスのxref:/use/metrics/k8sTs-explore-metrics.adoc[メトリックエクスプローラー]に移動し、http://your-instance/#/metrics,を使用して関心のあるメトリックを調べてください。エクスプローラーはメトリック、ラベル、ラベル値、さらにPromQL関数や演算子の自動補完を提供します。最良の結果を得るために、例えば1時間の短い時間範囲から始めてください。
+
+レプリカの総数には`kubernetes_state_deployment_replicas`メトリックを使用してください。このメトリックのチャートを時系列データに対して代表的にするために、`${__interval}`パラメータを使用して集約を行うようにクエリを拡張してください：
+
+----
+max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+----
+
+この特定のケースでは、チャートが常に任意の時点でのレプリカの最大数を表示することを確認するために`max_over_time`を使用してください。長い時間範囲の場合、レプリカの短い減少は表示されないことを意味します。最も少ないレプリカ数を強調するために、代わりに`min_over_time`を使用してください。
+
+クエリをメトリックバインディングの`queries`フィールドの最初のエントリの`expression`プロパティにコピーしてください。`Total replicas`をエイリアスとして使用します。これはチャートの凡例に表示される名前です。
+
+[NOTE]
+====
+SUSE Observabilityでは、メトリックチャートのサイズがチャートに表示されるメトリックの粒度を自動的に決定します。PromQLクエリは、この動作を最適に利用してメトリックの代表的なチャートを取得するように調整できます。xref:/use/metrics/k8s-writing-promql-for-charts.adoc[チャートのためのPromQLの書き方]がこれを詳しく説明しています。
+====
+
+
+== 各コンポーネントに正しい時系列をバインドします。
+
+すべてのフィールドが埋められたメトリックバインディング：
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression: max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+    alias: Total replicas
+scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+SUSE Observabilityでこれを作成し、デプロイメントコンポーネントの「レプリカ数」チャートを表示すると、予期しない結果が得られます。チャートはすべてのデプロイメントのレプリカ数を示しています。論理的には、特定のデプロイメントのレプリカ数という1つの時系列のみが期待されます。
+
+image::k8s/k8s-replica-counts-without-binding.png[単一デプロイメントの不正確なチャート, it shows the replica count for all deployments]
+
+これを修正するには、コンポーネントの情報を使用してPromQLクエリをコンポーネント固有のものにしてください。コンポーネントの特定の時系列のみを選択するために、十分なメトリックラベルでフィルタリングします。これがコンポーネントに正しい時系列をバインドする「バインディング」です。Grafanaダッシュボードの作成に経験がある方には、これはダッシュボードのクエリで使用されるパラメータを持つダッシュボードに似ています。メトリックバインディングのクエリを次のように変更しましょう：
+
+----
+max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+----
+
+image::k8s/k8s-replica-counts-with-binding.png[パラメータ化されたフィルタを追加した後、結果のチャートは期待通りに見えます, only 1 time series for this component]
+
+PromQLクエリは現在、`cluster_name`、`namespace`、および`deployment`の3つのラベルでフィルタリングします。これらのラベルに対して実際の値を指定する代わりに、コンポーネントのフィールドへの変数参照が使用されます。この場合、ラベル`cluster-name`と`namespace`が使用され、`${tags.cluster-name}`と`${tags.namespace}`を使用して参照されます。さらに、コンポーネント名は`${name}`で参照されます。
+
+サポートされている変数参照は次のとおりです：
+
+* 任意のコンポーネントラベルを使用して、`${tags.<label-name>}`
+* コンポーネント名を使用して、`${name}`
+
+image::k8s/k8s-carts-highlights.png[コンポーネントハイライトページは、ラベルとコンポーネント名（両方とも赤で強調表示）を表示します]
+
+[NOTE]
+====
+クラスター名、ネームスペース、およびコンポーネントタイプと名前の組み合わせは、Kubernetesから特定のコンポーネントのメトリクスを選択するのに通常十分です。これらのラベル、または類似のラベルは、通常、ほとんどのメトリクスおよびコンポーネントで利用可能です。
+====
+
+
+== SUSE Observabilityでメトリックバインディングを作成または更新します。
+
+SUSE Observability CLIを使用して、SUSE Observabilityでメトリックバインディングを作成します。`metric-bindings.yaml`が保存され、次のように表示されることを確認してください：
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+メトリックバインディングを作成するには、xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]を使用します：
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+デプロイメントのメトリックビューを開いて、SUSE Observabilityで結果を確認します。結果に満足できない場合は、YAMLファイル内のメトリックバインディングを変更し、コマンドを再実行して更新してください。ノードのリストは、多くのメトリックバインディングを追加することをサポートしています。前と同じ手順を使用して、YAML配列に別のメトリックバインディングエントリを追加してください。
+
+[CAUTION]
+====
+識別子は、メトリックバインディングの一意のキーとして使用されます。識別子を変更すると、既存のものを更新するのではなく、新しいメトリックバインディングが作成されます。
+====
+
+
+`sts settings`コマンドには、すべてのメトリックバインディングをリストするなど、より多くのオプションがあります：
+
+[,bash]
+----
+sts settings list --type MetricBinding
+----
+
+最後に、メトリックバインディングを削除するには、次のコマンドを使用します。
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+このコマンドの`<id>`は識別子ではなく、`sts settings list`出力の`Id`列の番号です。
+
+[NOTE]
+====
+推奨される作業方法は、メトリックバインディング（およびSUSE Observabilityで作成されたその他のカスタムリソース）をYAMLファイルとしてGitリポジトリに保存することです。そこから変更を手動で適用することも、GitHub ActionsやGitLabパイプラインのようなCI/CDシステムでSUSE Observability CLIを使用して完全に自動化することも可能です。
+====
+
+
+== その他のオプション
+
+=== チャートに1つ以上の時系列が存在します。
+
+[NOTE]
+====
+メトリックバインディングには1つの単位しかありません（チャートのy軸にプロットされます）。その結果、1つのメトリックバインディング内で同じ単位の時系列を生成するクエリのみを組み合わせるべきです。時には単位を変換することが可能な場合もあります。例えば、CPU使用率はミリコアまたはコアで報告されることがあります。ミリコアは1000倍することでコアに変換できます。`(<original-query>) * 1000`のように。
+====
+
+
+1つのメトリックバインディング、したがって1つのチャートに1つ以上の時系列を取得する方法は2つあります：
+
+. 単一のコンポーネントに対して複数の時系列を返すPromQLクエリを書く。
+. メトリックバインディングにさらにPromQLクエリを追加する。
+
+最初のオプションの例は、xref:/use/metrics/k8s-add-charts.adoc#_using_metric_labels_in_aliases[次のセクション]に示されています。2番目のオプションは、関連するメトリックを比較するのに役立ちます。いくつかの典型的なユースケース：
+
+* 合計レプリカ数と希望および利用可能なレプリカ数の比較。
+* リソース使用量：制限、リクエスト、および単一のチャート内の使用量。
+
+メトリックバインディングにさらにクエリを追加するには、xref:/use/metrics/k8s-add-charts.adoc#_steps[ステップ]の3と4を繰り返し、クエリをクエリのリストに追加します。デプロイメントレプリカ数には、同じチャートに含めることができるいくつかの関連メトリックがあります：
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+    - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Available - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: max_over_time(kubernetes_state_deployment_replicas_unavailable{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Unavailable - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Desired - ${cluster_name} - ${namespace} - ${deployment}
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+image::k8s/k8s-replica-counts-multiple-timeseries.png[複数のメトリックを持つメトリックバインディング]
+
+=== エイリアスにメトリックラベルを使用する。
+
+単一のクエリがコンポーネントごとに複数の時系列を返す場合、これはチャートに複数のラインとして表示されます。しかし、凡例ではすべて同じエイリアスが使用されます。異なる時系列の違いを確認できるように、エイリアスには`${label}`構文を使用してメトリックラベルへの参照を含めることができます。例えば、ここにポッドの「コンテナ再起動」メトリックのメトリックバインディングの例があります。ポッドには複数のコンテナがあることに注意してください：
+
+----
+type: MetricBinding
+chartType: line
+enabled: true
+id: -1
+identifier: urn:custom:metric-binding:my-pod-restart-count
+name: Container restarts
+priority: MEDIUM
+queries:
+- alias: Restarts - ${container}
+  expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"})
+scope: (label = "stackpack:kubernetes" and type = "pod")
+unit: short
+----
+
+`alias`はメトリックの`container`ラベルを参照していることに注意してください。クエリ結果にラベルが存在することを確認してください。ラベルが欠落している場合、`${container}`はトラブルシューティングの助けとなるようにリテラルテキストとして表示されます。
+
+=== レイアウト
+
+各コンポーネントは、k8s、ネットワーキング、ランタイム環境（例：JVM）、プロトコル（HTTP、AMQP）など、さまざまな技術やプロトコルに関連付けることができます。
+その結果、各コンポーネントに対して多くの異なるメトリックが表示される可能性があります。読みやすさを向上させるために、SUSE Observabilityはこれらのチャートをタブやセクションに整理できます。
+特定のタブやセクション内にチャート（`MetricBinding`）を表示するには、レイアウトプロパティを設定する必要があります。
+指定されたレイアウトのないMetricsBindingは、`Other`という名前のタブとセクションに表示されます。
+
+こちらが設定の例です：
+
+----
+layout:
+  metricPerspective:
+    tab: Kubernetes Pod
+    section: Performance
+    weight: 2
+  componentSummary:
+    weight: 2
+----
+
+フィールド:
+
+* `layout.metricPerspective` - `Metrics Perspective`に表示するメトリックを定義します。メトリックはタブにグループ化され、その後セクションに分けられます。
+* `layout.metricPerspective.tab` - タブ名。タブはアルファベット順にソートされます。
+* `layout.metricPerspective.section` - セクション名。セクションはアルファベット順にソートされます。
+* `layout.metricPerspective.weight` - セクション内のメトリックは、主に重み（昇順）で、次に名前（アルファベット順）でソートされます。
+* `layout.componentSummary` - コンポーネント選択時に`Components details`サイドバーに表示するメトリックを指定します。このプロパティが定義されている場合にのみ、チャートが表示されます。
+* `layout.componentSummary.weight` - これはチャートの重みを表しています。チャートは重みの昇順に並べ替えられ、最初の3つのチャートが表示されます。

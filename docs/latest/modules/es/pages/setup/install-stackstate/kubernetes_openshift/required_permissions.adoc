@@ -1,0 +1,269 @@
+= Permisos requeridos
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+Todos los componentes de SUSE Observability pueden funcionar sin permisos adicionales. Sin embargo, para instalar SUSE Observability con éxito, necesitas algunos privilegios adicionales, o asegurarte de que se cumplan los requisitos descritos en esta página.
+
+== Autenticación y autorización entre servicios
+
+Para permitir la comunicación entre los servicios de SUSE Observability, SUSE Observability utiliza cuentas de servicio de Kubernetes. Para poder verificar su validez y roles, el chart de helm crea un `ClusterRole` y un `ClusterRoleBinding`. Crear estos recursos a nivel de clúster a menudo está prohibido para usuarios que no son administradores de Kubernetes/OpenShift. En ese caso, la creación puede ser deshabilitada y en su lugar los roles y vinculaciones de roles deben ser xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_manually_create_cluster_wide_resources[creados manualmente] por tu administrador de clúster.
+
+=== Deshabilitar la creación automática de recursos a nivel de clúster
+
+La creación automática de recursos a nivel de clúster durante la instalación de SUSE Observability puede ser deshabilitada añadiendo la siguiente sección al archivo `values.yaml` utilizado para instalar SUSE Observability:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,yaml]
+----
+cluster-role:
+  enabled: false
+----
+
+--
+====
+
+[NOTE]
+====
+Si la creación del rol de clúster y la vinculación de rol de clúster ha sido deshabilitada, por favor asegúrate de seguir las instrucciones a continuación para crearlos manualmente usando las xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_manually_create_cluster_wide_resources[instrucciones a continuación].
+====
+
+
+=== Crear manualmente recursos a nivel de clúster
+
+Si necesitas crear manualmente los recursos a nivel de clúster, pide a tu administrador de Kubernetes/OpenShift que cree los 3 recursos a continuación en el clúster.
+
+[NOTE]
+====
+Verifica que especifiques la cuenta de servicio y el espacio de nombres correctos para el `ServiceAccount` vinculado para ambos recursos `ClusterRoleBinding`. El ejemplo asume que se utiliza el espacio de nombres `suse-observability` y que se utiliza `suse-observability` como la versión, si se utiliza algún otro espacio de nombres, cambia el espacio de nombres en los ejemplos. Además, las cuentas de servicio referenciadas necesitan ser cambiadas a `<release>-suse-observability-api`.
+====
+
+
+[tabs]
+====
+clusterrole-authorization.yaml::
++
+--
+
+[,yaml]
+----
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: suse-observability-authorization
+rules:
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - list
+----
+
+--
+====
+
+[tabs]
+====
+clusterrolebinding-authentication.yaml::
++
+--
+
+[,yaml]
+----
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: suse-observability-authentication
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: suse-observability-api
+  namespace: suse-observability
+----
+
+--
+====
+
+[tabs]
+====
+clusterrolebinding-authorization.yaml::
++
+--
+
+[,yaml]
+----
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: suse-observability-authorization
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: suse-observability-authorization
+subjects:
+- kind: ServiceAccount
+  name: suse-observability-api
+  namespace: suse-observability
+----
+
+--
+====
+
+== Normas de seguridad de Pods
+
+Si tu clúster de Kubernetes tiene https://kubernetes.io/docs/concepts/security/pod-security-standards/[Normas de Seguridad de Pods habilitadas], necesitas configurar políticas de seguridad apropiadas para el espacio de nombres `suse-observability`. SUSE Observability requiere que se cumpla la Norma de Seguridad de Pods básica para funcionar correctamente.
+
+=== Configurar Normas de Seguridad de Pods
+
+Aplica la Norma de Seguridad de Pods básica al espacio de nombres `suse-observability`:
+
+[,bash]
+----
+kubectl label ns suse-observability pod-security.kubernetes.io/enforce=baseline --overwrite
+kubectl label ns suse-observability pod-security.kubernetes.io/audit=baseline --overwrite
+kubectl label ns suse-observability pod-security.kubernetes.io/warn=baseline --overwrite
+----
+
+[NOTE]
+====
+Si las Normas de Seguridad de Pods están habilitadas en tu clúster, debes asegurarte de que los requisitos previos de Elasticsearch estén correctamente configurados antes de desplegar SUSE Observability.
+Dado que la Norma de Seguridad de Pods básica no permite contenedores privilegiados, necesitas seguir xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_elasticsearch[las instrucciones] para configurar el parámetro del kernel `vm.max_map_count` requerido a nivel de host.
+====
+
+
+== Elasticsearch
+
+SUSE Observability utiliza Elasticsearch para almacenar sus índices. Existen algunos requisitos adicionales para los nodos en los que se ejecuta Elasticsearch.
+
+Como la configuración del sistema Linux `vm.max_map_count` suele ser inferior a la requerida para que Elasticsearch se inicie, se utiliza un contenedor de inicialización que se ejecuta en modo privilegiado y como raíz. El contenedor de inicialización está habilitado por defecto para permitir que se cambie la configuración del sistema `vm.max_map_count`.
+
+=== Desactiva el contenedor de inicialización privilegiado de Elasticsearch
+
+En caso de que tú o tus administradores de Kubernetes/OpenShift no deseen que el contenedor de inicialización privilegiado de Elasticsearch esté habilitado por defecto, puedes desactivar este comportamiento en el archivo `values.yaml` utilizado para instalar SUSE Observability:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,yaml]
+----
+elasticsearch:
+  sysctlInitContainer:
+    enabled: false
+----
+
+--
+====
+
+[NOTE]
+====
+Si esto está desactivado, necesitarás asegurarte de que la configuración `vm.max_map_count` se cambie de su valor predeterminado común de `65530` a `262144`. Si esto no se hace, Elasticsearch no podrá iniciarse y sus pods estarán en un bucle de reinicio.
+====
+
+
+Para inspeccionar la configuración actual `vm.max_map_count`, ejecuta el siguiente comando. Ten en cuenta que ejecuta un pod privilegiado:
+
+[,text]
+----
+kubectl run -i --tty sysctl-check-max-map-count --privileged=true  --image=busybox --restart=Never --rm=true -- sysctl vm.max_map_count
+----
+
+Si la configuración actual `vm.max_map_count` no es al menos `262144`, necesitará ser aumentada de otra manera o Elasticsearch no podrá iniciarse y sus pods estarán en un bucle de reinicio. Los registros contendrán un mensaje de error como este:
+
+[,text]
+----
+bootstrap checks failed
+max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+----
+
+=== Aumenta la configuración del sistema Linux para Elasticsearch.
+
+Dependiendo de lo que prefieran tus administradores de Kubernetes/OpenShift, el `vm.max_map_count` puede establecerse en un valor predeterminado más alto en todos los nodos, ya sea cambiando la configuración predeterminada del nodo (por ejemplo, a través de guiones init) o haciendo que un DaemonSet lo haga justo después del inicio del nodo. Lo primero depende mucho de la configuración de tu clúster, por lo que no hay soluciones generales allí.
+
+A continuación se muestra un ejemplo que se puede utilizar como punto de partida para un DaemonSet para cambiar la configuración `vm.max_map_count`:
+
+[,yaml]
+----
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: set-vm-max-map-count
+  namespace: kube-system
+  labels:
+    k8s-app: set-vm-max-map-count
+spec:
+  selector:
+    matchLabels:
+      name: set-vm-max-map-count
+  template:
+    metadata:
+      labels:
+        name: set-vm-max-map-count
+    spec:
+      # Make sure the setting always gets changed as soon as possible:
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+      # Optional node selector (assumes nodes for Elasticsearch are labeled `elasticsearch:yes`
+      # nodeSelector:
+      #  elasticsearch: yes
+      initContainers:
+        - name: set-vm-max-map-count
+          image: busybox
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+      # A pause container is needed to prevent a restart loop of the pods in the daemonset
+      # See also this Kubernetes issue https://github.com/kubernetes/kubernetes/issues/36601
+      containers:
+        - name: pause
+          image: busybox
+          command: ["sleep", "infinity"]
+          resources:
+            limits:
+              cpu: 50m
+              memory: 50Mi
+            requests:
+              cpu: 50m
+              memory: 50Mi
+----
+
+Para limitar el número de nodos a los que se aplica esto, se pueden etiquetar los nodos. Los NodeSelectors en este DaemonSet, como se muestra en el ejemplo, y en la ampliación de Elasticsearch se pueden configurar para ejecutarse solo en nodos con la etiqueta específica. Para Elasticsearch, el selector de nodos se puede especificar a través de los valores:
+
+[,yaml]
+----
+elasticsearch:
+  nodeSelector:
+    elasticsearch: yes
+  sysctlInitContainer:
+    enabled: false
+----
+
+== Consulte también
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Instala SUSE Observability en Kubernetes]
+* xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[Instala SUSE Observability en OpenShift]

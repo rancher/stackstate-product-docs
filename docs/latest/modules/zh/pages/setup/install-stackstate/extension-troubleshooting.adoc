@@ -1,0 +1,33 @@
+= 扩展故障排除
+:revdate: 2025-11-03
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+本节提供了针对 {stackstate-product-name} 和 Rancher UI 扩展之间任何互操作性问题的故障排除步骤。
+
+== 收集 HAR（Http ARchive）
+
+Http ARchive 收集浏览器发送给 Rancher 和 {stackstate-product-name} 的请求详细信息。 它还记录收到的响应。
+此归档特定于出现错误的页面/浏览器标签。 它不需要访问后端的 Rancher 或 {stackstate-product-name} 实例（尽管它们的日志在后期可能会有用）。
+
+* 在 "开发者工具" 面板中打开 *网络* 标签。 您可以通过使用 `F12` 访问此功能。 网络标签显示所有请求的日志。
+* 清除日志并对显示问题行为的页面进行（强制）刷新。
+* 现在应该可以看到大量发送到 Rancher 和 SUSE Observability 的请求。
+* 导出/下载/保存 HAR - 不同浏览器在这里使用不同的名称。
+
+== 集群未被监控
+
+为了在 Rancher 中可见集群健康状态，这些配置需要一致：
+
+* Rancher UI 中集群的（显示）名称。
+* 在该集群部署的代理上设置的 `stackstate.cluster.name`
+* SUSE Observability 的 Kubernetes stackpack 配置中的集群名称
+
+不匹配通常会在 Rancher 的集群概览中显示为 "未接收到数据"。
+
+== 连接失败
+
+由于以下原因，SUSE Observability 的配置有时可能无法在 Rancher UI 中建立有效连接：
+
+* Rancher 主机未被配置为 SUSE Observability 的允许来源。 您可以通过将其添加到 `stackstate.allowedOrigins` 列表中的 helm 值，或通过将 `--set stackstate.allowedOrigins={"https://<rancher-url>"}` 传递给部署命令来修复此问题。
+* SUSE Observability 无法从浏览器访问。例如，根证书尚未安装。

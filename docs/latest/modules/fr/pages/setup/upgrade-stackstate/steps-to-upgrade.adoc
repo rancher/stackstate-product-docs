@@ -1,0 +1,117 @@
+= Étapes pour mettre à niveau
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergée
+
+[CAUTION]
+====
+Pour passer de StackState 6.0 à SUSE Observability, suivez le xref:/setup/upgrade-stackstate/migrate-from-6.adoc[guide de migration].
+====
+
+
+== Présentation
+
+Ce document décrit la procédure de mise à niveau pour SUSE Observability.
+
+== Avant de mettre à niveau
+
+Lors de l'exécution d'une mise à niveau de SUSE Observability, soyez conscient des éléments suivants :
+
+[CAUTION]
+====
+*Veuillez toujours lire les* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[*notes de mise à niveau spécifiques à la version*] *avant de mettre à niveau SUSE Observability.*
+====
+
+
+[CAUTION]
+====
+Lors de la mise à niveau d'un StackPack, *toutes les modifications que vous avez apportées aux éléments de configuration de ce StackPack seront écrasées*. Consultez xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[le verrouillage de configuration] pour plus d'informations.
+====
+
+
+[WARNING]
+====
+S'il y a des *correctifs* installés dans votre installation de SUSE Observability, contactez le support technique de SUSE Observability avant de procéder à la mise à niveau.
+====
+
+
+== Étapes pour mettre à niveau
+
+=== Version mineure ou de maintenance de SUSE Observability
+
+Une version mineure de SUSE Observability est indiquée par un changement dans le deuxième chiffre du numéro de version, par exemple 4.1.0. Les versions de maintenance sont identifiées par un changement dans le troisième chiffre du numéro de version, par exemple 4.1.1.
+
+Si vous mettez à niveau vers une nouvelle version *mineure* de SUSE Observability ou une version *de maintenance*, SUSE Observability lui-même et les StackPacks seront compatibles avec l'installation actuelle.
+
+Une mise à niveau mineure consiste en les étapes suivantes :
+
+. <<_create_a_backup,Créer une sauvegarde>>
+. <<_upgrade_suse_observability,Mettre à niveau SUSE Observability>>
+. <<_verify_the_new_installation,Vérifier la nouvelle installation>>
+. Vérifiez si des StackPacks installés nécessitent une mise à niveau
+
+=== Version majeure de SUSE Observability
+
+Une version majeure de SUSE Observability est indiquée par un changement dans le premier chiffre du numéro de version, par exemple 4.0.0.
+
+Si vous mettez à niveau vers une nouvelle version *majeure* de SUSE Observability, SUSE Observability et les StackPacks installés peuvent être incompatibles avec l'installation actuelle. Pour plus de détails, consultez les xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[notes de mise à niveau spécifiques à la version].
+
+Une mise à niveau majeure se compose des étapes suivantes :
+
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_create_a_backup[Créer une sauvegarde]
+. Facultatives : xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_uninstall_stackpacks_optional[Désinstaller les StackPacks]
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_upgrade_stackstate[Mettre à niveau SUSE Observability]
+. Facultatives : xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_install_stackpacks_optional[Installer les StackPacks]
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_verify_the_new_installation[Vérifier la nouvelle installation]
+
+== Le guide de mise à niveau
+
+=== Créer une sauvegarde
+
+Avant de mettre à niveau SUSE Observability, il est recommandé de sauvegarder votre configuration et vos données topologiques :
+
+* xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[Sauvegarde Kubernetes]
+* xref:/setup/data-management/backup_restore/configuration_backup.adoc[Sauvegarde de configuration]
+
+[NOTE]
+====
+Notez qu'il ne sera pas possible de restaurer la sauvegarde sur la version mise à niveau de SUSE Observability. La sauvegarde de SUSE Observability ne peut être restaurée que dans la version de SUSE Observability avant la mise à niveau.
+====
+
+
+=== Mettre à niveau SUSE Observability
+
+Assurez-vous de consulter les notes de version et toutes les notes de mise à niveau optionnelles avant d'exécuter la mise à niveau.
+
+[tabs]
+====
+
+Kubernetes::
++
+--
+
+. Obtenez le dernier chart helm en exécutant `helm repo update`.
+. Vérifiez les xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[notes de mise à niveau spécifiques à la version] pour tous les changements entre votre version actuelle et la version vers laquelle vous allez mettre à niveau. S'il y a eu des modifications apportées aux éléments de configuration spécifiés dans votre fichier `values.yaml`, le fichier doit être mis à jour.
+. Pour mettre à niveau, utilisez la même commande helm que pour la xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[première installation de Kubernetes]. Le nouveau chart helm téléchargera des versions plus récentes des images Docker et gérera la mise à niveau.
+--
+
+OpenShift::
++
+--
+
+. Obtenez le dernier chart helm en exécutant `helm repo update`.
+. Vérifiez les xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[notes de mise à niveau spécifiques à la version] pour tous les changements entre votre version actuelle et la version vers laquelle vous allez mettre à niveau. S'il y a eu des modifications apportées aux éléments de configuration spécifiés dans votre fichier `values.yaml`, le fichier doit être mis à jour.
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_additional_openshift_values_file[Mettre à jour le fichier `openshift-values.yaml`].
+. Pour mettre à niveau, utilisez la même commande helm que pour la xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[première installation d'OpenShift]. Le nouveau chart helm téléchargera des versions plus récentes des images Docker et gérera la mise à niveau.
+--
+
+====
+
+=== Vérifier la nouvelle installation
+
+Une fois que SUSE Observability a été mis à niveau et démarré, vérifiez que la nouvelle installation de SUSE Observability est accessible et que l'application fonctionne.
+
+== Reportez-vous également à la section
+
+* xref:/stackpacks/about-stackpacks.adoc#_upgrade_a_stackpack[Mettre à niveau manuellement un StackPack]
+* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[Notes de mise à niveau spécifiques à la version]

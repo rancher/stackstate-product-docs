@@ -1,0 +1,106 @@
+= Registros de Kubernetes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability autoalojado v5.1.x
+
+== Descripción general
+
+En una configuración de Kubernetes, las funciones de SUSE Observability se distribuyen a través de diferentes pods y los registros de cada función se almacenan por pod y contenedor. Puedes acceder a los registros recientes utilizando `kubectl`, aunque para el almacenamiento a largo plazo se recomienda configurar la agregación de registros.
+
+== Pods de Kubernetes para registro
+
+Los registros de SUSE Observability se almacenan por pod y contenedor. La tabla a continuación muestra el pod al que acceder para los registros relacionados con funciones específicas de SUSE Observability. Ten en cuenta que los nombres de los pods reales incluirán un número o un sufijo de cadena aleatoria (por ejemplo, `stackstate-receiver-5b9d79db86-h2hkz`) y también pueden incluir el nombre de la versión especificado cuando se desplegó SUSE Observability como prefijo.
+
+[NOTE]
+====
+Ten en cuenta que los registros almacenados en los pods se eliminarán regularmente. Para el acceso a largo plazo a los registros, se aconseja que configures <<_log_aggregation,agregación de registros>> para tu clúster de Kubernetes.
+====
+
+
+|===
+| Función de SUSE Observability | Registros en pod
+
+| API (incluyendo topología, gráficos y configuraciones)
+| `stackstate-api`
+
+| Indexación de datos en Elasticsearch
+| `stackstate-e2es` (eventos)
+
+| Ingesta de datos
+| `stackstate-receiver`
+
+| Manejadores de eventos
+| `stackstate-view-health`
+
+| Supervisar
+| `stackstate-checks`
+
+| Propagación de estado
+| `stackstate-state`
+
+| Sincronización
+| `stackstate-sync`
+
+| Ver estado de salud
+| `stackstate-view-health`
+|===
+
+Puedes acceder a los registros de un pod específico utilizando el comando `kubectl logs`.
+
+Por ejemplo:
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== Accede a los registros recientes
+
+=== Registros de pod o contenedor
+
+Los registros más recientes se pueden recuperar de Kubernetes utilizando el comando `kubectl logs`. Revisa el <<_kubernetes_pods_for_logging,pod que necesitas monitorizar>> para recuperar un registro específico.
+
+Por ejemplo:
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== Registros de sincronización
+
+Todos los registros de sincronización se pueden encontrar en un pod `stackstate-sync-<suffix>`. Puedes utilizar el nombre de sincronización para localizar información específica del registro en una instantánea de registro.
+
+Por ejemplo:
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== Agregación de registros
+
+Para el almacenamiento a largo plazo de los datos de registro de SUSE Observability, se recomienda que configures la agregación de registros en tu clúster de Kubernetes. Esto se puede hacer utilizando un sistema de terceros para almacenamiento, tales como Elasticsearch, Splunk o Logz.io, y un agente de registros como Logstash o Fluentd.
+
+Para más detalles sobre cómo se puede hacer esto, consulta:
+
+* Envío de registros con https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)]
+* Una visión completa de cómo configurar https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[la agregación de registros en Elasticsearch (bitnami.com)]
+
+== Consulte también
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[referencia del comando kubectl (kubernetes.io/docs)]

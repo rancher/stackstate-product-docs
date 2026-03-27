@@ -1,0 +1,178 @@
+= Nettoyer la synchronisation de la santé
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+Le xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] peut être utilisé pour dépanner une synchronisation de santé et résoudre les problèmes qui pourraient empêcher les données de santé d'être correctement ingérées et affichées dans SUSE Observability. Cette page décrit les étapes générales de dépannage à suivre lors du débogage d'une synchronisation de santé, ainsi que les commandes CLI utilisées et une description des messages d'erreur retournés.
+
+== Étapes générales de dépannage
+
+Lors du débogage de la synchronisation de santé, il existe certaines étapes de vérification courantes qui peuvent être effectuées, peu importe le problème spécifique :
+
+. xref:/configure/health/debug-health-sync.adoc#_list_streams[Vérifiez que le flux existe].
+. Si vous utilisez des sous-flux, xref:/configure/health/debug-health-sync.adoc#_list_sub_streams[vérifiez que le sous-flux existe]. La réponse montrera également le nombre d'états de vérification sur le sous-flux. Cela vous indique si les données sont ingérées et traitées.
+. Examinez davantage :
+ ** *Flux présent* - xref:/configure/health/debug-health-sync.adoc#_show_stream_status[Vérifiez l'état du flux], cela montrera la latence des métriques du flux et toute xref:/configure/health/debug-health-sync.adoc#_error_messages[erreur].
+ ** *Flux / sous-flux présents, mais il n'y a pas d'états de vérification* - Confirmez que la charge utile envoyée à l'API Receiver respecte la xref:/configure/health/send-health-data/send-health-data.adoc[spécification de charge utile de santé].
+ ** *Aucun flux / sous-flux n'est présent* - Utilisez la commande CLI ci-dessous pour vérifier que les données de santé envoyées à l'API Receiver arrivent dans SUSE Observability :
+
+[,sh]
+----
+$ sts topic describe --name sts_health_sync
+----
+
+== Problèmes courants
+
+=== État de vérification non visible sur le composant
+
+Il peut y avoir deux raisons pour qu'un état de vérification ne s'affiche pas sur un composant dans SUSE Observability :
+
+* L'état de vérification de santé n'a pas été créé. Suivez les xref:/configure/health/debug-health-sync.adoc#_general_troubleshooting_steps[étapes générales de dépannage] pour confirmer que le flux / sous-flux a été créé et que les données arrivent dans SUSE Observability.
+* L'état de vérification de santé a été créé, mais son `topologyElementIdentifier` ne correspond à aucun `identifiers` de la topologie de SUSE Observability. Utilisez la commande CLI xref:/configure/health/debug-health-sync.adoc#_show_substream_status[afficher l'état du sous-flux] pour vérifier s'il y a des `Check states with identifier which has no matching topology element`.
+
+=== État de vérification lent à mettre à jour dans SUSE Observability
+
+La principale raison en est que la latence de la synchronisation de santé est plus élevée que prévu. Utilisez la commande CLI xref:/configure/health/debug-health-sync.adoc#_show_stream_status[show stream status] pour confirmer la latence du flux ainsi que le débit des messages et les opérations de vérification spécifiques. Il peut être nécessaire d'ajuster les données envoyées à la synchronisation de la santé, ou la fréquence à laquelle les données sont envoyées.
+
+== Les commandes CLI utiles
+
+=== Lister les flux
+
+Renvoie une liste de tous les flux de santé synchronisés actuels et du nombre de sous-flux inclus dans chacun.
+
+[,sh]
+----
+$ sts health list
+STREAM URN                                              | STREAM CONSISTENCY MODEL | SUB STREAM COUNT
+urn:health:sourceId:streamId                            | REPEAT_SNAPSHOTS         | 1
+----
+
+=== Lister les sous-flux
+
+Renvoie une liste de tous les sous-flux pour un URN de flux donné, ainsi que le nombre d'états de vérification dans chacun.
+
+[,sh]
+----
+$ sts health list -u urn:health:sourceId:streamId
+SUB STREAM ID  | CHECK STATE COUNT
+subStreamId1   | 1
+subStreamId2   | 1
+----
+
+=== Afficher l'état du flux
+
+La commande d'état du flux renvoie les métriques agrégées de latence et de débit du flux. Cela est utile lors du débogage pour comprendre pourquoi une vérification de santé prend longtemps à s'afficher sur les éléments de topologie attendus. Cela aidera à diagnostiquer si la fréquence des données envoyées à SUSE Observability doit être ajustée. La sortie inclut une section `Errors for non-existing sub streams:` car certaines erreurs ne sont pertinentes que lorsqu'un sous-flux n'a pas pu être créé, par exemple `StreamMissingSubStream`. Les erreurs de sous-flux peuvent être l'un des xref:/configure/health/debug-health-sync.adoc#_error_messages[messages d'erreur] documentés.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId
+----
+
+=== Afficher l'état du sous-flux
+
+L'état du sous-flux fournit des informations utiles pour vérifier que SUSE Observability a pu lier les états de vérification envoyés depuis un système externe aux éléments de topologie existants. Cette information est utile pour déboguer pourquoi une vérification spécifique n'est pas visible sur l'élément de topologie attendu.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId -sub-stream-urn subStreamId3
+----
+
+[NOTE]
+====
+Un état de sous-flux affichera les métadonnées liées au modèle de cohérence :
+
+* *Instantanés répétés* - Afficher l'intervalle de répétition et l'expiration
+* *Transactional Increments* - Afficher le décalage du point de contrôle et l'indice de lot de point de contrôle
+====
+
+
+L'état du sous-flux peut être étendu pour inclure des détails sur les états de vérification correspondants et non correspondants en utilisant l'argument de ligne de commande `-t`. Cela est utile pour identifier tout état de santé qui n'est pas attaché à un élément de topologie.
+Dans l'exemple ci-dessous, `checkStateId2` est répertorié sous `Check states with identifier which has no matching topology element`. Cela signifie qu'il n'a pas été possible d'associer l'état de vérification à un élément de topologie avec l'identifiant `server-2`.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId -sub-stream-urn subStreamId3 -t
+----
+
+=== Supprimer un flux de santé
+
+La fonctionnalité du flux `delete` est utile lors de la configuration d'une synchronisation de santé dans SUSE Observability. Vous pouvez l'utiliser pour expérimenter, supprimer les données et recommencer à zéro. Vous pouvez également supprimer un flux et supprimer ses données lorsque vous êtes sûr de ne plus vouloir l'utiliser.
+
+[,sh]
+----
+$ sts health delete -u urn:health:sourceId:streamId
+----
+
+=== Effacer les erreurs du flux de santé
+
+L'option `clear-errors` supprime toutes les erreurs d'un flux de santé. Cela est utile lors de la configuration d'une synchronisation de santé dans SUSE Observability, ou, dans le cas du modèle de cohérence `TRANSACTIONAL_INCREMENTS`, lorsque certaines erreurs ne peuvent pas être supprimées de manière organique. Par exemple, une demande de suppression d'un état de vérification pourrait générer une erreur si l'état de vérification n'est pas connu de SUSE Observability. Le seul moyen de supprimer une telle erreur serait d'utiliser la commande `clear-errors`.
+
+[,sh]
+----
+$ sts health clear-error -u urn:health:sourceId:streamId
+----
+
+== Messages d’erreur
+
+[NOTE]
+====
+Les erreurs seront fermées une fois que le problème décrit aura été résolu.
+
+Par exemple, un `SubStreamStopWithoutStart` sera fermé une fois que la synchronisation de santé observe un message d'instantané de début suivi d'un message d'instantané d'arrêt.
+====
+
+
+|===
+| Erreur | Description
+
+| *StreamMissingSubStream*
+| Élevé lorsque la synchronisation de santé reçoit des messages sans un message de configuration de flux précédent tel que `start_snapshot` ou `expiry`.
+
+| *StreamConsistencyModelMismatch*
+| Élevé lorsqu'un message est reçu qui appartient à un modèle de cohérence différent de celui spécifié lors de la création du flux.
+
+| *StreamMissingSubStream*
+| Élevé lorsque la synchronisation de santé reçoit des messages avec un instantané de début précédent en place.
+
+| *SubStreamRepeatIntervalTooHigh*
+| Élevé lorsque la synchronisation de santé reçoit un `repeat_interval_s` supérieur au maximum configuré de 30 minutes.
+
+| *SubStreamStartWithoutStop*
+| Élevé lorsque la synchronisation de la santé reçoit un second message pour ouvrir un instantané alors qu'un instantané précédent était encore ouvert.
+
+| *SubStreamCheckStateOutsideSnapshot*
+| Élevé lorsque la synchronisation de la santé reçoit des états de vérification externes sans avoir précédemment ouvert un instantané.
+
+| *SubStreamStopWithoutStart*
+| Élevé lorsque la synchronisation de la santé reçoit un message d'arrêt d'instantané sans avoir du tout commencé un instantané.
+
+| *SubStreamMissingStop*
+| Élevé lorsque la synchronisation de la santé ne reçoit pas un arrêt d'instantané après une période de temps de deux fois le `repeat_interval_s` établi dans le message de début d'instantané. Dans ce cas, un arrêt d'instantané automatique sera appliqué.
+
+| *SousFluxExpiré*
+| Élevé lorsque la synchronisation de la santé cesse de recevoir des données sur un sous-flux particulier pendant plus longtemps que le `expiry_interval_s` configuré. Dans ce cas, le sous-flux sera supprimé.
+
+| *SubStreamLateData*
+| Élevé lorsque la synchronisation de la santé ne reçoit pas un instantané complet en temps voulu basé sur le `repeat_interval_s` établi.
+
+| *SubStreamTransformerError*
+| Élevé lorsque la synchronisation de la santé est incapable d'interpréter la charge utile envoyée au récepteur. Par exemple, "Champ requis manquant 'nom'" avec charge utile `{"checkStateId":"checkStateId3","health":"deviating","message":"Unable to provision the device. ","topologyElementIdentifier":"server-3"}` et transformation `Default Transformation`.
+
+| *SubStreamMissingCheckpoint*
+| Élevé lorsqu'un sous-flux transactionnel incrémente précédemment observé un point de contrôle, mais le message reçu manque le `previous_checkpoint`.
+
+| *SubStreamInvalidCheckpoint*
+| Élevé lorsqu'un sous-flux transactionnel incrémente précédemment observé un point de contrôle, mais le message reçu a un `previous_checkpoint` qui n'est pas équivalent au dernier observé.
+
+| *SubStreamOutdatedCheckpoint*
+| Élevé lorsqu'un sous-flux de Transactional Increments, ayant déjà observé un point de contrôle, reçoit un message dont le `checkpoint` précède le dernier point de contrôle enregistré, ce qui signifie que ses données ont déjà été reçues par SUSE Observability.
+
+| *SubStreamUnknownCheckState*
+| Élevé lors de la suppression d'un état de vérification d'incréments transactionnels et que le `check_state_id` n'est pas présent dans le sous-flux.
+|===
+
+== Reportez-vous également à la section
+
+* xref:/setup/cli/cli-sts.adoc[Installer le SUSE Observability CLI]

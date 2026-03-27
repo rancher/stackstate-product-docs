@@ -1,0 +1,84 @@
+= Standardkonfiguration überschreiben
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} Selbst gehostet
+
+Eine Reihe von Werten kann im https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} Helm-Chart] festgelegt werden. Zum Beispiel ist es möglich, die `tolerations` und `nodeSelectors` für jede der Komponenten anzupassen. Sie können auch benutzerdefinierte Konfiguration hinzufügen und Umgebungsvariablen einfügen.
+
+== Benutzerdefinierte Konfiguration für {stackstate-product-name} `api`
+
+Für den {stackstate-product-name} `api` Dienst kann die benutzerdefinierte Konfiguration direkt in das Helm-Chart eingefügt werden. Dies ist der empfohlene Weg, um die Standardkonfiguration, die {stackstate-product-name} mitliefert, zu überschreiben und ist besonders praktisch für die Anpassung der Authentifizierung. Auf diese Weise festgelegte Konfiguration ist in der {stackstate-product-name} Konfigurationsdatei im https://github.com/lightbend/config/blob/master/HOCON.md[HOCON] Format verfügbar.
+
+Zum Beispiel können Sie einen benutzerdefinierten "Passwort vergessen"-Link für die {stackstate-product-name} Anmeldeseite festlegen:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      config: |
+        stackstate.api.authentication.forgotPasswordLink =
+        "https://www.stackstate.com/forgotPassword.html"
+----
+
+--
+====
+
+[NOTE]
+====
+Beachten Sie, dass hier festgelegte benutzerdefinierte Konfiguration von xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_environment_variables[Umgebungsvariablen] überschrieben wird.
+====
+
+
+== Umgebungsvariablen
+
+Die Konfiguration für alle {stackstate-product-name} Dienste (`receiver`, `k2es-*`, `correlation` und `api`) kann mithilfe von Umgebungsvariablen angepasst werden. Umgebungsvariablen werden in der `values.yaml` Datei angegeben und können entweder `secret` (wie Passwörter) oder `open` (für normale Werte) sein. Um ein Konfigurationselement in einen Umgebungsvariablennamen zu konvertieren, ersetzen Sie `.` durch `_` und fügen Sie das Präfix `CONFIG_FORCE_` hinzu.
+
+[,text]
+----
+# configuration item
+stackstate.api.authentication.forgotPasswordLink
+
+# environment variable name
+CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink
+----
+
+Zum Beispiel können Sie einen benutzerdefinierten "Passwort vergessen"-Link für die {stackstate-product-name} Anmeldeseite festlegen:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      extraEnv:
+        # The value for open env vars is defined on the deployment
+        open:
+          CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink: "https://www.stackstate.com/forgotPassword.html"
+        # The value for secret env vars is defined in a secret and referenced from the deployment
+        secret:
+          CONFIG_FORCE_some_config_with_sensitive_data: "data-stored-in-secret"
+----
+
+--
+====
+
+[NOTE]
+====
+Für den {stackstate-product-name} `api` Dienst überschreiben Umgebungsvariablen <<_custom_configuration_for_suse_observability_api,benutzerdefinierte Konfiguration, die mit `config` festgelegt wurde>>.
+====
+
+
+* Vollständige Details zur Benennung aller verschiedenen Dienste finden Sie im https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} Helm-Chart-Readme].
+* Weitere Details zur xref:/setup/security/authentication/README.adoc[Anpassung der Authentifizierung] finden Sie.

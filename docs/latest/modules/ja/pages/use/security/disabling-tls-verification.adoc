@@ -1,0 +1,61 @@
+= TLS検証を無効にする
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== SUSE Observability Agent
+
+xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent]のSSL検証を無効にするには、以下のようにHelmの文字列値を設定する必要があります:
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability CLI]からSSL検証を無効にするには、`--skip-ssl`フラグを`sts CLI`コマンドと共に指定する必要があります。これは、以下の2つの方法のいずれかを使用して行うことができます:
+
+*方法1*:
+
+永続的な設定のためにPEMエンコードされたCA証明書ファイルに`--skip-ssl`フラグを指定します:
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip-ssl
+----
+
+*方法2*:
+
+一時的な証明書検証に使用される任意のCLIコマンドに`--skip-ssl`フラグを指定します:
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+----
+
+[WARNING]
+====
+`--skip-ssl`フラグを使用すると、`STS_CA_CERT_PATH`および`STS_CA_CERT_BASE64_DATA`の設定が無視されます。これはセキュリティを低下させるため、注意して使用してください。
+====
+
+== SUSE ObservabilityのためのRancher UI拡張機能
+
+Rancher UI拡張からSSL検証を無効にするには、`agent-tls-mode`設定を変更する必要があります。
+
+UIを通じて設定の値を変更するには、グローバル設定ページに移動し、ページの下部にある`agent-tls-mode`設定を見つけます。UIを通じて設定を変更した後、リクエストを許可する前に、クラスターが条件`AgentTlsStrictCheck`が'True'に設定されていることを確認します。これにより、証明書の不一致による障害が防止されます。

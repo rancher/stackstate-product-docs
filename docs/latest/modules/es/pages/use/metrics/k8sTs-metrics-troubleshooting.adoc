@@ -1,0 +1,45 @@
+= Solución de problemas de gráficos de métricas personalizadas
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+* <<_the_metric_chart_doesnt_show_on_the_highlights_page_of_a_component,El gráfico de métricas no se muestra en la página de Destacados de un componente>>
+* <<_the_metric_chart_doesnt_show_on_the_metrics_perspective_of_a_component,El gráfico de métricas no se muestra en la perspectiva de métricas de un componente>>
+* <<_the_metric_chart_on_a_component_remains_empty_no_data,El gráfico de métricas de un componente permanece vacío ("sin datos")>>
+
+== El gráfico de métricas no se muestra en la página de Destacados de un componente
+
+En este momento no es posible personalizar los gráficos de métricas que se muestran en la página de Destacados de un componente. Los gráficos para enlaces de métricas personalizados se mostrarán solo en la perspectiva de Métricas.
+
+== El gráfico de métricas no se muestra en la perspectiva de métricas de un componente
+
+La consulta `scope` en un enlace de métricas se utiliza para determinar si un componente muestra el enlace de métricas. Si un componente no muestra un enlace de métricas, verifica que la consulta de topología en el ámbito coincida con el componente.
+
+Primero verifica que el componente tenga efectivamente las etiquetas y/o el tipo de componente esperados en la página de Destacados del componente, donde el nombre y el tipo se ubican en la parte superior y las etiquetas en la sección "Acerca de". Asegúrate de que no haya errores de ortografía en los nombres o valores de las etiquetas.
+
+Verifica que la consulta de ámbito tenga la sintaxis correcta:
+
+. Abre la vista de exploración, a través de Vistas en el menú y el botón azul "Explorar" a la derecha. O directamente a través de la URL: `https://<your-stackstate-instance>/#/views/explore`
+. Abre los filtros y selecciona `switch to STQL`
+. Ahora copia/pega la consulta del ámbito en el campo STQL y ejecuta la consulta
+
+La vista general ahora muestra todos los componentes que coinciden con la consulta y que recibirán el gráfico.
+
+== El gráfico de métricas de un componente permanece vacío ("sin datos")
+
+Para el gráfico de métricas que no tiene datos mientras se esperaban, abre el inspector (el icono en la esquina superior derecha del gráfico). Activa el botón "Mostrar consulta" para mostrar las consultas.
+
+Asegúrate de que la consulta no contenga ninguno de los parámetros (es decir, todos los valores como `${tags.cluster-name}` o `${name}`) han sido reemplazados por los valores del componente. Si algunos parámetros quedaron en la consulta, las etiquetas no estaban disponibles en este componente. Así que verifica los nombres utilizados (en este ejemplo `cluster-name`) contra las etiquetas disponibles en el componente. También asegúrate de que no haya errores tipográficos en los nombres.
+
+Si todos los parámetros están completos, puede haber un problema con la consulta PromQL. Para investigar eso, copia la consulta PromQL y abre el explorador de métricas (a través del menú principal de SUSE Observability). Pega la consulta en el explorador de métricas y ejecútala. Esto debería seguir dando un resultado vacío.
+
+O bien, la métrica no existe, no tiene una de las etiquetas o la etiqueta existe pero no hay series temporales que coincidan con el valor. El método más rápido para resolver esto es reescribir la consulta solo con el nombre de su métrica y ejecutarla; si hay resultados, la métrica existe (así que sin errores tipográficos). El resultado de la tabla también se puede utilizar para verificar que todas las etiquetas que se utilizan existen. Asegúrate de que no haya errores tipográficos aquí tampoco.
+
+Si hay resultados, pero no para un valor específico de una etiqueta (por ejemplo, para la etiqueta `pod_name`), la consulta está bien pero no hay series temporales para esta métrica específica para este componente específico. Cosas a verificar en este caso:
+
+* ¿Se están recopilando los datos para este componente (ya sea a través del agente de SUSE Observability o por otros medios)?
+* ¿El componente está reportando siquiera la métrica?
+
+Cómo hacer esto depende de cómo se configure la recopilación de datos.

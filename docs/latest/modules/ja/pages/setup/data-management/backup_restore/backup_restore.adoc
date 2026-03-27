@@ -1,0 +1,507 @@
+= バックアップを復元する
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+[NOTE]
+====
+このページは {stackstate-product-name} バージョン 2.7.0 以降に適用されます。
+====
+
+== 概要
+
+このページでは、バックアップ CLI を使用して {stackstate-product-name} データストアのバックアップを復元する方法について説明します。
+
+[WARNING]
+====
+*バックアップからの復元は、既存のデータを消去または上書きします。この操作は元に戻すことができません。*
+
+復元操作を確認する前に、バックアップ名とネームスペースを必ず確認してください。
+
+*GitOps ワークフローに影響を与えます*
+このバックアップツールは、クラスター内の K8s リソースを直接変更します：
+
+- StatefulSets/Deployments のレプリカを 0 にスケールダウンします。
+- 復元追跡のためのアノテーションを追加します。
+
+これらの変更は、Git ベースの調整をバイパスするため、GitOps ワークフローと競合します。GitOps コントローラーは、バックアップ操作中にこれらの変更を元に戻そうとする場合があります。
+*重要:*SUSE Observability Helm チャートのデプロイメントの自動調整は、競合を防ぐためにバックアップ復元中に無効にする必要があります。
+====
+
+[NOTE]
+====
+*CLI を使用する前に、次のことを確認してください：*
+
+* 最新のバックアップ CLI を使用しています。
+* CLI は、SUSE Observability がインストールされているクラスターへの現在のコンテキストを持つ kubeconfig を期待しています。
+====
+
+== バックアップ CLI をダウンロードします。
+
+以下のコマンドを使用して、プラットフォーム用の最新のバックアップ CLI をダウンロードします。バイナリの名前は `sts-backup` です。
+
+[tabs]
+====
+macOS (Apple Silicon)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz
+----
+
+--
+macOS (Intel)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz
+----
+
+--
+Linux (ARM64)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz
+----
+
+--
+Linux (x86_64)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz
+----
+
+--
+Windows (x86_64)::
++
+--
+
+[,powershell]
+----
+$VERSION = (Invoke-RestMethod -Uri "https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest").tag_name
+Invoke-WebRequest -Uri "https://github.com/StackVista/stackstate-backup-cli/releases/download/$VERSION/stackstate-backup-cli-$($VERSION.TrimStart('v')).windows-x86_64.zip" -OutFile "stackstate-backup-cli.zip"
+Expand-Archive -Path "stackstate-backup-cli.zip" -DestinationPath "."
+----
+
+--
+====
+
+[TIP]
+====
+便宜上、`sts-backup` バイナリを `$PATH` のディレクトリ（例：Linux/macOS の `/usr/local/bin`）にコピーしてください。これにより、フルパスを指定せずにどこからでも実行できます。
+====
+
+== 構成およびトポロジーデータ (StackGraph)
+
+=== StackGraphバックアップの一覧
+
+StackGraphのバックアップを一覧表示するには、次のコマンドを実行してください。
+
+[,bash]
+----
+sts-backup stackgraph list --namespace <NAMESPACE>
+----
+
+`<NAMESPACE>` を {stackstate-product-name} がインストールされているネームスペースに置き換えてください。
+
+出力は次のようになります：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Stackgraph backups in bucket 'sts-stackgraph-backup'...
+NAME                            LAST MODIFIED            SIZE
+sts-backup-20251128-0300.graph  2025-11-28 03:08:42 UTC  2GiB
+----
+
+バックアップが取得されたタイムスタンプは、バックアップ名の一部です。
+
+
+=== StackGraphのバックアップを復元する
+
+StackGraph バックアップを復元するには、次のいずれかの方法を使用してください：
+
+==== 特定のバックアップを復元する
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 最新のバックアップを復元する
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --latest
+----
+
+==== 一般的なフラグ
+
+* `--yes` または `-y` - 確認プロンプトをスキップします（自動化に便利）
+* `--background` - 完了を待たずにバックグラウンドで復元を実行します
+
+==== バックグラウンド復元
+
+`--background` を使用すると、復元は非同期で実行されます。復元を開始した後、ステータスを確認し、最終化するには次のコマンドを使用してください：
+
+[,bash]
+----
+sts-backup stackgraph check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` コマンド：
+
+* 復元ジョブのステータスを確認します
+* `--wait` フラグを使用すると、ジョブの完了を待ちます
+* 復元中にスケールダウンされたデプロイメントを自動的にスケールアップします
+* 完了後にリソースをクリーンアップします
+
+[NOTE]
+====
+`--background` なしで実行されている復元が中断された場合（たとえば、Ctrl+C によって）、デプロイメントをスケールアップし、リソースをクリーンアップするには `check-and-finalize` を実行する必要があります。
+====
+
+== 設定
+
+設定のバックアップには、ユーザーが作成したモニター、カスタムビュー、サービストークンなどの構成とともにインストールされたStackPackが含まれます。設定のバックアップは軽量（通常は数メガバイト程度）で、ダウンタイムを最小限に抑えて迅速に復元できます。
+
+=== 設定のバックアップを一覧表示する
+
+設定のバックアップを一覧表示するには、次のコマンドを実行してください：
+
+[,bash]
+----
+sts-backup settings list --namespace <NAMESPACE>
+----
+
+`<NAMESPACE>` をSUSE Observabilityがインストールされているネームスペースに置き換えてください。
+
+出力は次のようになります：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Settings backups in bucket 'sts-configuration-backup'...
+NAME                          LAST MODIFIED            SIZE
+sts-backup-20251128-1328.sty  2025-11-28 13:29:12 UTC  2MiB
+----
+
+バックアップが取得されたタイムスタンプは、バックアップ名の一部です。
+
+=== 設定のバックアップを復元する
+
+[CAUTION]
+====
+設定のバックアップを復元すると、トポロジー、ヘルスステート、アラート、およびトポロジー履歴がすべて削除されます。
+====
+
+設定のバックアップを復元するには、次のいずれかのアプローチを使用してください：
+
+==== 特定のバックアップを復元する
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 最新のバックアップを復元する
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --latest
+----
+
+==== 一般的なフラグ
+
+* `--yes` または `-y` - 確認プロンプトをスキップします（自動化に便利）
+* `--background` - 完了を待たずにバックグラウンドで復元を実行します
+
+==== バックグラウンド復元
+
+`--background` を使用すると、復元は非同期で実行されます。復元を開始した後、ステータスを確認し、最終化するには次のコマンドを使用してください：
+
+[,bash]
+----
+sts-backup settings check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` コマンド：
+
+* 復元ジョブのステータスを確認します
+* `--wait` フラグを使用すると、ジョブの完了を待ちます
+* 復元中にスケールダウンされたデプロイメントを自動的にスケールアップします
+* 完了後にリソースをクリーンアップします
+
+[NOTE]
+====
+`--background` なしで実行されている復元が中断された場合（例：Ctrl+Cによって）、デプロイメントをスケールアップし、リソースをクリーンアップするために`check-and-finalize`を実行する必要があります。
+====
+
+== メトリクス (Victoria Metrics)
+
+プロファイル `nonha` または `ha` に応じて、Victoria Metricsは異なるモードでデプロイされます：
+
+* *nonha profile* - 1つのVictoria Metricsインスタンス（`victoria-metrics-0`）を持つシングルノードモード
+* *ha profile* - 2つのVictoria Metricsインスタンス（`victoria-metrics-0`と`victoria-metrics-1`）を持つHA（ミラー）モード
+
+=== Victoria Metricsのバックアップを一覧表示する
+
+Victoria Metricsのバックアップを一覧表示するには、次のコマンドを実行してください。
+
+[,bash]
+----
+sts-backup victoria-metrics list --namespace <NAMESPACE>
+----
+
+`<NAMESPACE>` をSUSE Observabilityがインストールされているネームスペースに置き換えてください。
+
+==== シングルノードモードの出力（nonhaプロファイル）
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:05 UTC
+----
+
+==== HAモードの出力（haプロファイル）
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-1-20251030152500  2025-11-28 09:35:08 UTC
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:04 UTC
+
+NOTE: In HA mode, backups from both instances (victoria-metrics-0 and victoria-metrics-1) are listed.
+      The restore command accepts either backup to restore both instances.
+----
+
+HAモードでは、異なるプレフィックス（`victoria-metrics-0`と`victoria-metrics-1`）で両方のインスタンスのバックアップが作成されます。復元時には、いずれかのバックアップを指定できます - 復元操作は選択したバックアップを両方のインスタンスに復元します。
+
+=== Victoria Metricsのバックアップを復元する
+
+[NOTE]
+====
+すべての新しいメトリクスは、復元プロセス中に`vmagent` によってキャッシュされます。メトリクスをキャッシュするために、`vmagent` に十分なメモリがあることを確認してください。
+====
+
+Victoria Metricsのバックアップを復元するには、次のいずれかのアプローチを使用してください：
+
+==== 特定のバックアップを復元する
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 最新のバックアップを復元する
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --latest
+----
+
+==== 一般的なフラグ
+
+* `--yes` または `-y` - 確認プロンプトをスキップします（自動化に便利）
+* `--background` - 完了を待たずにバックグラウンドで復元を実行します
+
+==== バックグラウンド復元
+
+`--background` を使用すると、復元は非同期で実行されます。復元を開始した後、ステータスを確認し、最終化するには次のコマンドを使用してください：
+
+[,bash]
+----
+sts-backup victoria-metrics check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` コマンド：
+
+* 復元ジョブのステータスを確認します
+* `--wait` フラグを使用すると、ジョブの完了を待ちます
+* 復元中にスケールダウンされたStatefulSetsを自動的にスケールアップします。
+* 完了後にリソースをクリーンアップします
+
+[NOTE]
+====
+`--background` なしで実行されている復元が中断された場合（例：Ctrl+Cによって）、StatefulSetsをスケールアップし、リソースをクリーンアップするために`check-and-finalize`を実行する必要があります。
+====
+
+== OpenTelemetry（ClickHouse）
+
+=== ClickHouseのバックアップを一覧表示する
+
+ClickHouseのバックアップを一覧表示するには、次のコマンドを実行してください：
+
+[,bash]
+----
+sts-backup clickhouse list --namespace <NAMESPACE>
+----
+
+`<NAMESPACE>` をSUSE Observabilityがインストールされているネームスペースに置き換えてください。
+
+出力は次のようになります：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-clickhouse-backup:7171 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Clickhouse backups...
+NAME                             CREATED              SIZE
+incremental_2025-11-28T09-45-00  2025-11-28 09:45:03  65MiB
+incremental_2025-11-28T08-45-00  2025-11-28 08:45:03  223MiB
+full_2025-11-28T00-45-00         2025-11-28 00:45:03  3GiB
+incremental_2025-11-27T23-45-00  2025-11-27 23:45:03  118MiB
+----
+
+`full_`で始まるバックアップ名はフルバックアップであり、`incremental_`で始まる名前は増分バックアップです。
+
+=== ClickHouseのバックアップを復元する
+
+[NOTE]
+====
+復元プロセスは、データを生成するワークロード（OpenTelemetryエクスポーターなど）を自動的にスケールダウンし、復元中のデータ損失を防ぎます。
+====
+
+ClickHouse バックアップを復元するには、次のいずれかのアプローチを使用してください：
+
+==== 特定のバックアップを復元する
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --snapshot <BACKUP_NAME>
+----
+
+==== 最新のバックアップを復元する
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --latest
+----
+
+==== 一般的なフラグ
+
+* `--yes` または `-y` - 確認プロンプトをスキップします（自動化に便利）
+* `--background` - 完了を待たずにバックグラウンドで復元を実行します
+
+==== バックグラウンド復元
+
+`--background` を使用すると、復元は非同期で実行されます。復元を開始した後、ステータスを確認し、最終化するには次のコマンドを使用してください：
+
+[,bash]
+----
+sts-backup clickhouse check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` コマンド：
+
+* 復元操作のステータスを確認します。
+* `--wait` フラグを使用すると、操作の完了を待機します。
+* 復元後のSQLコマンドを実行します。
+* 復元中にスケールダウンされたStatefulSetsを自動的にスケールアップします。
+* 完了後にリソースをクリーンアップします
+
+[NOTE]
+====
+`--background` なしで実行されている復元が中断された場合（例：Ctrl+Cによって）、操作IDを使用して `check-and-finalize` を実行し、StatefulSetsをスケールアップし、リソースをクリーンアップする必要があります。
+====
+
+== テレメトリーデータ（Elasticsearch）
+
+=== Elasticsearchのスナップショットを一覧表示
+
+Elasticsearchのスナップショットを一覧表示するには、次のコマンドを実行します：
+
+[,bash]
+----
+sts-backup elasticsearch list --namespace <NAMESPACE>
+----
+
+`<NAMESPACE>`をSUSE Observabilityがインストールされているネームスペースに置き換えてください。
+
+出力は次のようになります：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-elasticsearch-master-headless:9200 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Fetching snapshots from repository 'sts-backup'...
+SNAPSHOT                                         STATE    START TIME                DURATION (ms)  FAILURES
+sts-backup-20251128-1135-dpkj2dqrszo6cscpgfhrhg  SUCCESS  2025-11-28T11:35:10.967Z  329158         0
+----
+
+スナップショットが取得された時刻は、スナップショット名の一部です。
+
+=== Elasticsearchスナップショットを復元する
+
+[NOTE]
+====
+復元プロセスは、スナップショットを復元する前に、すべてのSTSインデックス（パターン`sts*`に一致する）を自動的に削除します。これには、クリーンな復元を確保するためのデータストリームのロールオーバーが含まれます。
+====
+
+Elasticsearchスナップショットを復元するには、次のいずれかのアプローチを使用します：
+
+==== 特定のスナップショットを復元します。
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --snapshot <SNAPSHOT_NAME>
+----
+
+==== 最新のスナップショットを復元します。
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --latest
+----
+
+==== 一般的なフラグ
+
+* `--yes` または `-y` - 確認プロンプトをスキップします（自動化に便利）
+* `--background` - 完了を待たずにバックグラウンドで復元を実行します
+
+==== バックグラウンド復元
+
+`--background` を使用すると、復元は非同期で実行されます。復元を開始した後、ステータスを確認し、最終化するには次のコマンドを使用してください：
+
+[,bash]
+----
+sts-backup elasticsearch check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` コマンド：
+
+* 復元操作のステータスを確認します。
+* `--wait`フラグを使用すると、操作の完了を待機します。
+* 復元中にスケールダウンされたデプロイメントを自動的にスケールアップします
+* 完了後にリソースをクリーンアップします
+
+[NOTE]
+====
+`--background`なしで実行されている復元が中断された場合（例：Ctrl+Cによって）、操作ID（スナップショット名）を使用して`check-and-finalize`を実行し、デプロイメントをスケールアップし、リソースをクリーンアップする必要があります。
+====

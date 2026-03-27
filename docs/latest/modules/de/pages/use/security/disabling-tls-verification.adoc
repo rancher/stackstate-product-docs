@@ -1,0 +1,61 @@
+= Deaktivierung der TLS-Überprüfung
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== SUSE Observability Agent
+
+Um die SSL-Validierung für Ihren xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent] zu deaktivieren, müssen Sie den Helm-Stringwert wie unten gezeigt konfigurieren:
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+Um die SSL-Validierung von der xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability Kommandozeilenschnittstelle] zu deaktivieren, müssen Sie das `--skip-ssl` Flag mit den `sts CLI` Befehlen angeben. Dies kann mit einer der beiden folgenden Methoden erfolgen:
+
+*Methode 1*: 
+
+Geben Sie das `--skip-ssl` Flag in der PEM-codierten CA-Zertifikatsdatei für eine dauerhafte Konfiguration an:
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip-ssl
+----
+
+*Methode 2*:
+
+Geben Sie das `--skip-ssl` Flag in jedem Befehl der Kommandozeilenschnittstelle an, der für die einmalige Zertifikatsvalidierung verwendet wird:
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+----
+
+[WARNING]
+====
+Die Verwendung des `--skip-ssl` Flags ignoriert die `STS_CA_CERT_PATH` und `STS_CA_CERT_BASE64_DATA` Einstellungen. Seien Sie vorsichtig, da dies die Sicherheit verringert.
+====
+
+== Rancher UI-Erweiterung für SUSE Observability
+
+Um die SSL-Validierung von der Rancher UI-Erweiterung zu deaktivieren, müssen Sie die `agent-tls-mode` Einstellung ändern. 
+
+Um den Wert der Einstellung über die UI zu ändern, navigieren Sie zur Seite "Globale Einstellungen" und finden Sie die `agent-tls-mode` Einstellung am Ende der Seite. Nach der Änderung der Einstellung über die UI werden die Cluster überprüft, um sicherzustellen, dass die Bedingung `AgentTlsStrictCheck` auf 'True' gesetzt ist, bevor die Anfrage erlaubt wird. Dies verhindert Ausfälle aufgrund eines Zertifikatsfehlers.

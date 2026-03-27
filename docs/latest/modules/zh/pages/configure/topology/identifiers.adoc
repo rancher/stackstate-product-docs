@@ -1,0 +1,136 @@
+= 标识符
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+标识符用于在SUSE Observability中识别对象，例如拓扑元素（组件和关系）以及功能。本页面描述了用于拓扑元素的不同类型的标识符，以及在SUSE Observability中全局范围标识符的结构。
+
+== 拓扑标识符
+
+拓扑元素在SUSE Observability中使用两种类型的标识符：
+
+* *集成范围标识符* - 用于识别集成中的组件和关系。每个组件或关系只有一个集成范围标识符。标识符是任意的，但必须在集成的范围内保持一致。
+* *全局范围标识符* - 用于在集成之间合并组件，例如 ServiceNow 和 SUSE Observability Agent。每个组件可以有多个全局范围标识符，而关系没有任何全局标识符。它们由SUSE Observability分配，并按照xref:/configure/topology/identifiers.adoc#_global_scope_identifiers[SUSE Observability全局标识符约定]格式化。
+
+下面的代码示例显示了一个具有两种类型标识符的组件。
+
+* 集成范围标识符 - `this-host-unique-identifier`
+* 全局范围标识符 - `urn:host:/this-host-fqdn`
+
+
+[,text]
+----
+self.component("this-host-unique-identifier", "Host", {
+    "name": "this-host",
+    "domain": "Webshop",
+    "layer": "Machines",
+    "identifiers": ["urn:host:/this-host-fqdn"],
+    "labels": ["host:this-host", "region:eu-west-1"],
+    "environment": "Production"
+})
+----
+
+
+== SUSE Observability Agent 标识符
+
+SUSE Observability Agent 用于识别同步拓扑元素的全局范围标识符列在下表中。
+
+|===
+| 资源类型 | URN标识符格式
+
+| 主机
+| `urn:host:/[hostName]`
+
+| 过程
+| `urn:process:/[hostName]:[pid]:[createTime]`
+
+| 容器
+| `urn:container:/[hostName]:[containerId]`
+
+| 通过跟踪发现的服务
+| `urn:service:/[serviceName]`
+
+| 通过跟踪发现的服务实例
+| `urn:service-instance:/[serviceName]:/[hostName]`
+|===
+
+请参见xref:/configure/topology/identifiers.adoc#_stackstate_agent[来自SUSE Observability Agent的示例URN全局范围标识符]。
+
+== 全局范围标识符
+
+当SUSE Observability从不同外部来源接收具有匹配全局范围标识符的组件时，这些组件及其属性（标签、流、检查）将合并为一个单一组件。这使得可以将来自不同来源的数据组合成IT环境的单一视图。
+
+SUSE Observability中的全局范围标识符是一个全球唯一的URN，符合以下约定：
+
+[,text]
+----
+urn:<prefix>:<type-name>:<free-form>
+----
+
+请注意，并非所有字符都允许在URN标识符中使用。您可以使用以下URN正则表达式检查您的标识符：
+
+[,text]
+----
+^urn:[a-z0-9][a-z0-9-]{0,31}:[a-z0-9()+,\-.:=@;$_!*'%/?#]+$
+----
+
+`<prefix>`和`<type-name>:<free-form>`段的格式如下所述。
+
+=== 前缀
+
+`prefix`段是全局标识符的必需部分。它命名标识符所属的范围，仅用于组织目的。
+
+[NOTE]
+====
+当前缀包含StackPack名称时，该对象将受该StackPack的控制。这意味着当StackPack被卸载时，该对象也将被卸载。
+====
+
+
+已识别的URN前缀包括：
+
+* `stackpack:<name>` - 属于StackPack的对象。
+* `stackpack:<name>:shared` - 在StackPack实例之间共享的对象。
+* `stackpack:<name>:instance:{{instanceId}}` - 属于StackPack特定实例的对象，其中`{{instanceId}}`是一个占位符，用于返回在StackPack安装过程中为每个具体实例提供的ID。
+* `system:auto` - 由系统创建的对象，不属于任何特定的StackPack。
+
+=== 类型名称和自由格式
+
+该标识符由`<type-name>:<free-form>`段唯一标识。
+
+* `<type-name>` 匹配分配给标识符的对象的域对象类型（不区分大小写）。
+* `<free-form>` 是任意的，但必须对该类型唯一。自由格式段的格式由用户决定。它不需要与对象的名称（如果存在）匹配，并且可以由多个段组成。
+
+== 示例标识符
+
+=== 常见的 StackPack
+
+来自常见 StackPack 的示例 URN 全局范围标识符。当常见 StackPack 被卸载时，对象将被卸载。
+
+* 组件类型服务器：
+ ** `urn:stackpack:common:component-type:server`
+
+=== SUSE Observability Agent
+
+来自 SUSE Observability Agent 的示例 URN 全局范围标识符。
+
+* 主机：
+ ** `urn:host:/example.org`
+* 进程:
+ ** `urn:process:/db.infra.company.org:161841:1602158335000`
+* 树枝:
+ ** `urn:container:/compnode5.k8s.example.org:8b18c68a820904c55b4909d7f5a9a52756d45e866c07c92bf478bcf6cd240901`
+* 通过跟踪发现的服务：
+ ** `urn:service:/prod-db`
+* 通过跟踪发现的服务实例：
+ ** `urn:service-instance:/prod-db:/main.example.org`
+
+=== 其他 StackPacks
+
+来自各种 StackPacks 的示例 URN 全局范围标识符。当指定的 StackPack 被卸载时，对象将被卸载。
+
+* 检查在 AWS StackPack 实例之间共享的 AWS 事件运行状态功能：
+ ** `urn:stackpack:aws:shared:check-function:aws-event-run-state`
+* ServiceNow StackPack 中的组件类型 cmdb_ci_netgear：
+ ** `urn:stackpack:servicenow:componenttype:cmdb_ci_netgear`

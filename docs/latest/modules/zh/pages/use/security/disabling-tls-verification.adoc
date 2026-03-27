@@ -1,0 +1,61 @@
+= 禁用 TLS 验证
+:revdate: 2025-08-25
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== SUSE Observability Agent
+
+要禁用 xref:/use/security/self-signed-certificates.adoc#_suse_observability_agent[SUSE Observability Agent] 的 SSL 验证，您需要按如下所示配置 Helm 的字符串值：
+
+[,bash]
+----
+--set-string 'global.skipSslValidation'=true \
+----
+
+== SUSE Observability CLI
+
+要从 xref:/use/security/self-signed-certificates.adoc#_suse_observability_cli[SUSE Observability CLI] 禁用 SSL 验证，您需要在 `sts CLI` 命令中指定 `--skip-ssl` 标志。这可以通过以下两种方法之一完成：
+
+*方法 1*：
+
+在 PEM 编码的 CA 证书文件中指定 `--skip-ssl` 标志以进行持久配置：
+
+[,bash]
+----
+sts context save \
+ --name staging \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ --skip-ssl
+----
+
+*方法 2*：
+
+在用于一次性证书验证的任何 CLI 命令中指定 `--skip-ssl` 标志：
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+
+
+# Using base64-encoded certificate data
+sts settings list \
+ --url https://staging.internal \
+ --api-token YOUR_API_TOKEN \
+ —-skip-ssl
+----
+
+[WARNING]
+====
+使用 `--skip-ssl` 标志将忽略 `STS_CA_CERT_PATH` 和 `STS_CA_CERT_BASE64_DATA` 设置。请谨慎使用，因为这会降低安全性。
+====
+
+== Rancher UI 扩展用于 SUSE Observability
+
+要从 Rancher UI 扩展禁用 SSL 验证，您需要更改 `agent-tls-mode` 设置。
+
+要通过 UI 更改设置的值，请导航到全局设置页面，并在页面底部找到 `agent-tls-mode` 设置。通过 UI 更改设置后，集群会检查条件 `AgentTlsStrictCheck` 是否设置为 'True'，然后才允许请求。这可以防止因证书不匹配而导致的停机。

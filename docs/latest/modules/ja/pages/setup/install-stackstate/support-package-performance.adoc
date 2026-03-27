@@ -1,0 +1,98 @@
+= SUSE Observability クラスターのパフォーマンステスト
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+このページでは、実行中のクラスターをプロファイルして、期待通りにパフォーマンスが発揮されているかどうかを確認する方法を提供します。パフォーマンスが低下している場合に、いくつかの部分がどのように機能しているかを積極的に調査するために使用できます。これは、一般的なログを収集するためのxref:/setup/install-stackstate/support-package-logs.adoc[サポートパッケージ（ログ）]コレクターへの追加です。
+
+== 備考
+
+スクリプトは、{stackstate-product-name}クラスターへのアクセスが設定されたkubectlを持つホストから、またはクラスターへの必要な権限と接続性を持つ他のホストから実行する必要があります。
+これは、ルートユーザを使用してホスト上で直接行うか、sudoを介して行うことができます。kubeconfigが設定されていない場合は、コマンド`export KUBECONFIG=$PATH-TO-YOUR/kubeconfig`を使用してください。
+
+== 使用方法
+
+スクリプトはダウンロードして、ホスト上で直接実行する必要があります。`root`ユーザまたは`sudo`を使用してください。
+
+=== スクリプトをダウンロードして実行する
+
+xref::attachment$suse-observability_performance_collector.sh[suse-observability_performance_collector.sh]スクリプトをダウンロードしてください。
+
+* スクリプトを次のように保存してください：`suse-observability_performance_collector.sh`
+* 次のコマンドを使用してスクリプトを実行してください：
++
+[,bash]
+----
+bash suse-observability_performance_collector.sh
+----
++
+これにより、現在のディレクトリに`suse-observability_performance_<date>.tar.gz`という名前のファイルが生成されます。このファイルをケースにアップロードしてください。
+
+追加の引数を指定することができます。例えば、異なるネームスペースを選択するには：
+[,bash]
+----
+> bash suse-observability_performance_collector.sh -h
+SUSE Observability performance measurement tool.
+Runs some rudimentary performance tests on a deployed instance to validate performance.
+
+Usage: $0 [options] [<namespace>]
+
+options:
+  -h  Print this help
+
+<namespace>:
+  The namespace that is running SUSE Observability, or
+  "suse-observability" when not specified
+----
+
+== 参照パフォーマンス
+
+以下は、システムのパフォーマンスの参考として使用する出力であり、私たち自身のプロファイルを調整するためにも使用します。顧客のディスクおよび速度は、これらの数値に近づく必要があります。
+
+----
+=== SUSE Observability Performance Summary ===
+Date: 2026-03-09T09:46:18Z
+
+--- Hdfs Disk Buffered ---
+  suse-observability-hbase-hdfs-dn-0                           151 MB/s
+  suse-observability-hbase-hdfs-dn-1                           150 MB/s
+  suse-observability-hbase-hdfs-dn-2                           150 MB/s
+
+--- Hdfs Disk Direct ---
+  suse-observability-hbase-hdfs-dn-0                           58.3 MB/s
+  suse-observability-hbase-hdfs-dn-1                           56.6 MB/s
+  suse-observability-hbase-hdfs-dn-2                           56.7 MB/s
+
+--- Kafka Disk Buffered ---
+  suse-observability-kafka-0                                   173 MB/s
+  suse-observability-kafka-1                                   142 MB/s
+  suse-observability-kafka-2                                   143 MB/s
+
+--- Kafka Disk Direct ---
+  suse-observability-kafka-0                                   59.2 MB/s
+  suse-observability-kafka-1                                   59.2 MB/s
+  suse-observability-kafka-2                                   59.4 MB/s
+
+--- Kafka Producer Local ---
+  suse-observability-kafka-0                                   50241.157556 records/sec (49.06 MB/sec), 557.44 ms avg latency
+  suse-observability-kafka-1                                   31422.825540 records/sec (30.69 MB/sec), 903.49 ms avg latency
+  suse-observability-kafka-2                                   31703.760066 records/sec (30.96 MB/sec), 893.00 ms avg latency
+
+--- Kafka Producer Remote ---
+  suse-observability-kafka-0                                   59765.718384 records/sec (58.36 MB/sec), 453.19 ms avg latency
+  suse-observability-kafka-1                                   54656.755575 records/sec (53.38 MB/sec), 500.53 ms avg latency
+  suse-observability-kafka-2                                   39503.831872 records/sec (38.58 MB/sec), 703.39 ms avg latency
+
+--- Hdfs Network ---
+  suse-observability-hbase-hdfs-dn-0 -> suse-observability-hbase-hdfs-dn-1 571 MB/s
+  suse-observability-hbase-hdfs-dn-1 -> suse-observability-hbase-hdfs-dn-2 524 MB/s
+  suse-observability-hbase-hdfs-dn-2 -> suse-observability-hbase-hdfs-dn-0 597 MB/s
+----
+
+補足説明：
+
+- バッファードIOは、生ディスクスループットに関連しており、カーネル内でデータをバッファリングできる仕組みです。
+- ダイレクトディスクは、O_DIRECTを使用しバッファリングを排除してディスクスループットを測定し、fsync()を使用する私たちのデータベースに近い動作を再現するとともに、基盤となるストレージのレイテンシーについての洞察を提供します。
+- Kafka Producerローカルは、localhost経由でKafkaにデータを投入し、リモートはネットワーク経由で行います。リモートは、ネットワークではなくCPUがボトルネックである場合、ローカルよりも高速になることがあります（ここではそのケースであり、リモートがより効率的でした）。

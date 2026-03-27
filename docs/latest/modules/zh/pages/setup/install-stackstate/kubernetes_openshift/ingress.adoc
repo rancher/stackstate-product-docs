@@ -1,0 +1,309 @@
+= 在集群外部暴露 SUSE Observability
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 自托管
+
+== 概述
+
+{stackstate-product-name} 可以通过 Kubernetes Ingress 资源进行暴露。本页面上的示例展示了如何使用 xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm 为在 Kubernetes 上运行的 SUSE Observability 配置 Traefik 或 Nginx Ingress 控制器]。本页面还记录了在使用不同的配置入口流量的方法时，应该暴露哪些服务/端口组合。
+
+在观察同时托管 {stackstate-product-name} 的集群时，可以通过在代理安装期间 xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_agents_in_the_same_cluster[更改代理配置] 来将代理流量完全保留在集群内部。
+
+== 通过 {stackstate-product-name} Helm 图表配置 Ingress
+
+{stackstate-product-name} Helm 图表在其值中暴露了一个 `ingress` 部分。默认情况下，这处于禁用状态。下面的示例展示了如何使用 Helm 图表配置启用 TLS 加密的入口控制器。请注意，设置控制器本身和证书超出了本文件的范围。
+
+要为 {stackstate-product-name} 配置 Ingress，请创建一个文件 `ingress_values.yaml`，内容如下。将 `MY_DOMAIN` 替换为您自己的域名（与您的 Ingress 控制器关联），并为 `tls-secret` 设置正确的名称。请查阅您的入口控制器的文档以获取正确的注释设置。下面的所有字段都是可选的，例如，如果不使用 TLS，请省略该部分，但请注意 {stackstate-product-name} 也不会加密流量。
+
+[CAUTION]
+====
+请注意，设置 TLS 是使用 Rancher UI 扩展所必需的。
+====
+
+[tabs]
+====
+Traefik::
++
+--
+.已知问题
+[WARNING]
+=====
+确保使用 Traefik < 3.6.3 or >= 3.6.7（Helm 图表版本 >= 39.0.0），因为版本 3.6.3 到 3.6.6 存在一个问题，导致某些 API 端点出现错误。特别是，组件高亮页面由于 API 调用被 Traefik 阻止而无法加载，出现 `400 Bad Request` 错误。
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Ingress Nginx 项目正在 https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[退役中]。建议用户考虑使用 Traefik 等替代方案。
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+
+该文件中突出的部分是 Nginx 注释，用于将允许的 `proxy-body-size` 增加到 `50m`（大于任何预期请求）。默认情况下，Nginx 允许的最大请求体大小为 `1m`。{stackstate-product-name} 代理和其他数据提供者有时会发送更大的请求。因此，您应该确保允许的请求体大小足够大，无论您使用的是 Nginx 还是其他入口控制器。
+--
+====
+
+请确保在初始安装期间生成的值文件中更新 `baseUrl`，它将被 {stackstate-product-name} 用于生成代理的便捷安装说明。
+
+示例使用 `ingressClassName` 字段来指定 https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]，而不是已弃用的 `kubernetes.io/ingress.class` 注释。如果您的集群定义了默认的 Ingress 类，则可以省略 Ingress 类名称字段。
+示例使用 `ingressClassName` 字段来指定 https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]，而不是已弃用的 `kubernetes.io/ingress.class` 注释。如果您的集群定义了默认的 Ingress 类，则可以省略 Ingress 类名称字段。
+
+在运行 `helm upgrade` 命令以部署 {stackstate-product-name} 时，请包含 `ingress_values.yaml` 文件：
+
+[,text]
+----
+helm upgrade --install \
+  --namespace "suse-observability" \
+  --values "ingress_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+此步骤假设 xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[生成 `baseConfig_values.yaml` 和 `sizing_values.yaml`] 已经执行。
+====
+
+== 为开放遥测配置入口规则
+
+{stackstate-product-name} Helm 图表在其值中公开了一个 `opentelemetry-collector` 服务，可以创建一个专用的 `ingress`。默认情况下，这处于禁用状态。用于 `opentelemetry-collector` 目的的入口需要支持 GRPC 协议。请注意，设置控制器本身和证书超出了本文件的范围。
+
+要为 {stackstate-product-name} 配置 `opentelemetry-collector` 入口，请创建一个文件 `ingress_otel_values.yaml`，内容如下。将 `MY_DOMAIN` 替换为您自己的域名（与您的入口控制器关联）并为 `otlp-tls-secret` 设置正确的名称。请查阅您的入口控制器的文档以获取正确的注释设置。以下所有字段都是可选的，例如，如果不使用 TLS，请省略该部分，但请注意 {stackstate-product-name} 也不会加密流量。
+
+[tabs]
+====
+Traefik::
++
+--
+.已知问题
+[WARNING]
+=====
+确保使用 Traefik < 3.6.3 or >= 3.6.7（Helm 图表版本 >= 39.0.0），因为版本 3.6.3 到 3.6.6 存在一个问题，导致某些 API 端点出现错误。特别是，组件高亮页面由于 API 调用被 Traefik 阻止而无法加载，出现 `400 Bad Request` 错误。
+=====
+
+[NOTE]
+=====
+通过 Traefik 暴露 OpenTelemetry Collector GRPC 端点从 {stackstate-product-name} Helm 图表版本 v2.8.0 开始得到支持。
+
+请注意，GRPC 主机条目需要一个明确的 `serviceName: suse-observability-otel-collector-grpc` 来将流量路由到正确的后端服务。
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            serviceName: suse-observability-otel-collector-grpc
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        ingressClassName: traefik
+        annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Ingress Nginx 项目正在 https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[退役中]。建议用户考虑使用 Traefik 等替代方案。
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+
+该文件中突出的部分是 Nginx 注释，用于将允许的 `proxy-body-size` 增加到 `50m`（大于任何预期请求）。默认情况下，Nginx 允许的最大请求体大小为 `1m`。{stackstate-product-name} 代理和其他数据提供者有时会发送更大的请求。因此，您应该确保允许的请求体大小足够大，无论您使用的是 Nginx 还是其他入口控制器。
+--
+====
+
+请确保在初始安装期间生成的值文件中更新 `baseUrl`，它将被 {stackstate-product-name} 用于生成代理的便捷安装说明。
+
+示例使用 `ingressClassName` 字段来指定 https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]，而不是已弃用的 `kubernetes.io/ingress.class` 注释。如果您的集群定义了默认的 Ingress 类，则可以省略 Ingress 类名称字段。
+示例使用 `ingressClassName` 字段来指定 https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]，而不是已弃用的 `kubernetes.io/ingress.class` 注释。如果您的集群定义了默认的 Ingress 类，则可以省略 Ingress 类名称字段。
+
+在运行 `helm upgrade` 命令以部署 {stackstate-product-name} 时，请包含 `ingress_otel_values.yaml` 文件：
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace "suse-observability" \
+  --values "ingress_otel_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+此步骤假设 xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[生成 `baseConfig_values.yaml` 和 `sizing_values.yaml`] 已经执行。
+====
+
+== 通过外部工具进行配置
+
+要使 {stackstate-product-name} 在其安装的 Kubernetes 集群外部可访问，只需将流量路由到 `<namespace>-stackstate-k8s-router` 服务的 `8080` 端口。{stackstate-product-name} 的用户界面可以直接在该服务的根路径下访问（即 `http://<namespace>-stackstate-k8s-router:8080`），而代理将使用 `/receiver` 路径（`http://<namespace>-stackstate-k8s-router:8080/receiver`）。
+
+请确保在初始安装期间生成的值文件中对 `baseUrl` 进行更新。它将被 {stackstate-product-name} 用于生成代理的便捷安装说明。
+
+[NOTE]
+====
+在手动配置 Nginx 或类似的 HTTP 服务器作为反向代理时，请确保它能够代理 websockets。对于 Nginx，可以通过在 `location` 指令中包含以下指令进行配置：
+
+[,text]
+----
+proxy_set_header Upgrade                 $http_upgrade;
+proxy_set_header Connection              "Upgrade";
+----
+
+====
+
+
+[CAUTION]
+====
+{stackstate-product-name} 本身不使用 TLS 加密流量，TLS 加密预计由入口控制器或外部负载均衡器处理。
+====
+
+
+== 同一集群中的代理
+
+与 {stackstate-product-name} 部署在同一集群中的代理当然可以使用 {stackstate-product-name} 暴露的外部 URL，但也可以配置代理仅通过 Kubernetes 内部网络直接连接到 {stackstate-product-name} 实例。为此，请将 xref:/k8s-quick-start-guide.adoc[代理 Kubernetes 安装] 中 `helm install` 命令的 `'stackstate.url'` 值替换为路由服务的内部集群 URL（另见上文）：`http://<namespace>-suse-observability-router.<namespace>.svc.cluster.local:8080/receiver/stsAgent`（`<namespace>` 部分需要替换为 {stackstate-product-name} 的命名空间）。
+
+
+== 转发 {stackstate-product-name} 路由服务端口
+
+默认情况下，{stackstate-product-name} Helm 图表会部署一个路由 Pod 和服务。该服务暴露端口 `8080`，这是需要通过 Ingress 暴露的唯一入口点。
+您还可以通过端口转发访问 {stackstate-product-name}；在这样做时，您必须允许 localhost 作为请求来源。
+
+[WARNING]
+====
+* 在 `stackstate.allowedOrigins` 中允许 `localhost` 仅用于本地开发或调试时使用端口转发。
+* 这不是 *生产* 设置。在通过 Ingress 暴露 {stackstate-product-name} 时，请移除此允许的来源。
+====
+
+要在不配置 Ingress 的情况下访问 UI，请转发路由服务端口：
+
+[,text]
+----
+kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+通过端口转发访问 {stackstate-product-name} 时，浏览器将 `http://localhost:8080` 作为请求来源。
+要允许来自此来源的请求，请将其添加到 Helm 值中的 `stackstate.allowedOrigins` 列表中，或直接传递给 Helm 命令：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --set stackstate.allowedOrigins={"http://localhost:8080"} \
+suse-observability \
+suse-observability/suse-observability
+----
+
+
+== 另请参见
+
+* https://learn.microsoft.com/en-us/azure/aks/ingress-tls?tabs=azure-cli[AKS (learn.microsoft.com)]
+* https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html[EKS 官方文档]（不使用 nginx）
+* https://aws.amazon.com/blogs/opensource/network-load-balancer-nginx-ingress-controller-eks/[EKS 博客文章]（使用 nginx）
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]

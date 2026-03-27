@@ -1,0 +1,105 @@
+= 高度なトラブルシューティング
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+プライム顧客である場合は、https://scc.suse.com/ に連絡して、ローカルクラスタに SUSE Observability を設定するための支援を受けてください。サポートチームのためにインスタンスに関する情報を収集するには、xref:/setup/install-stackstate/support-package-logs.adoc[サポートパッケージ (ログ)] を使用してください。
+
+このページでは、SUSE Observability プラットフォームのサブシステムに関する詳細情報を提供し、デプロイメントおよび運用上の問題をトラブルシューティングします。xref:/setup/install-stackstate/troubleshooting.adoc[トラブルシューティング] の手順で解決策が得られない場合にのみ、このページを参照してください。
+
+== 一般的なトラブルシューティングアプローチ
+
+SUSE Observability プラットフォームの運用上の問題をトラブルシューティングするための一般的なアプローチは、以下の通りです。
+
+* ポッドの動作を `kubectl get pods` を通じて把握する
+* この文書の詳細なサブシステム情報と問題の症状を組み合わせて、どのポッド/サブシステムが根本原因である可能性があるかを特定してください。
+* 疑わしいポッドのログ/メタデータを次の方法で確認します：
+ ** `kubectl logs <pod-name> --all-containers=true`
+ ** `kubectl describe pod <pod-name>`
+ ** SUSE Observability に関連するすべてのログ/説明を迅速に取得する方法は、xref:/setup/install-stackstate/support-package-logs.adoc[サポートパッケージ (ログ)] を通じてです。
+* ログが依存関係の不具合を示している可能性がある場合は、その依存関係を調査してください。
+
+== サブシステムの概要
+
+=== データベース
+
+SUSE Observability はさまざまなデータベースによって支えられており、データベースに不具合がある場合は、他のすべてのサービスがそれに依存しているため、まずこれを調査する必要があります。
+
+* `Zookeeper`:Zookeeper はサービスの発見、オーケストレーション、およびフェールオーバーに使用されます。Zookeeper は、次の名前の 1 つ以上のポッドを使用してデプロイされます：
+ ** `suse-observability-zookeeper-<n>`
+* `Kafka`:Kafka は、ほぼすべてのサービス間のメッセージパッシングに使用されます：Kafka は次のポッドによってデプロイされます：
+ ** `suse-observability-kafka-<n>`:メインの Kafka デプロイメント
+ ** `<release-name>-kafkaup-operator-kafkaup-*`:Kafkaのアップグレードを行うヘルパーオペレーター
+* `StackGraph`:StackGraphは（ユーザー）設定とトポロジーを保存します。StackGraphは複数のコンポーネントで構成されており、2つのデプロイメントモードがあります。HAと非HA。
+ ** `Tephra`:データベースのトランザクションの開始、コミット、競合を管理します。ポッド`<release-name>-hbase-tephra-<n>`によって提供されます。
+  *** `<release-name>-hbase-tephra-<n>`:Tephraトランザクションサーバーポッド。トランザクションと競合を追跡します。
+ ** `HBase-HA`:StackGraphデータを保存し、異なる役割を持つ複数のポッドに分散されます。
+  *** `<release-name>-hbase-hdfs-nn-0`:HDFSの名前ノード、ファイルインデックスを追跡します。
+  *** `<release-name>-hbase-hdfs-snn-0`:セカンダリ名前ノード、名前ノードの後にクリーンアップ作業を行います。
+  *** `<release-name>-hbase-hdfs-dn-<n>`:HDFSデータノード、実際のデータを保存します。
+  *** `<release-name>-hbase-hbase-master-<n>`:HBaseマスター、テーブルとリージョンを調整します。
+  *** `<release-name>-hbase-hbase-rs-<n>`:HBaseリージョンサーバー、テーブルとリージョンを提供し、そのデータをHDFSに保存します。
+ ** `HBase-non-HA`:
+  *** `<release-name>-hbase-stackgraph-0`:すべてのStackGraphコンポーネントが`non-HA`セットアップの単一ポッドとしてデプロイされます。これには独自のZookeeperインスタンスも含まれます。
+* `VictoriaMetrics`:メトリックデータを保存します。ポッドによってデプロイされます：
+ ** `suse-observability-victoria-metrics-<n>-0`:メインのVictoriaMetricsデータストア/クエリノード
+ ** `suse-observability-vmagent-0`:VictoriaMetricsのためのインジェスチョンエージェント。データは、転送されて保存される前にvmagentにプッシュされます。
+* `ClickHouse`:トレースデータを保存します。次のポッドによってデプロイされました：
+ ** `suse-observability-clickhouse-shard0-<n>`:メインのClickHouseストア
+* `ElasticSearch`:イベントとログを保存します。次のポッドによってデプロイされました：
+ ** `suse-observability-elasticsearch-master-<n>`:メインのElasticsearchストア
+ ** `<release-name>-prometheus-elasticsearch-exporter-*`:Elasticsearchインスタンスのパフォーマンスメトリクスをエクスポートします。
+
+=== インジェスチョンサービス
+
+SUSE Observabilityプラットフォームは、エージェントとOpenTelemetry（OTEL）エージェントによってプッシュされたデータを取得します。インジェスチョンサービスは初期処理を行い、データをストレージに持っていきます。
+
+* `Receiver`:レシーバーはSUSE Observabilityエージェントのコレクション側APIを実装します。それはテレメトリデータ（ログ、イベント、メトリクス、またはトポロジー）を受け入れ、認証し、対応するデータストアまたはKafkaに転送します。単一モードまたは分割モードでデプロイできます：
+ ** `Receiver-Split`:
+  *** `<release-name>-suse-observability-receiver-logs-*`:ログを受信し、Elasticsearchに入れます。
+  *** `<release-name>-suse-observability-receiver-process-agent-*`:プロセスおよびネットワーク接続情報を受信し、Kafkaトピックに転送します。
+  *** `<release-name>-suse-observability-receiver-base`-*:他のすべてのSUSE Observability Agentデータはここを通過します。
+ ** `Receiver-NonSplit`:
+  *** `<release-name>-suse-observability-receiver-*`:すべてのSUSE Observability Agentデータはここを通過します。
+* `OpenTelemetry Collector`:OpenTelemetryエージェントがOpenTelemetryデータをプッシュできるエンドポイントを提供し、プッシュされたデータに基づいてトレース、メトリクス、トポロジーを生成します。
+ ** `suse-observability-otel-collector-0`:OTELコレクターを実装する単一のポッド
+
+=== 処理と提供
+
+SUSE Observabilityプラットフォームは、受信したテレメトリデータに対して相関と監視を行います。結果はAPIを通じて、顧客の要求に応じて提供されます。コアプラットフォームは、分散モードと非分散モードで実行できます。分散モードは、より高いスループットを可能にします。
+
+* `Correlator`:TCP接続情報を相関させてトポロジーに変換します。ポッドによって実装されました：
+ ** `<release-name>-suse-observability-correlate-*`
+* `Events2Elasticsearch`:イベントを処理し、Elasticsearchに保存します：ポッドによって実装されました：
+ ** `<release-name>-suse-observability-e2es-*`
+* `Anomaly Detection`:SUSE Observabilityプラットフォームは、メトリクスに対して異常検知（デフォルトでは無効）を行い、健康違反を生成します：
+ ** `<release-name>-anomaly-detection-spotlight-manager-*`:分散異常検知作業
+ ** `<release-name>-anomaly-detection-spotlight-worker-*`:メトリクスストリームに対して異常検知を行います
+* `Platform-Distributed`:プラットフォームには、主要な処理コンポーネントと提供APIが含まれています。分散モードでは、機能ユニットが分割されます。プラットフォームに属するポッド：
+ ** `<release-name>-suse-observability-api-*`:すべてのデータをユーザーに提供し、StackPackのインストール/アンインストールを管理します。
+ ** `<release-name>-suse-observability-checks-*`:モニターを実行します
+ ** `<release-name>-suse-observability-health-sync-*`:モニターおよびSUSE Observabilityエージェントからの健康（違反）情報を処理し、それをトポロジーに添付します。
+ ** `<release-name>-suse-observability-initializer-*`:データストアとマイグレーションの初期化を調整します
+ ** `<release-name>-suse-observability-notification-*`:健康違反とユーザー設定に基づいて通知を下流システム（Slack/Opsgenieなど）に転送します。
+ ** `<release-name>-suse-observability-slicing-*`:トポロジー履歴を継続的に最適化し、迅速に取得できるようにします。
+ ** `<release-name>-suse-observability-state-*`:健康違反を処理し、それらをコンポーネントの健康に集約します。
+ ** `<release-name>-suse-observability-sync-*`:ユーザー設定と組み合わせたトポロジーデータを処理し、それをトポロジーグラフに変換します。
+* `Platform-Mono`:
+ ** `<release-name>-suse-observability-server-*`:`Platform-Distributed`のセットアップのすべての機能を含みますが、単一のポッド内にあります。
+
+=== その他
+
+* `Routing`:接続を受け入れ、適切なバックエンドサービスにルーティングします：
+ ** `<release-name>-suse-observability-router-`:Envoyに基づくルーター
+* `UI`:ReactベースのUI
+ ** `<release-name>-suse-observability-ui`:静的UIコードとアセットのみを提供し、すべての動的な動作は`api`によって行われます。
+* `Backup/Restore`:さまざまなデータストアのバックアップを行うために、定期的にジョブを実行します。1つのポッドが継続的に実行されています：
+ ** `suse-observability-minio-*`:バックアップストレージと対話するための抽象インターフェースを提供します。
+
+== サブシステム間の関係
+
+問題の根本原因を効果的に見つけるためには、デプロイ時に他のポッドに依存しているポッドを理解することが重要です。以下の図は、ポッド間に存在する可能性のあるTCP接続の概要を示しています。根本原因を探す際には、この依存関係チェーンで「最も低い」ポッドを探すことが理にかなっています。
+
+この図のポッド名は簡潔さのために省略されています。
+
+image::Pod_TCP_diagram.png[ポッドTCP依存関係]

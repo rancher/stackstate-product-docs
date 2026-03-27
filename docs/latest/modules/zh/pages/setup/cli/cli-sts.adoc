@@ -1,0 +1,496 @@
+= CLI: sts
+:revdate: 2025-07-29
+:page-revdate: {revdate}
+:description: {stackstate-product-name}
+
+== 概述
+
+{stackstate-product-name} `sts` CLI 提供了对 {stackstate-product-name} API 功能的便捷访问。它可以用于使用 {stackstate-product-name} 数据进行自动化，配置 {stackstate-product-name} 和开发 StackPacks。
+
+== 先决条件
+
+* **{stackstate-product-name} URL** - 您的 {stackstate-product-name} 实例的 URL（与访问网页界面时使用的 URL 相同）。
+* **API Token** - 用于身份验证的有效 API 词元，可以从您的 {stackstate-product-name} 实例中的 *CLI* 页面获取。
+
+要获取您的 API 词元：
+
+. 登录到您的 {stackstate-product-name} 实例。
+. 导航到 *主菜单* > *CLI*。
+. 复制页面上显示的 API 词元。
+
+== 快速入门
+
+安装和配置 `sts` CLI 的最快方法是使用您 {stackstate-product-name} 实例中可用的预填充命令：
+
+. 登录到您的 {stackstate-product-name} 实例。
+. 导航到 *Main menu* > *CLI*。
+. 复制适合您操作系统的命令并在终端中运行。
+
+这些命令已预填充您特定 {stackstate-product-name} 实例的正确 URL 和 API 词元，使安装和配置成为一步完成。
+
+== 下载 CLI
+
+[tabs]
+====
+Windows::
++
+--
+打开一个 *Powershell* 终端（版本 5.1 或更高）并运行以下步骤。这可以一步一步完成，或者合并为一个脚本。安装后，`sts` 命令将在 Powershell 终端和命令提示符（cmd.exe）中对当前用户可用。
+
+. 为 CLI 设置源版本和目标路径：
++
+[,powershell]
+----
+$CLI_PATH = $env:USERPROFILE +"\stackstate-cli"
+If (!(test-path $CLI_PATH)) { md $CLI_PATH }
+Invoke-WebRequest https://dl.stackstate.com/stackstate-cli/LATEST_VERSION -OutFile $CLI_PATH\VERSION
+$VERSION=type $CLI_PATH\VERSION
+$VERSION=$VERSION -replace "[v]"
+$CLI_DL = "https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.windows-x86_64.zip"
+echo "Installing {stackstate-product-name} CLI v$VERSION to: $CLI_PATH"
+----
+
+. 下载并解压 CLI 到目标 CLI 路径。去除剩余的工件：
++
+[,powershell]
+----
+Invoke-WebRequest $CLI_DL -OutFile $CLI_PATH\stackstate-cli.zip
+Expand-Archive -Path "$CLI_PATH\stackstate-cli.zip" -DestinationPath $CLI_PATH -Force
+rm $CLI_PATH\stackstate-cli.zip, $CLI_PATH\VERSION
+----
+
+. 将 CLI 路径注册到当前用户的 PATH 中。这将使得 `sts` 命令在任何地方可用：
++
+[,powershell]
+----
+$PATH = (Get-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH).Path
+if ( $PATH -notlike "*$CLI_PATH*" ) {
+  $PATH = "$PATH;$CLI_PATH"
+  (Set-ItemProperty -Path "Registry::HKEY_CURRENT_USER\Environment" -Name PATH –Value $PATH)
+  $MACHINE_PATH = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH).path
+  $env:Path = "$PATH;$MACHINE_PATH"
+}
+----
+
+. 验证 CLI 是否正常工作：
++
+[,powershell]
+----
+sts version
+----
+--
+
+macOS::
++
+--
+打开终端并运行以下步骤。这可以一步一步完成，也可以作为一个完整的脚本一起完成。安装后，`sts` 命令将对当前用户可用。
+
+. 下载适用于 x86_64（Intel）或 arm64（M1）的最新 CLI 版本。
++
+[,bash]
+----
+(VERSION=`curl https://dl.stackstate.com/stackstate-cli/LATEST_VERSION` &&
+  VERSION=${VERSION#v} &&
+  ARCH=`uname -m` &&
+  curl https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.darwin-$ARCH.tar.gz | tar xz --directory /usr/local/bin)
+----
+
+. 验证 CLI 是否正常工作：
++
+[,bash]
+----
+sts version
+----
+--
+
+Linux::
++
+--
+打开终端并运行以下步骤。这可以一步一步完成，也可以作为一个完整的脚本一起完成。安装后，`sts` 命令将对当前用户可用。
+
+. 下载并解压适用于 x86_64 的最新版本：
++
+[,bash]
+----
+(VERSION=`curl https://dl.stackstate.com/stackstate-cli/LATEST_VERSION` && VERSION=${VERSION#v} &&
+curl https://dl.stackstate.com/stackstate-cli/v$VERSION/stackstate-cli-$VERSION.linux-x86_64.tar.gz | tar xz --directory /usr/local/bin)
+----
+
+. 验证 CLI 是否正常工作：
++
+[,bash]
+----
+sts version
+----
+--
+
+Docker::
++
+--
+要使用 Docker 运行最新版本的 CLI，请执行：
+
+[,bash]
+----
+docker run stackstate/stackstate-cli2
+----
+
+或者，前往 {stackstate-product-name} 界面中的 *CLI* 页面，复制 *快速安装* 命令用于 *Docker*——该命令已预填充正确的 `<URL>` 和 `<API-TOKEN>`，用于配置 CLI 以适应您的 {stackstate-product-name} 实例。
+
+您现在可以通过将 CLI 命令附加到 `docker run` 命令的末尾来运行 CLI 命令（例如，`docker run stackstate/stackstate-cli2 version`）。
+--
+====
+
+== 配置 CLI
+
+=== 身份验证
+
+==== API 词元
+
+默认情况下，CLI 将使用您在保存 CLI 配置时提供的 API 词元进行身份验证。
+
+[CAUTION]
+====
+使用环境变量是使用 API 词元的最安全方式。您可以将 API 词元存储在秘密管理器中，并将其作为环境变量注入到您的 shell 中。
+====
+
+[tabs]
+====
+Windows / macOS / Linux::
++
+--
+. 在 {stackstate-product-name} 界面中，前往 *主菜单* > *CLI* 并复制您的 API 词元。
+. 运行以下命令，其中 `<URL>` 是您 {stackstate-product-name} 实例的 URL，`<API-TOKEN>` 是您从 {stackstate-product-name} 界面中的 CLI 页面复制的 API 词元：
++
+[,bash]
+----
+sts context save --name <NAME> --url <URL> --api-token <API-TOKEN>
+----
+
+. 将测试与您的 {stackstate-product-name} 实例的连接，并在 `~/.config/stackstate-cli/config.yaml` 存储配置文件。
+--
+
+Docker::
++
+--
+CLI 的 Docker 版本无法使用配置文件进行配置。使用环境变量指定您的 {stackstate-product-name} 实例的配置，并将这些传递给 Docker：
+
+* `STS_CLI_URL` - 您的 {stackstate-product-name} 实例的 URL。
+* `STS_CLI_API_TOKEN` - 从 {stackstate-product-name} 用户界面 *Main menu* > *CLI* 页面获取的 API 词元。
+* `STS_CA_CERT_PATH` - 用于使用自签名证书的服务器的 PEM 编码 CA 证书文件的路径。包含证书的目录必须挂载到 Docker 容器中。
+* `STS_CA_CERT_BASE64_DATA` - 用于使用自签名证书的服务器的 base64 编码 CA 证书数据（如果指定了 `STS_CA_CERT_PATH` 则忽略）。
+* `STS_SKIP_SSL` - 禁用 SSL 证书验证（忽略证书配置，请谨慎使用）。
+
+例如：
+
+[,bash]
+----
+docker run \
+   -v /path/to/certs:/certs \
+   -e STS_CLI_URL \
+   -e STS_CLI_API_TOKEN \
+   -e STS_CA_CERT_PATH=/certs/ca.crt \
+   stackstate/stackstate-cli2 settings list --type Layer
+----
+--
+====
+
+==== 服务词元
+
+您可以选择使用 CLI 创建一个或多个服务词元，以便与 {stackstate-product-name} 基础和管理 API 进行身份验证。例如，服务词元可以用于在没有真实用户在 {stackstate-product-name} 实例上执行操作的 CI（持续集成）场景中进行身份验证。
+
+要创建服务词元，请运行以下命令：
+
+[,bash]
+----
+sts service-token create --name <NAME> --roles <ROLE(s)> [--expiration <yyyy-MM-dd>]
+----
+
+这将创建一个新的服务词元并打印出来。`--expiration` 参数是可选的，可用于设置服务词元的到期日期。
+
+一旦您拥有这个，您可以配置 CLI 使用它：
+
+[,bash]
+----
+sts context save --name <NAME> --service-token <TOKEN> --url <URL>
+----
+
+=== 管理多个上下文
+
+`sts` CLI 支持不同（身份验证）上下文的配置和管理。这使您可以轻松在管理员和普通用户之间切换，或在不同的 {stackstate-product-name} 实例之间切换。例如，您可以为 {stackstate-product-name} 的测试和生产实例使用不同的上下文。您可以在 `sts` CLI 中列出、保存、删除、设置和验证上下文。运行 `sts context -h` 以获取可用命令及其用法的详细信息。
+
+=== 配置选项
+
+您不需要配置文件即可运行 `sts` CLI。您还可以通过环境变量和标志的组合来配置 CLI。
+
+如果向 CLI 提供多种类型的配置，处理顺序将是：
+
+. 标志
+. 环境变量
+. 配置文件
+
+|===
+| 环境变量 | 标志 | 说明
+
+| `STS_CLI_URL`
+| `--url`
+| 指向您的 {stackstate-product-name} 实例的 API 词元。
+
+| `STS_CLI_API_TOKEN`
+| `--api-token`
+| 指向您的 {stackstate-product-name} 实例的 API 词元。使用环境变量是使用 API 词元的最安全方式。您可以将 API 词元存储在秘密管理器中，并将其作为环境变量注入到您的 shell 中。
+
+| `STS_CLI_SERVICE_TOKEN`
+| `--service-token`
+| 指向您的 {stackstate-product-name} 实例的服务词元。使用服务词元的最安全方式是通过环境变量。您可以将服务词元存储在秘密管理器中，并将其作为环境变量注入到您的 shell 中。
+
+| `STS_CA_CERT_PATH`
+| `--ca-cert-path`
+| 用于自签名证书或来自私有 CA 的证书的服务器的 PEM 编码 CA 证书文件的路径。
+
+| `STS_CA_CERT_BASE64_DATA`
+| `--ca-cert-base64-data`
+| 用于自签名证书或来自私有 CA 的证书的服务器的 Base64 编码 CA 证书数据。如果指定了 `STS_CA_CERT_PATH`，则忽略。
+
+| `STS_SKIP_SSL`
+| `--skip-ssl`
+| 禁用 SSL 证书验证。当设置为 `true` 时，CLI 将不验证 SSL 证书，并将忽略 `STS_CA_CERT_PATH` 和 `STS_CA_CERT_BASE64_DATA` 设置。请谨慎使用，因为这会降低安全性。
+
+| `STS_CLI_API_PATH`
+| 无
+| 附加到 URL 末尾以获取 API 端点的路径。（默认为 `/api`）
+
+| `STS_CLI_CONTEXT`
+| `--context`
+| 要使用的上下文名称。
+|===
+
+除了覆盖配置文件的特定部分外，还可以覆盖默认配置文件位置。这是通过 `--config <PATH>` 标志完成的。
+
+== 可用的命令
+
+`sts` CLI 提供以下顶级命令：
+
+|===
+| 命令 | 说明
+
+| 代理
+| 管理 {stackstate-product-name} 代理
+
+| completion
+| 为 shell 生成自动补全脚本
+
+| 环境
+| 管理 CLI 上下文和配置
+
+| 仪表盘
+| 管理仪表盘
+
+| 状态
+| 与健康同步相关的命令
+
+| 许可证
+| 管理 {stackstate-product-name} 许可证信息
+
+| monitor
+| 管理监视器和监视配置
+
+ifdef::ss-ff-stackpacks2_enabled[]
+| otel-component-mapping*
+| 管理 OpenTelemetry 组件映射
+
+| otel-relation-mapping*
+| 管理 OpenTelemetry 关系映射
+endif::ss-ff-stackpacks2_enabled[]
+
+| rbac
+| 管理 RBAC
+
+| service-token
+| 管理服务令牌。
+
+| 设置
+| 管理实例设置和配置
+
+| stackpack
+| 管理和上传 StackPacks
+
+| 主题
+| 管理 Kafka 主题
+
+| 拓扑同步
+| 管理拓扑同步
+
+| 用户会话
+| 检查用户会话
+
+| version
+| 显示版本信息
+|===
+
+ifdef::ss-ff-stackpacks2_enabled[]
+{empty}* 需要启用 `STS_EXPERIMENTAL_OTEL_MAPPING=true` 环境变量的实验性命令。
+
+示例用法：
+
+[,bash]
+----
+STS_EXPERIMENTAL_OTEL_MAPPING=true sts otel-component-mapping --help
+----
+endif::ss-ff-stackpacks2_enabled[]
+
+所有命令都接受 `--help` 标志，该标志记录每个命令的用法。
+
+要获取有关任何命令及其子命令的详细信息，请运行：
+
+[,bash]
+----
+sts [command] --help
+----
+
+== 升级
+
+要升级到最新版本的 `sts` CLI，请 <<_quick_start, 再次运行安装命令>>。
+
+您可以使用命令 `sts version` 检查当前运行的 `sts` CLI 的版本。
+
+== 卸装
+
+[tabs]
+====
+Windows::
++
+--
+[discrete]
+=== 快速卸载
+
+打开一个 *Powershell* 终端并运行：
+
+[,powershell]
+----
+. { iwr -useb https://dl.stackstate.com/stackstate-cli/install.ps1 } | iex; uninstall
+----
+
+当前用户的 `sts` CLI 及所有相关配置已被去除。
+
+[discrete]
+=== 手动卸载
+
+打开一个 *Powershell* 终端并逐步或一次性运行每个步骤。当前用户的 `sts` CLI 及所有相关配置将被去除。
+
+. 去除二进制文件：
++
+[,powershell]
+----
+$CLI_PATH = $env:USERPROFILE+"\stackstate-cli"
+rm -R $CLI_PATH 2>1  > $null
+----
+
+. 去除配置：
++
+[,powershell]
+----
+rm -R $env:USERPROFILE+"\.config\stackstate-cli" 2>1  > $null
+----
+
+. 从环境路径中去除 CLI：
++
+[,powershell]
+----
+$PATH = (Get-ItemProperty -Path 'Registry::HKEY_CURRENT_USER\Environment' -Name PATH).Path
+$i = $PATH.IndexOf(";$CLI_PATH")
+if ($i -ne -1) {
+  $PATH = $PATH.Remove($i, $CLI_PATH.Length+1)
+  (Set-ItemProperty -Path 'Registry::HKEY_CURRENT_USER\Environment' -Name PATH –Value $PATH)
+}
+----
+--
+
+macOS::
++
+--
+[discrete]
+=== 快速卸载
+
+打开终端并运行：
+
+[,bash]
+----
+curl -o- https://dl.stackstate.com/stackstate-cli/uninstall.sh | bash
+----
+
+当前用户的 `sts` CLI 及所有相关配置已被去除。
+
+[discrete]
+=== 手动卸载
+
+. 打开终端。
+. 要去除 `sts` CLI，请运行以下命令：
++
+[,bash]
+----
+rm -r /usr/local/bin/sts
+----
+
+. 要去除 `sts` CLI 的配置，请运行以下命令：
++
+[,bash]
+----
+rm -r ~/.config/stackstate-cli
+----
+
+当前用户的 `sts` CLI 及所有相关配置已被去除。
+--
+
+Linux::
++
+--
+[discrete]
+=== 快速卸载
+
+打开终端并运行：
+
+[,bash]
+----
+curl -o- https://dl.stackstate.com/stackstate-cli/uninstall.sh | bash
+----
+
+当前用户的 `sts` CLI 及所有相关配置已被去除。
+
+[discrete]
+=== 手动卸载
+
+. 打开终端。
+. 要去除 `sts` CLI，请运行以下命令：
++
+[,bash]
+----
+rm -r /usr/local/bin/sts
+----
+
+. 要去除 `sts` CLI 的配置，请运行以下命令：
++
+[,bash]
+----
+rm -r ~/.config/stackstate-cli
+----
+
+当前用户的 `sts` CLI 及所有相关配置已被去除。
+--
+
+Docker::
++
+--
+要去除 CLI 镜像和容器，请运行：
+
+[,bash]
+----
+docker rmi -f stackstate/stackstate-cli2
+----
+--
+====
+
+== 开放源代码
+
+{stackstate-product-name} `sts` CLI 是开源的，可以在 GitHub 上找到：
+
+* https://github.com/stackvista/stackstate-cli

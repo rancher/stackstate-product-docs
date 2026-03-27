@@ -1,0 +1,91 @@
+= Ámbitos de topología
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability autoalojada
+
+WARNING: La delimitación de topología por consulta es una funcionalidad que queda obsoleta. Está reemplazada por el permiso `get-topology` que puede otorgar acceso a cualquier componente con una etiqueta específica.
+
+== ¿Cómo funcionan los ámbitos de topología?
+
+El ámbito de topología es una xref:/develop/reference/k8sTs-stql_reference.adoc[consulta STQL] que se combina con los permisos `get-topology` como prefijo para cada consulta de topología ejecutada en SUSE Observability. Cuando un usuario quiere seleccionar una vista o pasar una consulta en SUSE Observability, esta consulta de prefijo se ejecuta como parte de la consulta del usuario. Esto limita los resultados para que coincidan con el rol del usuario.
+
+NOTE: Las llamadas a funciones como `withCauseOf` y `withNeighborsOf` no son compatibles ya que no serían eficientes en este contexto.
+
+Si un usuario pertenece a múltiples grupos, puede tener múltiples ámbitos de topología, lo que se traduce en múltiples prefijos. Aquí, el prefijo se ejecuta como un OR de todos los ámbitos de topología que tiene el usuario.
+
+Los usuarios necesitan cerrar sesión y autenticarse nuevamente en SUSE Observability cada vez que cambian sus roles o permisos.
+
+== ¿Por qué ámbitos de topología?
+
+Los ámbitos de topología son una característica de seguridad para los sujetos dentro de SUSE Observability. Los roles predefinidos de SUSE Observability Administrador, Usuario Avanzado y Invitado no tienen un ámbito de topología definido.
+
+Es posible especificar un ámbito de topología como un comodín de consulta, sin embargo, esto resulta en acceso a todo y no se recomienda. Si hay necesidad de acceso sin un ámbito de topología, se recomienda utilizar uno de los xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[roles predefinidos] en su lugar.
+
+== Ejemplos
+
+El siguiente ejemplo muestra la misma vista de topología llamada "Toda la Infraestructura" para cuatro usuarios con diferentes niveles de permiso.
+
+=== Este usuario es parte del grupo de administradores de SUSE Observability, por lo que no hay ámbito de topología:
+
+image::v51_allperm.png[Permisos de vista completa]
+
+La consulta para esta vista es la misma que para las demás, pero sin ningún prefijo:
+
+[,text]
+----
+'layer = "Infrastructure" AND domain IN ("Customer1", "Customer2")'
+----
+
+=== El usuario a continuación está en un grupo con el sujeto configurado X con el siguiente ámbito de topología:
+
+[,text]
+----
+'domain = "Customer1"'
+----
+
+image::v51_esx1perm.png[Vista limitada]
+
+La consulta con el prefijo para esta vista es:
+
+[,text]
+----
+'(domain = "Customer1") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Otro usuario que forma parte de un grupo con un sujeto configurado Y que tiene el siguiente ámbito de topología:
+
+[,text]
+----
+'domain = "Customer2"'
+----
+
+obtiene esta topología:
+
+image::v51_esx2perm.png[Vista limitada]
+
+La consulta con el prefijo para esta vista es:
+
+[,text]
+----
+'(domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Usuario con múltiples prefijos
+
+Es posible asignar un sujeto a más de un grupo. En este ejemplo, puedes ver a un Gestor de Infraestructura que puede ver toda la vista presentada arriba. Este usuario tiene que estar en ambos grupos que tienen sujetos configurados como X e Y. En este caso, el prefijo para la consulta del usuario será el siguiente:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2")'
+----
+
+La consulta con prefijo para este usuario es entonces:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+Lo que resulta en la siguiente vista:
+
+image::v51_allperm.png[Permisos de vista completa]

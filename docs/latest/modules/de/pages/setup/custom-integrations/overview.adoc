@@ -1,0 +1,58 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Übersicht über benutzerdefinierte Integrationen
+:revdate: 2026-01-06
+:page-revdate: {revdate}
+:description:  Übersicht über benutzerdefinierte Integrationen
+
+[IMPORTANT]
+====
+Benutzerdefinierte Integrationen sind eine Funktion in der Vorproduktionsphase, die noch nicht veröffentlicht wurde, und können daher während der Weiterentwicklung einschneidende Änderungen erfahren. Sie sind nicht für die Nutzung in Produktionsumgebungen vorgesehen. Sie können jedoch in Nicht-Produktionsumgebungen getestet werden.
+====
+
+== Übersicht
+
+Benutzerdefinierte Integrationen nutzen Open Telemetry, um Telemetriedaten (Metriken, Traces, Protokolle) aus verschiedenen Quellen zu sammeln und an {stackstate-product-name} zu senden. Durch die Verwendung von Open Telemetry können Benutzer ihre Anwendungen und Dienste instrumentieren, um Einblicke in Leistung, Zuverlässigkeit und betriebliche Gesundheit zu gewinnen.
+Auf der {stackstate-product-name} Seite verarbeitet das xref:setup/custom-integrations/otelmappings/README.adoc[Open Telemetry Mappings] die eingehenden Telemetriedaten, wendet die erforderlichen Transformationen an und ordnet sie den entsprechenden Entitäten innerhalb von {stackstate-product-name} zu. xref:use/alerting/k8s-add-monitors-cli.adoc[Monitore über die Kommandozeilenschnittstelle hinzufügen], xref:setup/custom-integrations/metric-bindings/index.adoc[Metrikbindungen] und xref:setup/custom-integrations/ui-presentation/README.adoc[UI-Präsentation] können definiert werden, um die aufgenommenen Telemetriedaten in der UI darzustellen, Alarme hinzuzufügen und Einblicke zu ermöglichen. Alles wird in einem xref:setup/custom-integrations/develop.adoc[Stackpack] für die Verteilung verpackt.
+
+== Entwicklungs-Setup
+
+Benutzerdefinierte Integrationen sollten gegen eine Vorproduktions-Implementierung der {stackstate-product-name} Plattform entwickelt werden. Um ein Vorproduktionssetup zu erhalten, mit dem Sie Ihre benutzerdefinierte Integration entwickeln können, gibt es zwei Optionen:
+
+=== SaaS-Instanz (empfohlen):
+Für interne SUSE-Teams empfehlen wir, eine SaaS-Instanz vom {stackstate-product-name} Team anzufordern. Diese Instanzen haben benutzerdefinierte Integrationen aktiviert und werden automatisch mindestens mit jeder neuen Version aktualisiert; in einigen Fällen erhalten sie Vorabversionen mit wichtigen Fehlerkorrekturen oder Erweiterungen experimenteller Funktionen.
+Kontaktieren Sie uns über den speziellen Kanal (wird bekannt gegeben).
+
+=== Selbst gehostet:
+Sie können benutzerdefinierte Integrationen in Ihrer eigenen selbst gehosteten {stackstate-product-name} Installation aktivieren, indem Sie beim Installieren über Helm einige Feature-Flags setzen:
+
+    . Generieren Sie das `custom_integrations_values.yaml`. Dieser Leitfaden geht davon aus, dass Sie es im `$VALUES_DIR` speichern.
+
++
+.$VALUES_DIR/custom_integrations_values.yaml
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
++
+
+    . Bereitstellen des {stackstate-product-name} Helm-Charts mit den generierten Werten sowie dem `.$VALUES_DIR/custom_integrations_values.yaml`
+
++
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/custom_integrations_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
++
+
+endif::ss-ff-stackpacks2_enabled[]

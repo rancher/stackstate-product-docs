@@ -1,0 +1,106 @@
+= Kubernetes ログ
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability セルフホスト型 v5.1.x
+
+== 概要
+
+Kubernetes 環境では、SUSE Observability 機能は異なるポッドに分散され、各機能のログはポッドおよびコンテナごとに保存されます。最近のログには `kubectl` を使用してアクセスできますが、長期保存のためにはログ集約を設定することをお勧めします。
+
+== ログ用の Kubernetes ポッド
+
+SUSE Observability のログはポッドおよびコンテナごとに保存されます。以下の表は、特定の SUSE Observability 機能に関連するログにアクセスするためのポッドを示しています。実際のポッド名には番号やランダムな文字列のサフィックス（例えば、`stackstate-receiver-5b9d79db86-h2hkz`）が含まれ、SUSE Observability がデプロイされた際に指定されたリリース名がプレフィックスとして含まれる場合がありますのでご注意ください。
+
+[NOTE]
+====
+ポッドに保存されたログは定期的に削除されることに注意してください。ログへの長期アクセスのためには、Kubernetes クラスター用に <<_log_aggregation,ログ集約>> を設定することをお勧めします。
+====
+
+
+|===
+| SUSE Observability 機能 | ポッド上のログ
+
+| API（トポロジー、チャート、設定を含む）
+| `stackstate-api`
+
+| Elasticsearch へのデータインデックス作成
+| `stackstate-e2es`（イベント）
+
+| データ取り込み
+| `stackstate-receiver`
+
+| イベントハンドラー
+| `stackstate-view-health`
+
+| モニタ
+| `stackstate-checks`
+
+| 状態伝播
+| `stackstate-state`
+
+| 同期
+| `stackstate-sync`
+
+| ヘルス状態の表示
+| `stackstate-view-health`
+|===
+
+特定のポッド上のログには `kubectl logs` コマンドを使用してアクセスできます。
+
+次に例を示します。
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== 最近のログにアクセスする
+
+=== ポッドまたはコンテナのログ
+
+最も最近のログは、`kubectl logs` コマンドを使用して Kubernetes から取得できます。特定のログを取得するには、監視対象の<<_kubernetes_pods_for_logging,ポッド>>を確認してください。
+
+次に例を示します。
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== 同期ログ
+
+すべての同期ログは、ポッド `stackstate-sync-<suffix>` にあります。同期名を使用して、ログスナップショット内の特定のログ情報を見つけることができます。
+
+次に例を示します。
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== ログ集約
+
+SUSE Observability ログデータの長期保存のために、Kubernetes クラスターでログ集約を設定することをお勧めします。これは、Elasticsearch、Splunk、Logz.ioなどのストレージ用のサードパーティシステムと、LogstashやFluentdなどのログシッパーを使用して行うことができます。
+
+これを行う方法の詳細については、次を確認してください：
+
+* https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)]でログを送信する
+* https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[Elasticsearch へのログ集約 (bitnami.com)]の設定に関する完全な概要
+
+== 関連項目
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[kubectl コマンドリファレンス (kubernetes.io/docs)]

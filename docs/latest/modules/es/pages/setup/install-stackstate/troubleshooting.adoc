@@ -1,0 +1,51 @@
+= Solución de problemas
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Guía rápida de solución de problemas
+
+Aquí hay una guía rápida para solucionar problemas del inicio de SUSE Observability:
+
+. Verifica que la instalación se haya completado con éxito y que la versión esté listada:
++
+[,text]
+----
+helm list --namespace suse-observability
+----
+
+. Verifica que todos los pods en el espacio de nombres de SUSE Observability estén en ejecución:
++
+[,text]
+----
+kubectl get pods
+----
++
+En un primer despliegue, puede ser que los contenedores en varios pods se reinicien varias veces, porque están esperando a que otros pods se inicien y estén en el estado `ready`. Esto puede retrasarse debido a la programación y a los retrasos en la descarga de imágenes de docker.
++
+Los pods que están en estado `pending` suelen ser un indicativo de un problema:
+
+ ** El pod no se puede programar debido a la falta de recursos en el clúster. Si un autoescalador de clúster está activo, a menudo podrá resolver esto automáticamente; de lo contrario, se necesita intervención manual para añadir más nodos al clúster.
+ ** El pod no se puede programar, hay nodos en los que podría encajar, pero esos nodos tienen `taints` que el pod no tolera. Para resolver esto, se pueden añadir más nodos que no tengan las taints, pero SUSE Observability también puede ser xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_override_default_configuration[configurado] para tolerar ciertas taints y ejecutarse en los nodos con taints.
+ ** El pod está esperando a que se monten los Volúmenes Persistentes (PVs). Una causa puede ser que el gráfico de Helm de SUSE Observability no especifique un `storageClassName` pero dependa de que el clúster tenga una clase de almacenamiento por defecto. Cuando no hay un valor por defecto para el clúster, es necesario xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[especificar una clase de almacenamiento] a través de los valores de Helm de SUSE Observability.
+
++
+Para los pods con estado `ImagePullBackOff`, también verifica el mensaje de error exacto; las causas comunes son:
+
+ ** Un nombre de usuario y contraseña incorrectos utilizados para descargar las imágenes.
+ ** La conexión al registro de Docker falló, esto puede deberse a problemas de autenticación o a problemas de conectividad (firewalls, entornos aislados).
+ ** Un error tipográfico en la URL del registro de imágenes de Docker sobreescrito.
+
++
+Para averiguar una causa más detallada de los estados `Pending`, `ImagePullBackOff` o `CrashLoopBackOff`, utiliza este comando:
++
+[,text]
+----
+kubectl describe pod <pod-name>
+----
++
+La salida contiene una sección `event` al final que generalmente contiene el problema. También tiene una sección `State` para cada contenedor que tiene más detalles sobre la terminación del contenedor.
+
+. Cuando sois un cliente preferente, contactad con el soporte de SUSE Observability en https://scc.suse.com/ para obtener ayuda configurando SUSE Observability en vuestro clúster local. Usad xref:/setup/install-stackstate/support-package-logs.adoc[paquete de soporte (Registros)] para recopilar información sobre vuestra instancia para el equipo de soporte.
+. Si el problema está relacionado con el rendimiento, ejecutad xref:/setup/install-stackstate/support-package-performance.adoc[paquete de soporte (Rendimiento)] para investigar activamente el rendimiento.
+. En caso de que los pasos anteriores no resolvieran el problema, hay una xref:/setup/install-stackstate/advanced-troubleshooting.adoc[Guía Avanzada de Solución de Problemas] disponible.

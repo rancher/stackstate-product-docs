@@ -1,0 +1,91 @@
+= 拓扑范围
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+WARNING: 通过查询进行拓扑范围设置的功能已被弃用。它被`get-topology`权限所取代，该权限可以授予对具有特定标签的任何组件的访问权限。
+
+== 拓扑范围是如何工作的？
+
+拓扑范围是一个xref:/develop/reference/k8sTs-stql_reference.adoc[STQL查询]，与`get-topology`权限结合，作为每个在SUSE Observability中执行的拓扑查询的前缀。当用户想要在SUSE Observability中选择视图或传递查询时，这个前缀查询会作为用户查询的一部分运行。这限制了结果以匹配用户的角色。
+
+NOTE: 像`withCauseOf`和`withNeighborsOf`这样的函数调用不被支持，因为在这种情况下它们的性能不佳。
+
+如果用户属于多个组，他们可以拥有多个拓扑范围，这意味着多个前缀。在这里，前缀以逻辑“或”方式合并了用户拥有的所有拓扑范围。
+
+每当用户的角色或权限发生变化时，用户需要注销并重新认证到SUSE Observability。
+
+== 为什么要使用拓扑范围？
+
+拓扑范围是SUSE Observability中主体的安全特性。预定义的SUSE Observability角色管理员、高级用户和访客没有定义拓扑范围。
+
+可以将拓扑范围指定为查询通配符，但这会导致访问所有内容，不推荐使用。如果需要在没有拓扑范围的情况下访问，建议使用其中一个xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[预定义角色]。
+
+== 示例
+
+下面的示例展示了四个权限级别不同的用户使用相同的拓扑视图“所有基础设施”。
+
+=== 该用户是SUSE Observability管理员组的一部分，因此没有拓扑范围：
+
+image::v51_allperm.png[完整视图权限]
+
+该视图的查询与其他视图相同，但没有任何前缀：
+
+[,text]
+----
+'layer = "Infrastructure" AND domain IN ("Customer1", "Customer2")'
+----
+
+=== 下面的用户属于一个配置了主体X的组，该组具有以下拓扑范围：
+
+[,text]
+----
+'domain = "Customer1"'
+----
+
+image::v51_esx1perm.png[有限视图]
+
+此视图的查询前缀为：
+
+[,text]
+----
+'(domain = "Customer1") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== 另一个用户属于一个配置了主体Y的组，该组具有以下拓扑范围：
+
+[,text]
+----
+'domain = "Customer2"'
+----
+
+获取此拓扑：
+
+image::v51_esx2perm.png[有限视图]
+
+此视图的查询前缀为：
+
+[,text]
+----
+'(domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== 具有多个前缀的用户
+
+可以将一个主体分配给不止一个组。在这个例子中，您可以看到一个基础设施管理员，他可以看到上面呈现的整个视图。该用户必须同时属于配置了主体X和主体Y的两个组。在这种情况下，用户查询的前缀将如下所示：
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2")'
+----
+
+该用户的查询前缀为：
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+这导致以下视图：
+
+image::v51_allperm.png[完整视图权限]

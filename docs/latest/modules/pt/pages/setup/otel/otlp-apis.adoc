@@ -1,0 +1,73 @@
+= SUSE Observability suporte ao Protocolo OpenTelemetry
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observability suporta 2 versões do protocolo OTLP, a versão `grpc` (também referida como OTLP) e `http/protobuf` (também referida como OTLP sobre HTTP). Na configuração do coletor, você pode escolher qual exportador usar, mas certifique-se de configurar a URL correta para o SUSE Observability. A versão `grpc` do protocolo é preferida, permite cargas úteis maiores e taxa de transferência mais alta. Mas em caso de suporte inadequado para `grpc` em sua infraestrutura, você pode alternar para a versão HTTP. Veja também xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[solução de problemas]
+
+== SUSE Cloud Observability
+
+Os endpoints para SUSE Cloud Observability são:
+
+* OTLP: `otlp-<your-suse-observability>.app.stackstate.io:443` (sem o esquema de URL)
+* OTLP sobre HTTP: `https://otlp-http-<your-suse-observability>.app.stackstate.io` (com o esquema de URL: `https`)
+
+== SUSE Observability auto-hospedado
+
+Para uma instalação auto-hospedada, você precisa habilitar um dos endpoints, ou ambos, configurando o ingresso para o SUSE Observability como xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_rule_for_open_telemetry[descrito aqui].
+
+Quando o SUSE Observability está rodando no mesmo cluster que o coletor, você também pode usá-lo sem ingresso, utilizando os endpoints de serviço, no entanto, isso só é possível usando o protocolo HTTP:
+
+* OTLP sobre HTTP: `http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4318`
+
+Certifique-se de definir `insecure: true` na configuração do coletor (veja a próxima seção) para permitir o uso de endpoints http simples em vez de https. 
+
+O protocolo GRPC não suporta o envio de credenciais por uma conexão insegura, portanto, você só pode usá-lo em combinação com uma configuração de ingresso seguro.
+
+== Configuração do coletor
+
+=== Protocolo OTLP
+
+Os exemplos na configuração do coletor usam o protocolo OTLP assim:
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+    endpoint: <otlp-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+=== Protocolo OTLP HTTP
+
+Para usar o protocolo OTLP sobre HTTP, use o exportador `otlphttp` em vez disso. Atualize também todas as referências de exportador em seus pipelines de `otlp/suse-observability` para `otlphttp/suse-observability`! Use uma busca/substituição para garantir que você mude todas as ocorrências.
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlphttp/stackstate:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp-http endpoint, for example https://otlp-http-suse-observability.my.company.com:443
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable TLS entirely:
+    #  insecure: true
+    # To disalbe certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+Há mais configurações disponíveis para controlar os requisitos exatos e o comportamento do exportador. Por exemplo também é possível usar um certificado raiz CA personalizado ou habilitar certificados de cliente. Veja a documentação do https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlpexporter/README.md[exportador OTLP] para os detalhes.

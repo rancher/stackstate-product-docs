@@ -1,0 +1,155 @@
+= Instalación del Agente de SUSE Observability en un entorno aislado
+:revdate: 2025-07-18
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Este documento proporciona una guía paso a paso para instalar el SUSE Observability Agent utilizando gráficos de Helm en un entorno aislado. El proceso de instalación implica preparar las imágenes de Docker necesarias y el gráfico de Helm en un host con acceso a Internet, transferirlas a un host dentro de una red privada, subir las imágenes de Docker a un registro privado y desplegar los gráficos de Helm. Los privilegios requeridos para instalar el agente se pueden encontrar aquí xref:/k8s-suse-rancher-prime.adoc#_required_privileges[aquí]
+
+== Requisitos previos
+
+=== En el Host Local (Acceso a Internet)
+
+* *Sistema operativo*: Linux o MacOS
+* *Herramientas Instaladas*:
+ ** https://www.docker.com/products/docker-desktop/[Docker]
+ ** https://helm.sh/docs/intro/install/[Helm cli]
+ ** Scripts para descargar imágenes de Docker del registro fuente (los enlaces se proporcionarán más adelante en la guía).
+* *Acceso a Internet*: Requerido para obtener imágenes de Docker de Quay.io y gráficos de Helm de ChartMuseum.
+
+=== En el Host de Red Privada
+
+* *Acceso*: Acceso SSH al host.
+* *Herramientas Instaladas*:
+ ** https://www.docker.com/products/docker-desktop/[Docker]
+ ** https://helm.sh/docs/intro/install/[Helm cli]
+ ** Scripts para descargar imágenes de Docker del registro fuente (los enlaces se proporcionarán más adelante en la guía).
+ ** Acceso a la red y credenciales para subir imágenes a un registro privado de Docker.
+ ** Un Kubeconfig configurado para instalar los gráficos de Helm en los clústeres de destino.
+
+== Preparando las Imágenes de Docker y el Gráfico de Helm
+
+Ejecuta los siguientes comandos en el host local para obtener las imágenes de Docker y los gráficos de Helm necesarios:
+
+*Añadiendo Repositorios de Helm a la Caché Local de Helm:*
+
+[,bash]
+----
+# Adding the Helm repository for the SUSE Observability Agent
+helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+helm repo update
+----
+
+*Obteniendo la Última Versión del Gráfico*
+
+El siguiente comando descargará un archivo TGZ del gráfico desde el repositorio de Helm:
+
+[,bash]
+----
+# Downloading the chart for the SUSE Observability Agent
+# The file will be named stackstate-agent-X.Y.Z.tgz
+helm fetch suse-observability/suse-observability-agent
+----
+
+*Obteniendo los scripts de Bash para guardar las imágenes de Docker.*
+
+[,bash]
+----
+# o11y-agent-get-images.sh
+curl -LO https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability-agent/installation/o11y-agent-get-images.sh
+# o11y-agent-save-images.sh
+curl -LO https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability-agent/installation/o11y-agent-save-images.sh
+
+# Make the scripts executable
+chmod a+x o11y-agent-get-images.sh o11y-agent-save-images.sh
+----
+
+*Extrayendo y Guardando Imágenes de Docker*
+
+[,bash]
+----
+# Extract the list of images from the Helm chart and save it to a file.
+./o11y-agent-get-images.sh -f suse-observability-agent-X.Y.Z.tgz > o11y-agent-images.txt
+----
+
+[NOTE]
+====
+Reemplaza `suse-observability-agent-X.Y.Z.tgz` con el nombre de archivo real del archivo del gráfico descargado anteriormente.*
+====
+
+
+[,bash]
+----
+# Save Docker images to an archive.
+# The script expects the file o11y-agent-images.txt to contain the list of images used by the SUSE Observability Agent.
+# The Docker images will be saved to o11y-agent-images.tar.gz.
+./o11y-agent-save-images.sh -i o11y-agent-images.txt -f o11y-agent-images.tar.gz
+----
+
+== Copiando los Archivos Requeridos al Host Remoto
+
+Los siguientes archivos deben ser copiados del host local al host en la red privada:
+
+* o11y-agent-images.txt (Lista de imágenes requeridas por el gráfico de SUSE Observability Agent)
+* o11y-agent-images.tar.gz (Un archivo con las imágenes de Docker de SUSE Observability Agent)
+* https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability-agent/installation/o11y-agent-load-images.sh[o11y-agent-load-images.sh] (Script de Bash para subir imágenes de Docker a un registro)
+* Gráficos de Helm descargados anteriormente:
+ ** suse-observability-agent-X.Y.Z.tgz
+
+== Restaurando Imágenes de Docker desde el Archivo al Registro Privado
+
+*Subiendo las imágenes al registro privado:*
+
+[,bash]
+----
+# Load Docker images from the archive and push them to the private registry.
+# Replace <private-registry> with your private registry's URL.
+export DST_REGISTRY_USERNAME="..."
+export DST_REGISTRY_PASSWORD="..."
+./o11y-agent-load-images.sh -d registry.example.com:5043 -i o11y-agent-images.txt -f o11y-agent-images.tar.gz
+----
+
+[NOTE]
+====
+_Nota: si el registro de destino no utiliza autenticación, las variables de entorno, `DST_REGISTRY_USERNAME` y `DST_REGISTRY_PASSWORD` no deben configurarse o deben establecerse en valores vacíos._
+====
+
+
+== Instalando el Agente de Observabilidad de SUSE
+
+El comando para instalar el Agente de Observabilidad de SUSE debe ser recibido desde la interfaz de usuario de SUSE Observability.
+Inicia sesión en tu instancia y en el menú de la izquierda elige el `Stackpacks`. Presiona `ADD NEW INSTANCE` y completa el nombre del clúster. Para una correcta integración con Rancher, debe ser el mismo que el nombre del clúster en la interfaz de usuario de Rancher.
+
+image::rancher-prime-agent-airgap-01.png[Agregando Nuevo Agente]
+
+Cuando se añade una instancia, la interfaz de usuario proporcionará las instrucciones sobre cómo se puede desplegar el gráfico de Helm. Desplázate hacia abajo hasta la sección `Self-hosted` y copia el comando `helm upgrade ...`.
+
+image::rancher-prime-agent-airgap-02.png[Obteniendo el Comando de Instalación de Helm]
+
+El comando debe ser actualizado para la instalación en un entorno aislado:
+
+* Sobrescribiendo el registro de imágenes con el valor `all.image.registry`.
+* Usando el archivo con el gráfico de Helm en lugar del repositorio de Helm. `suse-observability/suse-observability-agent` \-> `./suse-observability-agent-X.Y.Z.tgz`
+
+Ejecuta el comando para instalar el Agente de Observabilidad de SUSE.
+
+[,bash]
+----
+helm upgrade --install \
+--namespace suse-observability \
+--create-namespace \
+--set-string 'stackstate.apiKey'='<api-key>' \
+--set-string 'stackstate.cluster.name'='<cluster-name>' \
+--set-string 'stackstate.url'='https://...' \
+--set 'nodeAgent.skipKubeletTLSVerify'=true \
+--set-string 'all.image.registry'='registry.acme.com:5000' \
+--set-string 'global.imageRegistry'='registry.acme.com:5000' \
+--set-string 'global.skipSslValidation'=true \
+suse-observability-agent ./suse-observability-agent-X.Y.Z.tgz
+----
+
+*Validando el despliegue*
+
+[,bash]
+----
+kubectl get pod -n suse-observability
+----

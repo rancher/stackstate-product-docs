@@ -1,0 +1,91 @@
+= Topologie-Bereiche
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+WARNING: Das Topologie-Scoping durch Abfragen ist eine ausgelaufene Funktion. Sie wird durch die `get-topology` Berechtigung ersetzt, die den Zugriff auf jede Komponente mit einem bestimmten Label gewähren kann.
+
+== Wie funktionieren Topologie-Bereiche?
+
+Der Topologie-Bereich ist eine xref:/develop/reference/k8sTs-stql_reference.adoc[STQL-Abfrage], die mit den `get-topology` Berechtigungen als Präfix für jede in SUSE Observability ausgeführte Topologie-Abfrage kombiniert wird. Wenn ein Benutzer eine Ansicht auswählen oder eine Abfrage in SUSE Observability übergeben möchte, wird diese Präfix-Abfrage als Teil der Abfrage des Benutzers ausgeführt. Dies beschränkt die Ergebnisse auf die Rolle des Benutzers.
+
+NOTE: Funktionsaufrufe wie `withCauseOf` und `withNeighborsOf` werden nicht unterstützt, da sie in diesem Kontext nicht leistungsfähig wären.
+
+Wenn ein Benutzer mehreren Gruppen angehört, kann er mehrere Topologie-Bereiche haben, was mehreren Präfixen entspricht. Hier wird das Präfix als ein ODER aller Topologie-Bereiche ausgeführt, die der Benutzer hat.
+
+Benutzer müssen sich abmelden und sich erneut bei SUSE Observability authentifizieren, wann immer sich ihre Rollen oder Berechtigungen ändern.
+
+== Warum Topologie-Bereiche?
+
+Topologie-Bereiche sind ein Sicherheitsmerkmal für Subjekte innerhalb von SUSE Observability. Die vordefinierten SUSE Observability-Rollen Administrator, Power User und Gast haben keinen definierten Topologie-Bereich.
+
+Es ist möglich, einen Topologie-Bereich als Abfrage-Wildcard anzugeben, jedoch führt dies zu Zugriff auf alles und wird nicht empfohlen. Wenn ein Zugriff ohne einen Topologie-Bereich erforderlich ist, wird empfohlen, stattdessen eine der xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[vordefinierten Rollen] zu verwenden.
+
+== Beispiele
+
+Das folgende Beispiel zeigt die gleiche Topologie-Ansicht mit dem Namen "Alle Infrastruktur" für vier Benutzer mit unterschiedlichen Berechtigungsstufen.
+
+=== Dieser Benutzer ist Teil der SUSE Observability Admin-Gruppe, daher gibt es keinen Topologie-Bereich:
+
+image::v51_allperm.png[Vollständige Ansichtsberechtigungen]
+
+Die Abfrage für diese Ansicht ist die gleiche wie für die anderen, jedoch ohne Präfix:
+
+[,text]
+----
+'layer = "Infrastructure" AND domain IN ("Customer1", "Customer2")'
+----
+
+=== Der untenstehende Benutzer befindet sich in einer Gruppe mit dem konfigurierten Subjekt X mit dem folgenden Topologie-Bereich:
+
+[,text]
+----
+'domain = "Customer1"'
+----
+
+image::v51_esx1perm.png[Eingeschränkte Ansicht]
+
+Die Abfrage mit dem Präfix für diese Ansicht lautet:
+
+[,text]
+----
+'(domain = "Customer1") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Ein anderer Benutzer, der Teil einer Gruppe mit dem konfigurierten Subjekt Y ist, das den folgenden Topologie-Bereich hat:
+
+[,text]
+----
+'domain = "Customer2"'
+----
+
+erhält diese Topologie:
+
+image::v51_esx2perm.png[Eingeschränkte Ansicht]
+
+Die Abfrage mit dem Präfix für diese Ansicht lautet:
+
+[,text]
+----
+'(domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Benutzer mit mehreren Präfixen
+
+Es ist möglich, ein Subjekt mehreren Gruppen zuzuweisen. In diesem Beispiel sehen Sie einen Infrastrukturmanager, der die gesamte oben dargestellte Ansicht sehen kann. Dieser Benutzer muss in beiden Gruppen sein, die die konfigurierten Subjekte X und Y haben. In diesem Fall wird das Präfix für die Benutzerabfrage wie folgt aussehen:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2")'
+----
+
+Die Abfrage mit dem Präfix für diesen Benutzer lautet dann:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+Was zu folgender Ansicht führt:
+
+image::v51_allperm.png[Vollständige Ansichtsberechtigungen]

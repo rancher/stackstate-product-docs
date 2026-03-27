@@ -1,0 +1,159 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Komponentenpräsentationsschema
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: Komponentenpräsentationsschema
+
+[IMPORTANT]
+====
+*Status:* In aktiver Entwicklung.
+
+*Verfügbarkeit:* Hinter dem StackPacks 2.0-Feature-Flag. Siehe xref:/setup/custom-integrations/overview.adoc[Übersicht über benutzerdefinierte Integrationen], um zu erfahren, wie Sie das Feature aktivieren können.
+
+Diese Dokumentation beschreibt die aktuelle Designabsicht und die hochrangige Konfigurationsoberfläche.
+
+Hinweis: Es wurden noch keine Verhaltensweisen und Funktionen implementiert.
+
+Da sich dieses Feature in aktiver Entwicklung befindet, können sich Verhalten, Schemata und Funktionen ändern, während sich das Modell weiterentwickelt.
+====
+
+== Übersicht
+
+Diese Seite dokumentiert das Konfigurationsschema, das vom UI-Präsentationsmodell verwendet wird.
+Es dient als Referenz für Autoren, die das Verhalten der UI-Präsentation definieren.
+
+Alle hier beschriebenen Schemata sind Teil von *StackPacks 2.0* und befinden sich in aktiver Entwicklung.
+
+== UI-Seiten, die von `ComponentPresentation` befüllt werden
+
+Siehe die folgenden Screenshots, um eine Vorstellung davon zu bekommen, auf welche Seiten und UI-Elemente die `ComponentPresentation`-Konfiguration auf den jeweiligen Seiten zutrifft.
+
+=== Übersichtsseite des Komponententyps
+
+In der folgenden Schema-Referenz sehen Sie den Abschnitt `overview`.
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_overview_page.png[Übersichtsseite]
+
+=== Komponenten-Hervorhebungsseite
+
+In der folgenden Schema-Referenz sehen Sie den Abschnitt `highlight`.
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_highlight_page.png[Hervorhebungsseite]
+
+== Komponentenpräsentation
+
+Ein `ComponentPresentation` definiert, wie übereinstimmende Komponenten in der UI für einen bestimmten Modus und Kontext präsentiert werden.
+
+[,yaml]
+----
+_type: ComponentPresentation
+identifier: urn:...:component-presentation:<presentation-name>
+mode: ["observability" | "security" | "all"]
+
+binding:
+  _type: ComponentPresentationQueryBinding
+  query: string                       # Primitive STQL query used to match components
+
+rank:
+  specificity: number                 # Higher values indicate more specific definitions
+
+presentation:
+  icon: string                        # Optional icon (base64-encoded)
+  name:                               # Optional naming configuration
+    plural: string
+    singular: string
+    title: string
+
+  mainMenu:                           # Optional main menu entry
+    group: string                     # Name of an existing MainMenuGroup
+    rank: number                      # Optional override within the group
+
+  overview:                           # Optional overview page configuration
+    columns:
+      - _type: string                 # ViewTypeTableCol*
+
+  highlight:                          # Optional highlight page configuration
+    summary:
+      ...
+    fields:
+      - _type: string                 # ComponentTypeField
+        fieldId: string
+        label:
+          title: string
+          helpBubbleText: string      # Optional
+        valueExtractor:
+          _type: string
+        display:
+          _type: string
+    about:
+      _type: ComponentTypeAbout
+      fields:
+        - string
+
+  filter:                             # Optional overview filters
+    - _type: FilterField
+      name: string
+      tagField: string
+----
+
+== ID
+
+Bezeichner sollten dem {stackstate-product-name}-Bezeichnerformat (d.h. `urn:...`) folgen. Verweisen Sie auf die Dokumentation zu xref:/configure/topology/identifiers.adoc[Identifikatoren] für weitere Informationen.
+
+== Bindung
+
+Die Bindung bestimmt, auf welche Komponenten sich eine `ComponentPresentation` bezieht.
+
+Bindungen werden gegen die Komponentendaten ausgewertet und müssen einfach und effizient sein, da sie während der UI-Auswertung verwendet werden.
+
+Derzeit unterstützter `binding` Typ:
+
+* `ComponentPresentationQueryBinding`: eine STQL-Abfrage (siehe die xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] für weitere Informationen)
+
+== Rang
+
+Der `rank` Abschnitt steuert, wie mehrere übereinstimmende `ComponentPresentation` Definitionen kombiniert werden.
+
+Höhere Spezifitätswerte zeigen spezialisiertere Definitionen an und haben Vorrang vor niedrigeren Werten bei der Zusammensetzung des Präsentationsverhaltens.
+
+== Präsentationsabschnitte
+
+Alle Felder unter `presentation` sind optional. Eine `ComponentPresentation` kann nur eine Teilmenge von Präsentationsaspekten definieren.
+
+Präsentationsabschnitte werden zusammengesetzt, wenn mehrere Definitionen auf dieselbe Komponente zutreffen.
+
+=== Symbol und Name
+
+Definiert die Ikonographie und Benennung, die in der gesamten Benutzeroberfläche verwendet wird.
+
+=== Hauptmenü
+
+Steuert, ob übereinstimmende Komponenten im Hauptmenü angezeigt werden.
+
+Die referenzierte Menügruppe muss separat mit `MainMenuGroup` definiert werden.
+
+=== Übersicht
+
+Definiert die in Übersichtstabellen angezeigten Spalten.
+
+Spalten können Spalten überschreiben oder erweitern, die von anderen übereinstimmenden Präsentationen definiert wurden.
+
+=== Hervorhebung:
+
+Definiert Felder und Abschnitte, die auf Hervorhebungsseiten angezeigt werden.
+
+==== Zusammenfassung
+
+==== Felder
+
+==== Info
+
+Definiert die Felder, die im Informationsbereich auf der Seite der Komponenten-Highlights angezeigt werden.
+
+=== Filter
+
+Definiert die Filter, die für Übersichtsseiten angezeigt werden.
+
+Filter werden angezeigt, wenn übereinstimmende Daten für die gebundenen Komponenten vorhanden sind.
+
+endif::ss-ff-stackpacks2_enabled[]

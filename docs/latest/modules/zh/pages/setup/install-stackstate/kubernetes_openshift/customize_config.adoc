@@ -1,0 +1,84 @@
+= 覆盖默认配置
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 自托管
+
+可以在 https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} Helm 图表] 中设置多个值例如，可以为每个组件自定义 `tolerations` 和 `nodeSelectors`。您还可以添加自定义配置并包含环境变量
+
+== {stackstate-product-name} `api` 的自定义配置
+
+对于 {stackstate-product-name} `api` 服务，自定义配置可以直接放入 Helm 图表中这是覆盖 {stackstate-product-name} 附带的默认配置的建议方法，特别方便自定义身份验证。以这种方式设置的配置将在 https://github.com/lightbend/config/blob/master/HOCON.md[HOCON] 格式的 {stackstate-product-name} 配置文件中可用。
+
+例如，您可以为 {stackstate-product-name} 登录页面设置自定义的 "忘记密码链接"：
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      config: |
+        stackstate.api.authentication.forgotPasswordLink =
+        "https://www.stackstate.com/forgotPassword.html"
+----
+
+--
+====
+
+[NOTE]
+====
+请注意，此处设置的自定义配置将被 xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_environment_variables[环境变量] 覆盖。
+====
+
+
+== 环境变量
+
+所有 {stackstate-product-name} 服务 (`receiver`, `k2es-*`, `correlation` 和 `api`) 的配置可以使用环境变量进行自定义环境变量在 `values.yaml` 文件中指定，可以是 `secret`（例如密码）或 `open`（用于普通值）要将配置项转换为环境变量名称，请将 `.` 替换为 `_` 并添加前缀 `CONFIG_FORCE_`
+
+[,text]
+----
+# configuration item
+stackstate.api.authentication.forgotPasswordLink
+
+# environment variable name
+CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink
+----
+
+例如，您可以为 {stackstate-product-name} 登录页面设置自定义的 "忘记密码链接"：
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      extraEnv:
+        # The value for open env vars is defined on the deployment
+        open:
+          CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink: "https://www.stackstate.com/forgotPassword.html"
+        # The value for secret env vars is defined in a secret and referenced from the deployment
+        secret:
+          CONFIG_FORCE_some_config_with_sensitive_data: "data-stored-in-secret"
+----
+
+--
+====
+
+[NOTE]
+====
+对于 {stackstate-product-name} `api` 服务，环境变量将覆盖 <<_custom_configuration_for_suse_observability_api,使用 `config` 设置的自定义配置>>。
+====
+
+
+* 有关所有不同服务命名的完整详细信息，请参见 https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} Helm 图表自述文件]。
+* 有关 xref:/setup/security/authentication/README.adoc[自定义身份验证] 的更多详细信息。

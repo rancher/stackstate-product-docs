@@ -1,0 +1,119 @@
+= 使用 CLI 进行指标绑定
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+您可以使用 {stackstate-product-name} CLI 来检查和修改指标绑定。 这些与其他设置一样，均使用 `sts settings` 命令进行处理。
+
+== 检查指标绑定
+
+=== 列出指标绑定
+
+`sts settings` 命令可以列出所有指标绑定：
+
+[,bash]
+----
+sts settings list --type MetricBinding
+TYPE          | ID              | IDENTIFIER         | NAME               | OWNED BY           | LAST UPDATED
+MetricBinding | 190567588459765 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:pod: |                    |                    |
+              |                 | dotnet-gc-allocate |                    |                    |
+              |                 | d                  |                    |                    |
+MetricBinding | 247972504900226 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:depl |                    |                    |
+              |                 | oyment:dotnet-gc-a |                    |                    |
+              |                 | llocated           |                    |                    |
+MetricBinding | 109239589408271 | urn:stackpack:open | .NET GC Allocated  | urn:stackpack:open | Wed Jan 7 00:20:48
+              |                 | -telemetry:shared: |                    | -telemetry:shared  |  2026 CET
+              |                 | metric-binding:ser |                    |                    |
+              |                 | vice:dotnet-gc-all |                    |                    |
+              |                 | ocated             |                    |                    |
+...
+----
+
+=== 描述指标绑定
+
+您可以使用 `describe` 命令获取现有指标绑定的定义：
+
+[,bash]
+----
+sts settings describe --ids 190567588459765
+_version: 1.0.93
+nodes:
+- _type: MetricBinding
+  chartType: line
+  description: Bytes allocated to GC Heap
+  enabled: true
+  id: -1
+  identifier: urn:stackpack:kubernetes-v2:shared:metric-binding:pod:dotnet-gc-allocated
+  layout:
+    metricPerspective:
+      section: GC
+      tab: .NET
+      weight: 3
+  name: .NET GC Allocated
+  priority: high
+  queries:
+  - alias: allocated
+    expression: rate(process_runtime_dotnet_gc_allocations_size_bytes_total{k8s_cluster_name="${tags.cluster-name}", k8s_namespace_name="${tags.namespace}", k8s_pod_name="${name}"}[${__rate_interval}])
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+  unit: bytes(IEC)
+timestamp: 2026-01-14T13:11:07.575662922Z[Etc/UTC]
+----
+
+== 修改指标绑定
+
+[NOTE]
+====
+推荐的工作方式是将指标绑定（以及在 {stackstate-product-name} 中创建的任何其他自定义资源）存储为 YAML 文件，放在 xref:/setup/custom-integrations/overview.adoc[a StackPack] 中。从那里，可以手动应用更改，或者通过在 CI/CD 系统中使用 SUSE Observability CLI 完全自动化，例如 GitHub Actions 或 GitLab Pipelines。
+====
+
+=== 创建/更新指标绑定
+创建一个文件 `metric-bindings.yaml`，内容如下：
+
+[source,bash]
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:stackpack:my-stackpack:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+使用xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]创建指标绑定：
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+通过在 SUSE Observability 中打开部署的指标视角验证结果。如果您对结果不满意，只需在YAML文件中更改指标绑定，然后再次运行命令以更新它。节点列表支持添加多个指标绑定。只需按照之前的步骤向YAML数组中添加另一个指标绑定条目。
+
+[CAUTION]
+====
+标识符用作指标绑定的唯一键。更改标识符将创建一个新的指标绑定，而不是更新现有的指标绑定。
+====
+
+=== 删除指标绑定
+
+最后，要删除指标绑定，请使用
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+此命令中的 `<id>` 不是标识符，而是 `Id` 输出中 `sts settings list` 列的数字。
+

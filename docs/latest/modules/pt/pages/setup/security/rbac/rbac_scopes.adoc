@@ -1,0 +1,91 @@
+= Escopos de Topologia
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Auto-hospedado
+
+WARNING: A delimitação de topologia por consulta é uma funcionalidade descontinuada. Ela é substituída pela permissão `get-topology` que pode conceder acesso a qualquer componente com um rótulo específico.
+
+== Como funcionam os escopos de topologia?
+
+O escopo de topologia é uma xref:/develop/reference/k8sTs-stql_reference.adoc[consulta STQL] que é combinada com as permissões `get-topology` como um prefixo para cada consulta de topologia executada no SUSE Observability. Quando um usuário deseja selecionar uma visualização ou enviar uma consulta no SUSE Observability, essa consulta de prefixo é executada como parte da consulta do usuário. Isso limita os resultados para corresponder ao papel do usuário.
+
+NOTE: Chamadas de função como `withCauseOf` e `withNeighborsOf` não são suportadas, pois não seriam eficientes neste contexto.
+
+Se um usuário pertence a vários grupos, ele pode ter múltiplos escopos de topologia, traduzindo-se em múltiplos prefixos. Aqui, o prefixo é executado como um OU de todos os escopos de topologia que o usuário possui.
+
+Os usuários precisam sair e se autenticar novamente no SUSE Observability sempre que seus papéis ou permissões mudam.
+
+== Por que escopos de topologia?
+
+Os escopos de topologia são um recurso de segurança para sujeitos dentro do SUSE Observability. Os papéis predefinidos do SUSE Observability, Administrador, Usuário Avançado e Convidado, não têm escopo de topologia definido.
+
+É possível especificar um escopo de topologia como um curinga de consulta, no entanto, isso resulta em acesso a tudo e não é recomendado. Se houver necessidade de acesso sem um escopo de topologia, é recomendado usar um dos xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[papéis predefinidos] em vez disso.
+
+== Exemplos
+
+O exemplo abaixo mostra a mesma visualização de topologia chamada "Toda a Infraestrutura" para quatro usuários com diferentes níveis de permissão.
+
+=== Este usuário faz parte do grupo de Administradores do SUSE Observability, portanto, não há escopo de topologia:
+
+image::v51_allperm.png[Permissões de visualização completa]
+
+A consulta para esta visualização é a mesma que para as outras, mas sem nenhum prefixo:
+
+[,text]
+----
+'layer = "Infrastructure" AND domain IN ("Customer1", "Customer2")'
+----
+
+=== O usuário abaixo está em um grupo com o assunto configurado X com o seguinte escopo de topologia:
+
+[,text]
+----
+'domain = "Customer1"'
+----
+
+image::v51_esx1perm.png[Visão limitada]
+
+A consulta com o prefixo para esta visualização é:
+
+[,text]
+----
+'(domain = "Customer1") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Outro usuário que faz parte de um grupo com um assunto configurado Y que tem o seguinte escopo de topologia:
+
+[,text]
+----
+'domain = "Customer2"'
+----
+
+recebe esta topologia:
+
+image::v51_esx2perm.png[Visão limitada]
+
+A consulta com o prefixo para esta visualização é:
+
+[,text]
+----
+'(domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== Usuário com múltiplos prefixos
+
+É possível atribuir um assunto a mais de um grupo. Neste exemplo, você pode ver um Gerente de Infraestrutura que pode ver toda a visão apresentada acima. Este usuário deve estar em ambos os grupos que têm os assuntos configurados como X e Y. Neste caso, o prefixo para a consulta do usuário será como o seguinte:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2")'
+----
+
+A consulta com prefixo para este usuário é então:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+O que resulta na seguinte visualização:
+
+image::v51_allperm.png[Permissões de visualização completa]

@@ -1,0 +1,33 @@
+= Fehlerbehebung für Erweiterungen
+:revdate: 2025-11-03
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+Dieser Abschnitt bietet Schritte zur Fehlerbehebung bei Interoperabilitätsproblemen zwischen {stackstate-product-name} und der Rancher UI-Erweiterung.
+
+== Einen HAR (Http ARchive) sammeln
+
+Http ARchive sammelt Details zu Anfragen, die vom Browser an Rancher und {stackstate-product-name} gesendet werden.  Es protokolliert auch die empfangenen Antworten.
+Dieses Archiv ist spezifisch für die Seite/den Browser-Tab mit dem Fehler.  Es benötigt keinen Zugriff auf die zugrunde liegenden Rancher- oder {stackstate-product-name}-Instanzen (obwohl deren Protokolle zu einem späteren Zeitpunkt nützlich sein können).
+
+* Öffnen Sie den *Netzwerk* Tab im Panel "Entwicklertools".  Sie können darauf zugreifen, indem Sie `F12` verwenden.  Der Netzwerk-Tab zeigt ein Protokoll aller durchgeführten Anfragen an.
+* Löschen Sie das Protokoll und führen Sie ein (hartes) Neuladen der Seite durch, die das problematische Verhalten zeigt.
+* Jetzt sollten zahlreiche Anfragen sowohl an Rancher als auch an SUSE Observability sichtbar sein.
+* Exportieren/Herunterladen/Speichern Sie die HAR-Datei – verschiedene Browser verwenden hier unterschiedliche Bezeichnungen.
+
+== Der Cluster wird nicht überwacht
+
+Damit der Gesundheitsstatus des Clusters in Rancher sichtbar ist, muss eine Übereinstimmung zwischen diesen Konfigurationen bestehen:
+
+* Der (Anzeigename) des Clusters in der Rancher UI.
+* Das `stackstate.cluster.name`, das auf dem Agenten, der im Cluster bereitgestellt ist, gesetzt ist
+* Der Clustername in der Konfiguration des Kubernetes-Stackpacks in SUSE Observability
+
+Eine Nichtübereinstimmung wird dazu führen, dass in der Clusterübersicht in Rancher "keine Daten empfangen" angezeigt wird.
+
+== Verbindung fehlgeschlagen
+
+Die Konfiguration für SUSE Observability kann manchmal keine gültige Verbindung in der Rancher-Benutzeroberfläche herstellen, aus folgenden Gründen:
+
+* Der Rancher-Host ist nicht als erlaubte Herkunft für SUSE Observability konfiguriert.  Sie können dies beheben, indem Sie es zur `stackstate.allowedOrigins`-Liste in den Helm-Werten hinzufügen oder `--set stackstate.allowedOrigins={"https://<rancher-url>"}` an den Implementierungsbefehl übergeben.
+* SUSE Observability ist über den Browser nicht zugänglich. Zum Beispiel wurde das Root-Zertifikat nicht installiert.

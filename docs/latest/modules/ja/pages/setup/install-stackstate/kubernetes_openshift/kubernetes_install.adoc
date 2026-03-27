@@ -1,0 +1,476 @@
+= {stackstate-product-name}のインストール
+:revdate: 2025-07-14
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 自己ホスト型
+
+== 始める前に
+
+[NOTE]
+====
+インストールに関する追加の注意事項：
+
+* *権限が制限されたKubernetesクラスター：*必要なxref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc[権限]をお読みください。
+* *Alibaba Cloud Container Service for Kubernetes (ACK)： *xref:/setup/install-stackstate/kubernetes_openshift/ack.adoc[ACKインストールノート]をお読みください。
+* *OpenShift*:xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[OpenShiftインストール手順]を参照してください。
+====
+
+
+{stackstate-product-name}のインストールを開始する前に：
+
+* xref:/setup/install-stackstate/requirements.adoc[要件]を確認して、使用するセットアップ（推奨、最小、または非高可用性）にKubernetes環境が適合していることを確認してください。
+* xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc[必要な権限]を持っていることを確認してください。
+* ローカルhelmクライアントに{stackstate-product-name}helmリポジトリを追加します：
+
+[,text]
+----
+helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+helm repo update
+----
+
+== {stackstate-product-name}のインストール
+
+[NOTE]
+====
+インターネットアクセスのない環境、いわゆるエアギャップ(された)環境の場合、最初にxref:/k8s-suse-rancher-prime-air-gapped.adoc[これらの追加の手順]に従ってください。
+
+また、ステップに対してエアギャップ(された)インストール手順が存在する場合は、それに従うことを確認してください。
+====
+
+
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[{stackstate-product-name}がインストールされる名前空間を作成する]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#create-values-yaml[`values.yaml`設定ファイルを作成する]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_configure_storage_class_optional[ストレージクラスを設定する（オプション）]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Helmで{stackstate-product-name}をデプロイする]
+. xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_access_the_suse_observability_ui[{stackstate-product-name} UIにアクセスする]
+
+
+=== 名前空間を作成する
+
+{stackstate-product-name}をインストールしたい名前空間を作成し、その名前空間にシークレットをデプロイします。私たちのウォークスルーでは、名前空間`suse-observability`を使用します：
+
+[,text]
+----
+kubectl create namespace suse-observability
+----
+
+[#create-values-yaml]
+=== `values.yaml`設定ファイルを作成します。
+
+`values.yaml`ファイルには、ライセンスキー、ベースURL、管理者パスワード、サイズプロファイルを含む、{stackstate-product-name}をデプロイするために必要なすべての設定が含まれています。
+
+[NOTE]
+====
+*続行する前に：*`helm repo update`を使用した最新のHelmチャートを持っていることを確認してください。
+====
+
+[tabs]
+====
+推奨方法::
++
+--
+[NOTE]
+=====
+`global.suseObservability`設定方法は`2.8.0`バージョンから利用可能です。以前のバージョンでは、レガシー方法を使用してください。
+=====
+
+`values.yaml`設定構造を持つ`global.suseObservability`ファイルを作成します：
+
+[source,yaml]
+----
+global:
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
+
+  # Optional: Override storage class (uses cluster default if not set)
+  # storageClass: "your-storage-class"
+
+  suseObservability:
+    # Required: Your {stackstate-product-name} license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    # Use http://localhost:8080 if ingress is not configured yet
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    # Required: Plain text admin password
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password with adminPasswordBcrypt
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    # receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Pull secret for private registry
+    # pullSecret:
+    #   username: "registry-user"
+    #   password: "registry-pass"
+----
+
+アフィニティ設定を含むその他の設定オプションについては、xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Kubernetesアフィニティの設定]を参照してください。
+
+--
+レガシー方法（廃止）::
++
+--
+[WARNING]
+=====
+この方法は廃止されています。新しいインストールの場合は、上記の推奨方法を使用してください。この方法を使用している既存のインストールについては、新しい設定形式に移行するためにxref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[移行ガイド]を参照してください。
+=====
+
+別のHelmチャートを実行することで、{stackstate-product-name}設定ファイルを生成できます。これが`suse-observability/suse-observability-values`チャートです：
+
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+このコマンドは、`$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`、`$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml`、および`$VALUES_DIR/suse-observability-values/templates/affinity_values.yaml`のファイルを生成します。
+
+[NOTE]
+=====
+{stackstate-product-name}管理者パスワードは、上記のコマンドによって自動生成され、生成された`basicConfig.yaml`ファイルのコメントとして出力されます。実際の値には、これらのパスワードの`bcrypt`ハッシュが含まれており、クラスター内のHelmリリースに安全に保存されます。
+=====
+
+このチャートに渡すことができる値は次のとおりです。
+
+[cols="1,1,2"]
+|===
+| 設定 | 値 | 説明
+
+| 基本設定を生成
+| `basicConfig.generate`
+| `basicConfig_values.yaml`ファイルの生成をオンまたはオフにします。
+
+| 受信者APIキー
+| `receiverApiKey`
+| {stackstate-product-name}がエージェントからデータを受信するために使用するAPIキーです。これはプライベートに保つべき秘密のキーです。これを省略すると、ランダムなキーが生成されます。
+
+| ベースURL
+| `baseUrl`
+| ここでもゾーンが追加されないよう、`<STACKSTATE_BASE_URL>`.ユーザーとエージェントが接続するために使用する{stackstate-product-name}の外部URL。例えば`https://suse-observability.internal`。まだIngress構成を決定していない場合は、`http://localhost:8080`を使用してください。これは生成されたファイルで後で更新できます。
+
+| ユーザ名とパスワード**
+| `-u` `-p`
+| {stackstate-product-name}がイメージを取得するために使用するユーザ名とパスワード。エアギャップ(された)環境では、これらはローカルコンテナレジストリのユーザ名とパスワードである必要があります。
+
+| ライセンスキー
+| `license`
+| {stackstate-product-name}ライセンスキー。
+
+| デフォルトパスワード
+| `adminPassword`
+| デフォルトユーザー（`admin`）が{stackstate-product-name}のUIにアクセスするためのパスワード。また、`adminPasswordBcrypt`を使用してbcryptハッシュ化されたパスワードを提供することもできます。2つのオプションのうち、同時に使用できるのは1つだけです。
+
+| イメージレジストリ
+| `imageRegistry`
+| {stackstate-product-name}イメージがホストされているレジストリ。提供されない場合、デフォルト値は'registry.rancher.com'になります。エアギャップ(された)環境またはカスタムレジストリにのみ必要です。
+
+| プルシークレットユーザ名
+| `pullSecret.username`
+| {stackstate-product-name}イメージがホストされているDockerレジストリからイメージを取得するために使用されるユーザ名。カスタムレジストリにのみ必要です。
+
+| プルシークレットパスワード
+| `pullSecret.password`
+| {stackstate-product-name}イメージがホストされているDockerレジストリからイメージを取得するために使用されるパスワード。カスタムレジストリにのみ必要です。
+
+| サイズ生成
+| `sizing.generate`
+| `sizing_values.yaml`ファイルの生成をオンまたはオフにします。
+
+| サイズプロファイル
+| `sizing.profile`
+| OneOfトライアル、10-nonha、20-nonha、50-nonha、100-nonha、150-ha、250-ha、500-ha。これらのプロファイルに基づいて、`sizing_values.yaml`ファイルを生成し、{stackstate-product-name}リソースのデフォルトサイズとHAまたはNon-HAモードでデプロイするための設定を含めることができます。例えば、10-nonhaは、Non-HAモードで10ノードクラスターを監視するためにNon-HA {stackstate-product-name}インスタンスをデプロイするための`sizing_values.yaml`を生成します。現在、Non-HAからHA環境への移行は不可能です。環境が約150ノードの観察を必要とする場合は、すぐにHAに移行する方が良いです。
+
+| ポッドアンチアフィニティ
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+| 同じデータサービスのレプリカが異なるKubernetesノードにスケジュールされることを強制します。`HA`プロファイルにのみ適用されます。`true`または`false`のいずれか。デフォルトは`true`です - 異なるノードへのスケジューリングが強制されます。
+|===
+
+[NOTE]
+=====
+生成された`basicConfig.yaml`および`sizing_values.yaml`ファイルを安全に保管してください。これらのファイルをアップグレードする際に再利用でき、時間を節約し、{stackstate-product-name}が同じAPIキーを使用し続けることを保証します。これは望ましいことであり、{stackstate-product-name}のエージェントや他のデータプロバイダーを更新する必要がないことを意味します。
+スイッチ`basicConfig.generate=false`および`sizing.generate=false`を使用して、ファイルの以前に生成されたバージョンを`output-dir`に保持しながら、いずれかを無効にしてファイルを独立して再生成できます。
+=====
+
+[NOTE]
+=====
+{stackstate-product-name}値チャートは、ポッドスケジューリングの動作を制御するためにメインの{stackstate-product-name}チャートと一緒に使用できるアフィニティ設定を生成します。詳細については、xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes Affinities]のドキュメントを参照してください。
+=====
+
+--
+====
+
+=== ストレージクラスを設定します（オプション）
+
+{stackstate-product-name}が指定されていない場合、クラスターのデフォルトストレージクラスを使用します。この設定は、`global.storageClass`を`values.yaml`ファイルに設定することでオーバーライドできます。
+
+[tabs]
+====
+推奨方法::
++
+--
+特定のストレージクラスを使用する必要がある場合は、それを`values.yaml`ファイルの`global.storageClass`の下に追加してください。
+
+[source,yaml]
+----
+global:
+  storageClass: "your-storage-class"  # e.g., "local-path" for Rancher local-path provisioner
+  suseObservability:
+    # ... other configuration
+----
+--
+レガシー方法（廃止）::
++
+--
+"storageClass"の設定を追加するには、`$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`ファイルを編集してください。
+
+[,text]
+----
+# Source suse-observability-values/templates/baseConfig_values.yaml
+global:
+  storageClass: "your-storage-class" # Optional: override default storage class
+----
+--
+====
+
+
+=== Helmを使用して{stackstate-product-name}をデプロイします。
+
+{stackstate-product-name}の推奨デプロイメントは、冗長性のある多くのサービスが稼働する、運用準備完了の高可用性セットアップです。必要に応じて、各サービスが単一のレプリカのみを持つ非冗長セットアップで{stackstate-product-name}を実行することも可能です。このセットアップはテスト環境にのみ推奨されます。
+
+エアギャップ環境の場合は、エアギャップインストールの指示に従ってください。
+
+[tabs]
+====
+推奨方法::
++
+--
+
+Kubernetes上で{stackstate-product-name}をデプロイするには：
+
+. デプロイする前に：
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[{stackstate-product-name}がインストールされる名前空間を作成する]
+ ** <<create-values-yaml,`values.yaml`設定ファイルを作成する>>
+. 次のコマンドを使用して、`suse-observability`名前空間に最新の{stackstate-product-name}バージョンをデプロイします：
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+または、値ファイルなしで`--set`フラグを使用して直接デプロイします：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+  --set global.suseObservability.baseUrl="https://observability.example.com" \
+  --set global.suseObservability.sizing.profile="150-ha" \
+  --set global.suseObservability.adminPassword='$2a$10$...' \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+推奨方法（エアギャップ(された)）::
++
+--
+
+Kubernetes上でエアギャップ(された)セットアップで{stackstate-product-name}をデプロイするには：
+
+. デプロイする前に：
+ ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[エアギャップインストールのための追加の指示に従ってください]。
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[{stackstate-product-name}がインストールされるネームスペースを作成する]
+ ** <<create-values-yaml,`values.yaml` 設定ファイルを作成する>>
+. 次のコマンドを使用して、`suse-observability`ネームスペースに最新の{stackstate-product-name}バージョンをデプロイします：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values local-docker-registry.yaml \
+  --values values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+レガシー方法（廃止）::
++
+--
+
+[WARNING]
+=====
+この方法は廃止されています。新しいインストールの場合は、上記の推奨方法を使用してください。この方法を使用している既存のインストールについては、新しい設定形式に移行するためにxref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[移行ガイド]を参照してください。
+=====
+
+Kubernetes上で{stackstate-product-name}をデプロイするには：
+
+. デプロイする前に：
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[{stackstate-product-name}がインストールされるネームスペースを作成する]
+ ** <<create-values-yaml,`baseConfig_values.yaml`と`sizing_values.yaml`を生成します>>
+. 次のコマンドを使用して、`suse-observability`ネームスペースに最新の{stackstate-product-name}バージョンをデプロイします：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+レガシー方法（エアギャップ）::
++
+--
+
+[WARNING]
+=====
+この方法は廃止されています。新しいインストールの場合は、上記の推奨方法を使用してください。この方法を使用している既存のインストールについては、新しい設定形式に移行するためにxref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[移行ガイド]を参照してください。
+=====
+
+Kubernetes上でエアギャップ(された)セットアップで{stackstate-product-name}をデプロイするには：
+
+. デプロイする前に：
+ ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[エアギャップ(された)インストールのための追加の指示に従ってください]。
+ ** xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_create_namespace[{stackstate-product-name}がインストールされるネームスペースを作成する]
+ ** <<create-values-yaml,`baseConfig_values.yaml`と`sizing_values.yaml`を生成します>>
+. 次のコマンドを使用して、`suse-observability`ネームスペースに最新の{stackstate-product-name}バージョンをデプロイします：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values local-docker-registry.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability-A.B.C.tgz
+----
+
+--
+====
+
+インストール後、{stackstate-product-name}リリースは{stackstate-product-name}ネームスペースにリストされ、すべてのポッドが稼働しているはずです：
+
+[,text]
+----
+# Check the release is listed
+helm list --namespace suse-observability
+
+# Check pods are running
+# It may take some time for all pods to be installed or available
+kubectl get pods --namespace suse-observability
+----
+
+=== {stackstate-product-name} UIにアクセスします。
+
+{stackstate-product-name}がデプロイされた後、すべてのポッドが稼働しているか確認できます：
+
+[,bash]
+----
+kubectl get pods --namespace suse-observability
+----
+
+すべてのポッドが起動したら、ポートフォワードを有効にできます:
+
+[,bash]
+----
+kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+イングレス設定のために、`ingress_values.yaml` ファイルを作成し、以下のコードを追加してください。
+
+[NOTE]
+====
+TLS設定のためにシークレットを設定することを忘れないでください。その方法の詳細については、kubectlのドキュメントを参照してください。
+====
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  class: ""
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    #if external dns (cloudflare and similars) configure:
+    #external-dns.alpha.kubernetes.io/target: <INGRESS_FQDN>
+    #external-dns.alpha.kubernetes.io/ttl: "60"
+    #end if
+  hosts:
+  - host: <SUSE_OBSERVABILITY_HOST>
+  tls:
+  - hosts:
+    - <SUSE_OBSERVABILITY_HOST>
+    secretName: suse-private-ai-tls
+  existingSecret: suse-private-ai-tls
+  # Set up your secrets in whichever way feels fit. Check k8s docs for details: https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/
+----
+
+イングレス設定を適用するためにアップグレードを実行してください:
+
+[tabs]
+====
+アップグレード::
++
+--
+
+[,bash]
+----
+helm upgrade --namespace suse-observability --reuse-values --values ingress_values.yaml suse-observability suse-observability/suse-observability
+----
+
+--
+エアギャップ(された)アップグレード::
++
+--
+
+[,bash]
+----
+helm upgrade --namespace suse-observability --reuse-values --values suse-observability-values/templates/ingress_values.yaml suse-observability suse-observability-A.B.C.tgz
+----
+
+--
+====
+
+[NOTE]
+====
+外部DNSを使用していない場合は、ローカルマシンの/etc/hostsに追加してください: <CLUSTER_IP> <SUSE_OBSERVABILITY_HOST>。
+====
+
+{stackstate-product-name}は、`https://localhost:8080`でブラウザで利用可能になります。ユーザー名`admin`と`baseConfig_values.yaml`ファイルに記載されているデフォルトのパスワードでログインしてください。
+
+次のステップは
+
+* xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc[クラスターの外部に{stackstate-product-name}を公開する]
+* xref:/k8s-quick-start-guide.adoc[Kubernetesクラスターの監視を開始する]
+* xref:/setup/security/authentication/README.adoc[同僚にアクセスを与える].

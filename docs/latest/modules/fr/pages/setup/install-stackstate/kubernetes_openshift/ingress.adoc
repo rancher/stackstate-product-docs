@@ -1,0 +1,309 @@
+= Exposez SUSE Observability en dehors du cluster
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} Auto-hébergé
+
+== Présentation
+
+{stackstate-product-name} peut être exposé avec une ressource Ingress Kubernetes. Les exemples sur cette page montrent comment configurer un contrôleur Ingress Traefik ou Nginx en utilisant xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm pour SUSE Observability fonctionnant sur Kubernetes]. Cette page documente également la combinaison service/port à exposer lors de l'utilisation d'une méthode différente pour configurer le trafic Ingress.
+
+Lors de l'observation du cluster qui héberge également {stackstate-product-name}, le trafic de l'agent peut être entièrement maintenu à l'intérieur du cluster lui-même en xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_agents_in_the_same_cluster[modifiant la configuration de l'agent] lors de l'installation de l'agent.
+
+== Configurez l'ingress via le {stackstate-product-name} chart Helm
+
+Le {stackstate-product-name} chart Helm expose une section `ingress` dans ses valeurs. Ceci est désactivé par défaut. Les exemples ci-dessous montrent comment utiliser le chart Helm pour configurer un contrôleur d'ingress avec le chiffrement TLS activé. Notez que la configuration du contrôleur lui-même et des certificats dépasse le cadre de ce document.
+
+Pour configurer l'ingress pour {stackstate-product-name}, créez un fichier `ingress_values.yaml` avec un contenu comme ci-dessous. Remplacez `MY_DOMAIN` par votre propre domaine (qui est lié à votre contrôleur d'ingress) et définissez le nom correct pour le `tls-secret`. Consultez la documentation de votre contrôleur d'ingress pour les annotations correctes à définir. Tous les champs ci-dessous sont optionnels, par exemple, si aucun TLS n'est utilisé, omettez cette section mais sachez que {stackstate-product-name} ne chiffre également pas le trafic.
+
+[CAUTION]
+====
+Notez que la configuration de TLS est requise pour l'utilisation de l'extension de l'interface utilisateur de Rancher.
+====
+
+[tabs]
+====
+Traefik::
++
+--
+.Problèmes connus
+[WARNING]
+=====
+Assurez-vous d'utiliser Traefik < 3.6.3 or >= 3.6.7 (avec la version du chart Helm >= 39.0.0), car les versions 3.6.3 à 3.6.6 ont un problème qui provoque des erreurs sur certains points de terminaison API. En particulier, les pages de mise en évidence des composants échouent à se charger en raison d'appels API bloqués par Traefik avec une erreur `400 Bad Request`.
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Le projet Ingress Nginx est https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[en cours de retrait]. Les utilisateurs sont invités à envisager des alternatives telles que Traefik.
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+
+Ce qui se distingue dans ce fichier est l'annotation Nginx pour augmenter le `proxy-body-size` autorisé à `50m` (plus grand que toute demande attendue). Par défaut, Nginx autorise des tailles de corps maximales de `1m`. {stackstate-product-name} Agents et autres fournisseurs de données peuvent parfois envoyer des requêtes beaucoup plus volumineuses. Pour cette raison, vous devez vous assurer que la taille de corps autorisée est suffisamment grande, que vous utilisiez Nginx ou un autre contrôleur Ingress.
+--
+====
+
+Assurez-vous de mettre à jour le `baseUrl` dans le fichier de valeurs généré lors de l'installation initiale, il sera utilisé par {stackstate-product-name} pour générer des instructions d'installation pratiques pour l'agent.
+
+Les exemples utilisent le champ `ingressClassName` pour spécifier le https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] au lieu de l'annotation `kubernetes.io/ingress.class` dont la prise en charge a cessé. Si votre cluster a une classe d'ingress par défaut définie, le champ du nom de la classe d'ingress peut être omis.
+Les exemples utilisent le champ `ingressClassName` pour spécifier le https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] au lieu de l'annotation `kubernetes.io/ingress.class` dont la prise en charge a cessé. Si votre cluster a une classe d'ingress par défaut définie, le champ du nom de la classe d'ingress peut être omis.
+
+Incluez le fichier `ingress_values.yaml` lorsque vous exécutez la commande `helm upgrade` pour déployer {stackstate-product-name} :
+
+[,text]
+----
+helm upgrade --install \
+  --namespace "suse-observability" \
+  --values "ingress_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+Cette étape suppose que xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Générer `baseConfig_values.yaml` et `sizing_values.yaml`] a déjà été exécutée.
+====
+
+== Configurer la règle Ingress pour Open Telemetry
+
+Le {stackstate-product-name} chart Helm expose un service `opentelemetry-collector` dans ses valeurs dans lequel un `ingress` dédié peut être créé. Ceci est désactivé par défaut. L'Ingress nécessaire pour des fins `opentelemetry-collector` doit prendre en charge le protocole GRPC. Notez que la configuration du contrôleur lui-même et des certificats dépasse le cadre de ce document.
+
+Pour configurer l'Ingress `opentelemetry-collector` pour {stackstate-product-name}, créez un fichier `ingress_otel_values.yaml` avec un contenu comme ci-dessous. Remplacez `MY_DOMAIN` par votre propre domaine (qui est lié à votre contrôleur Ingress) et définissez le nom correct pour le `otlp-tls-secret`. Consultez la documentation de votre contrôleur d'ingress pour les annotations correctes à définir. Tous les champs ci-dessous sont optionnels, par exemple, si aucun TLS n'est utilisé, omettez cette section mais sachez que {stackstate-product-name} ne chiffre pas le trafic.
+
+[tabs]
+====
+Traefik::
++
+--
+.Problèmes connus
+[WARNING]
+=====
+Assurez-vous d'utiliser Traefik < 3.6.3 or >= 3.6.7 (avec la version du chart Helm >= 39.0.0), car les versions 3.6.3 à 3.6.6 ont un problème qui provoque des erreurs sur certains points de terminaison API. En particulier, les pages de mise en évidence des composants échouent à se charger en raison d'appels API bloqués par Traefik avec une erreur `400 Bad Request`.
+=====
+
+[NOTE]
+=====
+L'exposition du point de terminaison GRPC du Collecteur OpenTelemetry via Traefik est prise en charge à partir de la version v2.8.0 du {stackstate-product-name} chart Helm.
+
+Notez que l'entrée hôte GRPC nécessite un `serviceName: suse-observability-otel-collector-grpc` explicite pour acheminer le trafic vers le service backend correct.
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            serviceName: suse-observability-otel-collector-grpc
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        ingressClassName: traefik
+        annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Le projet Ingress Nginx est https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[en cours de retrait]. Les utilisateurs sont invités à envisager des alternatives telles que Traefik.
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+
+Ce qui se distingue dans ce fichier est l'annotation Nginx pour augmenter le `proxy-body-size` autorisé à `50m` (plus grand que toute demande attendue). Par défaut, Nginx autorise des tailles de corps maximales de `1m`. {stackstate-product-name} Agents et autres fournisseurs de données peuvent parfois envoyer des requêtes beaucoup plus volumineuses. Pour cette raison, vous devez vous assurer que la taille de corps autorisée est suffisamment grande, que vous utilisiez Nginx ou un autre contrôleur d'entrée.
+--
+====
+
+Assurez-vous de mettre à jour le `baseUrl` dans le fichier de valeurs généré lors de l'installation initiale, il sera utilisé par {stackstate-product-name} pour générer des instructions d'installation pratiques pour l'agent.
+
+Les exemples utilisent le champ `ingressClassName` pour spécifier le https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] au lieu de l'annotation `kubernetes.io/ingress.class` dont la prise en charge a cessé. Si votre cluster a une classe d'ingress par défaut définie, le champ du nom de la classe d'ingress peut être omis.
+Les exemples utilisent le champ `ingressClassName` pour spécifier le https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress] au lieu de l'annotation `kubernetes.io/ingress.class` dont la prise en charge a cessé. Si votre cluster a une classe d'ingress par défaut définie, le champ du nom de la classe d'ingress peut être omis.
+
+Incluez le fichier `ingress_otel_values.yaml` lorsque vous exécutez la commande `helm upgrade` pour déployer {stackstate-product-name} :
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace "suse-observability" \
+  --values "ingress_otel_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+Cette étape suppose que xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Générer `baseConfig_values.yaml` et `sizing_values.yaml`] a déjà été exécutée.
+====
+
+== Configurer via des outils externes
+
+Pour rendre {stackstate-product-name} accessible en dehors du cluster Kubernetes dans lequel il est installé, il suffit d'acheminer le trafic vers le port `8080` du service `<namespace>-stackstate-k8s-router`. L'interface utilisateur de {stackstate-product-name} peut être accessible directement sous le chemin racine de ce service (c'est-à-dire `http://<namespace>-stackstate-k8s-router:8080`) tandis que les agents utiliseront le chemin `/receiver` (`http://<namespace>-stackstate-k8s-router:8080/receiver`).
+
+Assurez-vous de mettre à jour le `baseUrl` dans le fichier de valeurs généré lors de l'installation initiale, il sera utilisé par {stackstate-product-name} pour générer des instructions d'installation pratiques pour l'agent.
+
+[NOTE]
+====
+Lors de la configuration manuelle d'un serveur HTTP Nginx ou similaire en tant que proxy inverse, assurez-vous qu'il peut également gérer les websockets. Pour Nginx, cela peut être configuré en incluant les directives suivantes dans la directive `location` :
+
+[,text]
+----
+proxy_set_header Upgrade                 $http_upgrade;
+proxy_set_header Connection              "Upgrade";
+----
+
+====
+
+
+[CAUTION]
+====
+La directive {stackstate-product-name} elle-même n'utilise pas de trafic chiffré TLS, le chiffrement TLS doit être géré par le contrôleur d'entrée ou les équilibreurs de charge externes.
+====
+
+
+== Agents dans le même cluster
+
+Les agents déployés dans le même cluster que {stackstate-product-name} peuvent bien sûr utiliser l'URL externe sur laquelle {stackstate-product-name} est exposé, mais il est également possible de configurer l'agent pour se connecter directement à l'instance {stackstate-product-name} via le réseau interne de Kubernetes uniquement. Pour ce faire, remplacez la valeur de `'stackstate.url'` dans la commande `helm install` de l'installation de l'Agent Kubernetes xref:/k8s-quick-start-guide.adoc[Agent Kubernetes installation] par l'URL interne du cluster pour le service de routeur (voir aussi ci-dessus) : `http://<namespace>-suse-observability-router.<namespace>.svc.cluster.local:8080/receiver/stsAgent` (les sections `<namespace>` doivent être remplacées par l'espace de noms de {stackstate-product-name}).
+
+
+== Transfert du port du {stackstate-product-name} service de routeur
+
+Par défaut, le graphique Helm {stackstate-product-name} déploie un pod et un service de routeur. Ce service expose le port `8080`, qui est le seul point d'entrée qui doit être exposé via Ingress.
+Vous pouvez également accéder à {stackstate-product-name} via le transfert de port ; ce faisant, vous devez autoriser localhost comme origine de la requête.
+
+[WARNING]
+====
+* Autoriser `localhost` dans `stackstate.allowedOrigins` est uniquement destiné au développement local ou au débogage lors de l'utilisation du transfert de port.
+* Ce n'est *pas* une configuration de production. Supprimez cette origine autorisée lors de l'exposition de {stackstate-product-name} via Ingress.
+====
+
+Pour accéder à l'interface utilisateur sans configurer Ingress, transférez le port du service de routeur :
+
+[,text]
+----
+kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+Lors de l'accès à {stackstate-product-name} via le transfert de port, le navigateur utilise `http://localhost:8080` comme origine de la requête.
+Pour autoriser les requêtes provenant de cette origine, ajoutez-la à la liste `stackstate.allowedOrigins` dans les valeurs Helm, ou passez-la directement à la commande Helm :
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --set stackstate.allowedOrigins={"http://localhost:8080"} \
+suse-observability \
+suse-observability/suse-observability
+----
+
+
+== Reportez-vous également à la section
+
+* https://learn.microsoft.com/en-us/azure/aks/ingress-tls?tabs=azure-cli[AKS (learn.microsoft.com)]
+* https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html[Documentation officielle EKS] (sans utiliser Nginx)
+* https://aws.amazon.com/blogs/opensource/network-load-balancer-nginx-ingress-controller-eks/[Article de blog EKS] (en utilisant Nginx)
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]

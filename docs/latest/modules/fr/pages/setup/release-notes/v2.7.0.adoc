@@ -1,0 +1,49 @@
+= v2.7.0 - 14/Jan/2026
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability en mode auto-hébergé
+
+== Notes de mise à jour : {stackstate-product-name} Tableau de bord v2.7.0
+
+WARNING:  Cette version comporte un *CHANGEMENT IMPORTANT*: La valeur `backup.enabled` Helm a été remplacée par `global.backup.enabled`. L'utilisation de l'ancienne valeur `backup.enabled=true` entraînera l'**échec du** déploiement.
+
+== Tableaux de bord
+
+{stackstate-product-name} prend désormais en charge les tableaux de bord. Une nouvelle fonctionnalité majeure permettant la visualisation des données issues des processus d'entreprise, des flux d'utilisateurs et des pipelines de données dans un emplacement central. Les utilisateurs qui migrent depuis des outils comme Grafana et Prometheus disposent ainsi d'un environnement familier pour recréer des visualisations et définir des mesures personnalisées.
+
+* *RBAC intégré :* Les tableaux de bord respectent les autorisations existantes de la plateforme et peuvent être affichés en privé ou en public.
+* *Widgets polyvalents :* Comprend des graphiques de séries temporelles, des diagrammes à barres, des jauges et des champs Markdown avec prise en charge du redimensionnement manuel et de la mise en page par glisser-déposer.
+* *Personnalisation :* Prend en charge les variables d'interrogation, les seuils personnalisés et le style de visualisation. Les tableaux de bord peuvent être regroupés dans des StackPacks ou créés ad hoc à partir de widgets métriques existants.
+
+Pour plus d'informations sur les tableaux de bord, voir la xref:use/dashboards/dashboards.adoc[documentation sur les tableaux de bord].
+
+== Nouvelles fonctionnalités et améliorations
+
+* *Restructuration de la sauvegarde :*
+** *Restauration simplifiée :* Les valeurs de `*.backup.restore.enable` Helm sont supprimées au profit du réglage global.
+** *UN CHANGEMENT RADICAL :* La valeur `backup.enabled` Helm est remplacée par `global.backup.enabled`. L'utilisation de l'ancienne valeur `backup.enabled=true` entraînera l'**échec du** déploiement.
+** *Gestion globale :* Les sauvegardes sont gérées globalement via `global.backup.enabled` et ne peuvent plus être activées par datastore individuel (les sauvegardes "Settings" restent toujours activées).
+** *Nouvel outil :* Introduction de `sts-backup`, un outil CLI dédié à la gestion et à la restauration des sauvegardes. Pour plus d'informations, voir xref:setup/data-management/backup_restore/backup_enable.adoc[Activation des sauvegardes] et des xref:setup/data-management/backup_restore/backup_restore.adoc[procédures de restauration].
+* *Gestion CLI :* Le CLI `sts` prend désormais en charge la commande `dashboard` pour gérer les tableaux de bord {stackstate-product-name} de manière programmatique.
+* *Quorum Observation Daemon (démon d'observation du quorum) :* Introduction d'un petit démon de journalisation qui surveille le quorum des services redondants au sein de la plateforme afin d'assurer une haute disponibilité.
+* *Amélioration de la gestion des erreurs :* Amélioration des messages d'erreur et de leur traitement dans toutes les perspectives de la plate-forme.
+* *Visualisation des métriques de stockage :* Amélioration des graphiques métriques PV et PVC pour simplifier les données en ne montrant qu'une seule série temporelle pour l'utilisation et la capacité.
+* *Agent : Intégration de Splunk :* Les recherches sauvegardées désactivées dans Splunk sont désormais automatiquement ignorées par le contrôle Splunk.
+
+== Corrections de bugs
+
+* *Plate-forme : Correction de l'OOM de SLES 16 :* Résolution d'un problème où plusieurs pods (HBase, Tephra) rencontraient des erreurs Out-Of-Memory (OOM) sur SLES 16 à cause de la gestion des ressources cgroups v2.
+* *Plate-forme : Kafka Init Container :* Correction d'un bug où le conteneur Kafka init se bloquait occasionnellement lors d'une nouvelle installation.
+* *StackGraph : Scans à long terme :* Résolution d'un problème de corruption du StackGraph qui pouvait survenir lors d'analyses de données de longue durée.
+* *Plate-forme : Rafraîchissement du jeton de l'agent RBAC :* Correction d'un problème où le site `rbac-agent` ne parvenait pas à actualiser son jeton ServiceAccount, ce qui entraînait une perte d'authentification.
+* *Performance de l'interface utilisateur :* Résolution d'un problème où l'interface utilisateur ne répondait parfois plus lors de l'affichage de graphiques métriques complexes.
+* *OpenShift StackPack Fix :* Correction de l'URL de la page StackPack pour l'intégration avec OpenShift `ClusterLogForwarder`.
+* *Amélioration des notifications Slack :* Les utilisateurs peuvent désormais saisir manuellement l'identifiant d'un canal Slack, ce qui résout les problèmes liés aux espaces de travail contenant un grand nombre de canaux.
+* *Analyse des variables YAML :* Correction d'un bogue dans l'analyse YAML lorsqu'une valeur est une référence de variable (par exemple, `alias: $\{cluster-name}`).
+* *Sécurité et dépendances :* Mise à jour des paquets de base du système d'exploitation et des dépendances d'exécution pour les images `jmx-exporter`, `kafkaup-operator`, `clickhouse-backup`, et `kafka`.
+* *Prise en charge FIPS :* Correction d'une régression qui empêchait SUSE Observability de fonctionner sur les nœuds dont le mode FIPS était activé.
+
+=== Correction des bugs de l'agent
+
+* *Agent : Masquage d'identité :* Correction d'un problème pour s'assurer que les informations d'identification de l'intégration Splunk ne sont pas enregistrées lorsque le mode de débogage est activé.
+* *Agent : Définition de la ressource :* Résolution d'un problème où Kubernetes `rbac-agent` ignorait les limites de ressources personnalisées définies dans le fichier `values.yaml`.

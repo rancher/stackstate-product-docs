@@ -1,0 +1,132 @@
+= Anforderungsverfolgung
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Einblick durch Lastenausgleicher, Service-Meshes und zwischen Clustern
+
+SUSE Observability kann Verbindungen zwischen Diensten und Pods in verschiedenen Clustern beobachten, oder wenn die Verbindungen durch ein Service-Mesh oder einen Lastenausgleicher gehen. Die Beobachtung dieser Verbindungen erfolgt durch `request tracing`. Verfolgte Anfragen führen zu Verbindungen in der xref:/use/views/k8s-topology-perspective.adoc[Topologie-Perspektive], um Einblicke in die Abhängigkeiten einer Anwendung zu geben und bei der Auffindung der Ursache eines Vorfalls zu helfen.
+
+== Wie funktioniert das?
+
+Die Anforderungsverfolgung erfolgt durch das Einfügen eines einzigartigen Headers (des `X-Request-ID`-Headers) in den gesamten HTTP-Verkehr. Dieser einzigartige Header wird sowohl beim Client als auch beim Server durch eine eBPF-Probe beobachtet, die mit dem SUSE Observability Agent installiert ist. Diese Beobachtungen werden an SUSE Observability gesendet, das die Beobachtungen nutzt, um zu verstehen, welche Clients und Server verbunden sind.
+
+Die `X-Request-Id`-Header werden <<_enabling_the_trace_header_injection_sidecar,eingefügt>> von einem Sidecar-Proxy, der automatisch vom SUSE Observability Agent eingefügt werden kann. Der Sidecar wird durch einen https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#_mutatingadmissionwebhook[mutierenden Webhook] eingefügt, der den Sidecar in jeden Pod einfügt, für den die `http-header-injector.stackstate.io/inject: enabled`-Annotation definiert ist. Die Sidecar-Injektion wird auf OpenShift nicht unterstützt.
+
+Es ist auch möglich, den `X-Request-Id`-Header hinzuzufügen, wenn Ihre Anwendung <<_add_the_trace_header_id_to_an_existing_proxy,bereits einen Proxy oder Lastenausgleicher hat>>, in einem <<_add_the_trace_header_id_with_envoy_filter,Istio-Service-Mesh>> aktivierten Kubernetes-Cluster bereitgestellt ist oder durch <<_instrument_your_application,Instrumentierung Ihres eigenen Codes>>. Der Vorteil davon ist, dass der zusätzliche Sidecar-Proxy nicht benötigt wird.
+
+== Aktivierung der Sidecar-Injektion für den Trace-Header
+
+Die Aktivierung der Trace-Header-Injektion ist ein zweistufiger Prozess:
+
+. Installieren Sie den mutierenden Webhook im Cluster, indem Sie `--set httpHeaderInjectorWebhook.enabled=true` zum Helm-Upgrade-Befehl hinzufügen, wenn Sie den SUSE Observability Agent installieren. Standardmäßig generiert der Sidecar-Injektor sein eigenes selbstsigniertes Zertifikat, was Clusterrollen erfordert, um diese im Cluster zu installieren. Es ist auch möglich, xref:/setup/agent/k8sTs-agent-request-tracing-certificates.adoc[Ihre eigenen Zertifikate zu verwalten] in einer restriktiveren Umgebung.
+. Für jeden Pod, der einen Endpunkt hat, der http(s)-Anfragen verarbeitet, fügen Sie die Annotation `http-header-injector.stackstate.io/inject: enabled` hinzu, um den Sidecar einzufügen.
+
+[CAUTION]
+====
+*Die Aktivierung des mutierenden Webhooks tritt erst nach einem Neustart des Pods in Kraft*
+
+Wenn die Annotation vor der Installation des Webhooks platziert wird. Die Installation des Webhooks hat keine Auswirkungen, bis die Pods neu gestartet werden.
+====
+
+
+=== Deaktivierung der Trace-Header-Injektion
+
+Die Deaktivierung der Trace-Header-Injektion kann mit dem umgekehrten Prozess erfolgen:
+
+. Entfernen Sie die `http-header-injector.stackstate.io/inject: enabled`-Annotation von allen Pods.
+. Stellen Sie den SUSE Observability Agent ohne die `--set httpHeaderInjectorWebhook.enabled=true` Einstellung erneut bereit.
+
+[CAUTION]
+====
+*Die Deaktivierung des mutierenden Webhooks tritt erst nach einem Neustart des Pods in Kraft*
+
+Wenn Schritt 1 übersprungen wird und nur der mutierende Webhook deaktiviert ist, müssen alle Pods neu gestartet werden, damit der Sidecar entfernt wird.
+====
+
+
+=== Overhead
+
+Die Anforderungsverfolgung fügt für jeden HTTP-Anforderungsheader, der injiziert und beobachtet wird, eine kleine, feste Menge an CPU-Overhead hinzu. Die genaue Menge hängt von dem System ab, auf dem es ausgeführt wird, daher wird empfohlen, diese Funktion zuerst in einer Akzeptanzumgebung zu aktivieren, um die Auswirkungen zu beobachten, bevor man in die Produktion geht. Der Sidecar-Proxy benötigt mindestens 25 MB Speicher pro Pod, mit dem er bereitgestellt wird, bis zu maximal 40 MB.
+
+== Fügen Sie die Trace-Header-ID zu einem bestehenden Proxy hinzu
+
+Um den `X-Request-Id` Header von einem bestehenden Proxy hinzuzufügen, sind zwei Eigenschaften wichtig:
+
+. Jedes Anforderungs-/Antwortpaar muss eine eindeutige ID erhalten.
+. Der `X-Request-Id` Header sollte sowohl zu Anfrage als auch Antwort hinzugefügt werden, um sowohl beim Client als auch beim Server beobachtet zu werden.
+
+=== Fügen Sie die Trace-Header-ID in Envoy hinzu
+
+In Envoy kann der `X-Request-Id` Header aktiviert werden, indem `generate_request_id: true` und `always_set_request_id_in_response: true` für https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto[HTTP-Verbindungen] gesetzt werden.
+
+== Istio
+
+Ein https://istio.io/latest/docs/reference/config/networking/envoy-filter/[Envoy Filter] kann verwendet werden, um den Trace-Header für Envoy festzulegen.
+
+=== Fügen Sie die Trace-Header-ID mit dem Envoy-Filter hinzu.
+
+Verwenden Sie `kubectl`, um die folgende Definition auf den Kubernetes-Cluster anzuwenden,
+
+[,yaml]
+----
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: responsed-x-request-id-always
+  namespace: istio-system
+spec:
+  configPatches:
+    - applyTo: NETWORK_FILTER
+      match:
+        context: ANY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: MERGE
+        value:
+          typed_config:
+            '@type': >-
+              type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            always_set_request_id_in_response: true
+            generate_request_id: true
+            preserve_external_request_id: true
+  priority: 0
+----
+
+== Instrumentieren Sie Ihre Anwendung
+
+Es ist auch möglich, den `X-Request-Id` Header entweder von der Client-Seite zu jeder Anfrage oder von der Server-Seite zu jeder Antwort hinzuzufügen. Es ist wichtig sicherzustellen, dass jede Anfrage/jede Antwort einen einzigartigen `X-Request-Id` Wert erhält. Außerdem erfordert das `X-Request-Id`, dass, wenn eine ID bereits in einer Anfrage vorhanden ist, die Antwort dieselbe ID enthalten sollte.
+
+== Unterstützte Systeme/Technologien
+
+* HTTP/1.0 und HTTP/1.1 mit keepAlive
+* Trace-Header-Injektion und Trace-Beobachtung bei unverschlüsseltem Verkehr
+* Trace-Beobachtung für OpenSSL-verschlüsselten Verkehr
+* Trace-Header-Injektion zusammen mit LinkerD
+* Jeder LoadBalancer, der den `X-Request-Id` Header in Anfragen und Antworten weiterleitet
+* Jede Netzwerklösung über Cluster hinweg, die den `X-Request-Id` Header in Anfragen und Antworten weiterleitet
+
+== Bekannte Probleme
+
+=== Kein Sidecar wird für meine Pods injiziert
+
+Um sicherzustellen, dass Ihr Setup in Ordnung ist, überprüfen Sie zunächst, ob die folgenden Schritte durchgeführt wurden:
+
+* Das `--set httpHeaderInjectorWebhook.enabled=true` Flag wurde während der Installation des Agents gesetzt
+* Der Pod hat `http-header-injector.stackstate.io/inject: enabled` gesetzt
+* Der Pod wurde neu gestartet
+
+Wenn dies das Problem nicht löst, könnte Folgendes das Problem sein:
+
+==== Cluster-Netzwerkrichtlinien
+
+Der Cluster kann Netzwerkrichtlinien eingerichtet haben, die verhindern, dass der Kubernetes-Control-Plane-APIServer den MutatingValidationWebhook kontaktiert, der den Sidecar injiziert. Um dies zu validieren, schauen Sie sich die Protokolle des Kube-APIServers an, die sich entweder im Kube-System-Namespace befinden oder von Ihrem Cloud-Anbieter verwaltet werden könnten. Ein Fehler wie der folgende sollte in diesen Protokollen gefunden werden:
+
+----
+Failed calling webhook, failing open stackstate-agent-http-header-injector-webhook.stackstate.io: failed calling webhook "stackstate-agent-http-header-injector-webhook.stackstate.io": failed to call webhook: Post "https://stackstate-agent-http-header-injector.monitoring.svc:8443/mutate?timeout=10s": context deadline exceeded
+----
+
+Wenn dies geschieht, stellen Sie sicher, dass Sie Ihre Cluster-Netzwerkrichtlinien anpassen, damit der apiserver den mutatingvalidationwebhook erreichen kann.

@@ -1,0 +1,131 @@
+= Selección
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+El muestreo se utiliza para reducir el volumen de datos que se exportan a SUSE Observability, mientras se compromete la calidad de los datos de telemetría lo menos posible. La razón principal para aplicar muestreo es reducir el costo (de red, almacenamiento, etc.).
+
+Si tus aplicaciones generan pocos datos, no hay necesidad de muestreo y puede incluso obstaculizar la observabilidad debido a la falta de datos de telemetría. Sin embargo, si tu aplicación tiene una cantidad significativa de tráfico, por ejemplo, más de 1000 spans por segundo, ya puede tener sentido aplicar muestreo.
+
+Hay 2 tipos principales de muestreo, muestreo de cabeza y muestreo de cola.
+
+== Muestreo de cabeza
+
+El muestreo de cabeza toma la decisión de muestreo (si exportar los datos o no) lo antes posible. Por lo tanto, la decisión no puede basarse en toda la traza, sino solo en la información, muy limitada, que está disponible. El recolector otel tiene el https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[procesador de muestreo probabilístico] que implementa el Muestreo de Probabilidad Consistente. El muestreador es configurable y toma una decisión de muestreo basada en el id de la traza (útil para trazas) o en un hash de un atributo (útil para registros). Esto asegura que todos los spans de una traza sean siempre muestreados o no, y tendrás trazas completas en SUSE Observability.
+
+Las ventajas del muestreo de cabeza son:
+
+* Fácil de entender
+* Eficiente
+* Sencillo de configurar
+
+Pero una desventaja es que es imposible tomar decisiones de muestreo sobre una traza completa, por ejemplo, muestrear todas las trazas fallidas y solo una pequeña selección de las trazas exitosas.
+
+Para habilitar el muestreo de cabeza, configura el procesador e inclúyelo en los pipelines. Este ejemplo muestrea 1 de cada 4 trazas basado en el id de la traza:
+
+[,yaml]
+----
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+----
+
+== Muestreo de cola
+
+El muestreo de cola pospone la decisión de muestreo hasta que una traza está (casi) completa. Esto permite que el muestreador de cola tome decisiones de muestreo basadas en toda la traza, por ejemplo, para muestrear siempre las trazas fallidas y/o las trazas lentas. Existen muchas más posibilidades, como muestrear en función de atributos específicos o la participación en servicios.
+
+El OpenTelemetry Collector proporciona un https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[procesador de muestreo de cola] que se puede utilizar para aplicar políticas de muestreo de cola.
+
+La principal ventaja del muestreo de cola es la flexibilidad adicional que proporciona al tomar decisiones de muestreo basadas en datos de traza completos, en lugar de en información parcial disponible cuando se crean los spans individuales.
+
+
+[WARNING]
+====
+Aunque es ventajoso, el muestreo de cola tiene las siguientes desventajas:
+
+* Más difícil de configurar y entender.
+* Debe ser con estado para almacenar los spans de las trazas hasta que se tome una decisión de muestreo.
+* Por lo tanto, también (mucho) más uso de recursos.
+* El muestreador puede no mantenerse al día y necesita monitoreo y escalado adicionales para eso.
+====
+
+Para habilitar el muestreo de cola, configura el procesador e inclúyelo en los pipelines.
+
+[,yaml]
+----
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+    - name: rate-limited-composite
+      type: composite
+      composite:
+        max_total_spans_per_second: 500
+        policy_order: [errors, slow-traces, rest]
+        composite_sub_policy:
+        - name: errors
+          type: status_code
+          status_code:
+            status_codes: [ ERROR ]
+        - name: slow-traces
+          type: latency
+          latency:
+            threshold_ms: 1000
+        - name: rest
+          type: always_sample
+        rate_allocation:
+        - policy: errors
+          percent: 33
+        - policy: slow-traces
+          percent: 33
+        - policy: rest
+          percent: 34
+----
+
+El ejemplo muestra:
+
+* Un máximo de 500 spans por segundo.
+* todos los spans en trazas que tienen errores hasta el 33% del máximo.
+* todos los spans en trazas más lentos de 1 segundo hasta el 33% del máximo.
+* otros spans hasta la tasa máxima permitida.
+
+Para más detalles sobre las opciones de configuración y diferentes políticas, utiliza el https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[readme de muestreo de cola].
+
+Sin embargo, no es completamente un 'configúralo y olvídalo'. Si el uso de recursos comienza a crecer, necesitas escalar para utilizar múltiples recolectores para manejar el muestreo de cola, lo que también requerirá https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[rutear] el tráfico basado en el id de la traza.
+
+== Muestreo de trazas en combinación con métricas de span.
+
+En la sección de inicio rápido, la configuración del recolector no incluye muestreo. Al añadir muestreo, queremos tener cuidado de mantener las métricas que se calculan a partir de trazas lo más precisas posible. Especialmente el muestreo de cola puede resultar en métricas muy sesgadas, porque típicamente la cantidad relativa de errores es mucho mayor. Para evitar esto, dividimos el pipeline de trazas en múltiples partes y las conectamos con el conector hacia adelante. Modifica la configuración para incluir el conector extra y el procesador de muestreo. Y modifica los pipelines como se muestra aquí:
+
+[,yaml]
+----
+connectors:
+  # enable the forwarder
+  forward:
+processors:
+  # Configure the probabilistic sampler to sample 25% of the traffic
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [forward]
+    traces/spanmetrics:
+      receivers: [forward]
+      processors: []
+      exporters: [spanmetrics]
+    traces/sampling:
+      receivers: [forward]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, otlp/stackstate]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/stackstate]
+----
+
+El ejemplo utiliza el muestreador probabilístico configurado para muestrear el 25% del tráfico. Probablemente querrás ajustar el porcentaje para tu situación o cambiar al <<_tail_sampling,muestreador de cola>> en su lugar. La configuración del pipeline es la misma para el muestreador de cola, solo reemplaza la referencia al `probabilistic_sampler` con `tail_sampling`.

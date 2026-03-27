@@ -1,0 +1,79 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schéma et référence pour les liaisons de métriques
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+Cette page décrit les schémas pour un `MetricBinding`, accompagnés d'explications détaillées sur les constructions, la syntaxe des expressions et la sémantique.
+
+== Schéma pour la liaison de métrique
+
+Chaque liaison de métrique :
+
+* Sélectionne les composants où elle peut être appliquée
+* Définit des modèles de requêtes PromQL pour récupérer des données
+* Spécifie comment les données résultantes doivent être rendues
+* Inclut des indications de mise en page pour sélectionner un endroit approprié dans l'interface utilisateur pour afficher le graphique
+
+[,yaml]
+----
+_type: "MetricBinding"
+name: string
+chartType: "line"                     # "line" is the only type for now
+unit?: string
+scope: string                         # Topology scope - components to bind to
+enabled: boolean                      # default: true
+description?: string
+valuation?: "higher-is-better" | "lower-is-better"
+priority?: "HIGH" | "MEDIUM" | "LOW" | "NONE"    # deprecated
+queries:
+  - _type: "MetricBindingQuery"
+    expression: string                # promql query
+    alias: string                     # name in legend
+    componentIdentifierTemplate?: string    # URN template for linking
+    primary?: boolean                 # is this query the primary one
+tags:
+  <key>: <value>
+layout?:                              # where should chart be shown
+  metricPerspective?:                 # the metrics perspective for a component
+    tab: string
+    section: string
+    weight?: integer
+  componentHighlight?:                # highlight perspective of a component
+    section: string
+    weight?: integer
+  componentSummary?:                  # summary - supporting panel on the right
+    weight?: integer
+identifier?: string
+----
+
+* `_type` : {stackstate-product-name} doit savoir qu'il s'agit d'une liaison de métrique, donc la valeur doit toujours être `MetricBinding`
+* `name` : Le nom de la liaison de métrique
+* `chartType` : {stackstate-product-name} prendra en charge différents types de graphiques (`line`, `bar`, etc.), actuellement seul `line` est pris en charge
+* `unit` : L'unité des valeurs dans la série temporelle renvoyée par la ou les requêtes, utilisée pour rendre l'axe Y du graphique. Voir la référence des xref:/develop/reference/k8sTs-chart-units.adoc[unités prises en charge] pour toutes les unités
+* `scope` : Le champ topologique de la liaison de métrique, une requête topologique qui sélectionne les composants sur lesquels cette liaison de métrique sera affichée
+* `enabled` : Définir sur `false` pour conserver la liaison de métrique mais ne pas l'afficher aux utilisateurs
+* `description` : Description optionnelle, affichée au survol du nom
+* `valuation` : Si des valeurs plus élevées ou plus basses sont "meilleures"
+* `priority` : [Obsolète] L'un de `HIGH`, `MEDIUM` ou `LOW`. Ordre de tri principal pour les métriques sur un composant (dans l'ordre où elles sont mentionnées ici), l'ordre de tri secondaire est le `name`.
+* `queries` : Une liste de requêtes à afficher dans le graphique pour la liaison de métrique (voir xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[Rédaction de requêtes PromQL])
+** `expression` : La requête PromQL (modélisée)
+** `alias` : Nom de la requête dans la légende
+** `componentIdentifierTemplate` : Modèle pour l'identifiant du composant associé, rempli avec les étiquettes des séries temporelles résultant de la requête
+** `primary` : Cette requête est-elle la principale ?
+* `tags` : Sera utilisée pour organiser les métriques dans l'interface utilisateur, peut être laissée vide en utilisant `{}`
+* `layout` : Comment regrouper les graphiques sur différentes vues de perspective, par exemple sur xref:/use/views/k8s-metrics-perspective.adoc[Perspective des métriques]
+** `metricPerspective` - Définit les métriques à afficher sur `Metrics Perspective`. Les métriques sont regroupées en onglets puis en sections.
+*** `tab` - Nom de l'onglet. Les onglets sont triés par ordre alphabétique
+*** `section` - Nom de la section. Les sections sont triées par ordre alphabétique
+*** `weight` - Les métriques au sein d'une section sont triées principalement par poids (croissant) et secondairement par nom (alphabétique)
+** `componentHighlight` - Définit les métriques à afficher sur `Component Highlight`. Les métriques sont regroupées en sections.
+*** `section` - Nom de la section. Les sections sont triées par ordre alphabétique
+*** `weight` - Les métriques au sein d'une section sont triées principalement par poids (croissant) et secondairement par nom (alphabétique)
+** `componentSummary` - Spécifie les métriques à afficher dans la barre latérale `Components details` lors de la sélection du composant. Les graphiques apparaissent uniquement lorsque cette propriété est définie.
+*** `weight` - Cela représente le poids du graphique. Les graphiques sont triés par ordre croissant de poids, puis le système affiche les trois premiers graphiques.
+* `identifier` : Un URN (identifiant de ressource universel), utilisé comme identifiant unique de la liaison de métrique. Cela doit commencer par `urn:stackpack:<stackpack-name>:metric-binding:`, le reste est en format libre tant qu'il est unique parmi toutes les liaisons de métrique.
+
+endif::ss-ff-stackpacks2_enabled[]

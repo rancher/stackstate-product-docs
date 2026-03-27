@@ -1,0 +1,36 @@
+= v2.6.0 - 29/Sep/2025
+:revdate: 2025-09-29
+:page-revdate: {revdate}
+:description: SUSE Observability en mode auto-hébergé
+
+== Notes de mise à jour : SUSE Observability Helm Chart v2.6.0
+
+WARNING:  Cette version comporte un *BREAKING CHANGE* pour `clickhouse.commonLabels` et `zookeeper.commonLabels` (graphique Helm).
+
+== Nouvelles fonctionnalités et améliorations
+
+* *Mise à jour de HBase :* HBase a été mis à jour à la version `2.6.3` pour améliorer la compatibilité avec Hadoop 3.4.
+
+* *Supports d'étiquettes communes globales (tableau de bord) :* La carte SUSE Observability Helm prend désormais en charge la configuration `global.commonLabels`. Cela vous permet d'ajouter des étiquettes Kubernetes personnalisées à tous les déploiements, StatefulSets, CronJobs, Jobs et Pods créés par le graphique Helm.
+** *UN CHANGEMENT RADICAL :* Si vous avez explicitement configuré `clickhouse.commonLabels` et `zookeeper.commonLabels`, la mise à jour de Helm échouera en raison de la nature immuable des StatefulSets. Pour éviter cela, vous devez supprimer les StatefulSets correspondants *avant la* mise à niveau, tout en laissant les pods en cours d'exécution intacts.
+** Utilisez les commandes suivantes pour supprimer les StatefulSets en toute sécurité :
++
+[source,bash]
+----
+kubectl delete statefulset -n <suse observability namespace> -l app.kubernetes.io/name=zookeeper --cascade=orphan
+kubectl delete statefulset -n <suse observability namespace> -l app.kubernetes.io/name=clickhouse --cascade=orphan
+----
+
+* *Moniteurs de service modifiables :* Les moniteurs des services internes de SUSE Observability sont désormais modifiables. Cela s'applique également à d'autres moniteurs qui créent plusieurs états de santé par composant.
+
+== Corrections de bugs
+
+* *Conflit de nom de rôle de cluster :* Correction d'un problème où l'agent et la plateforme ne pouvaient pas être installés dans le même espace de noms à cause d'un conflit de nom `ClusterRole`.
+* *Corruption des données (configurations non HA) :* Résolution d'un problème de corruption de données qui se produisait après un Tephra et un redémarrage du serveur sur des configurations non-HA.
+* *Aperçu de la topologie Performance :* Correction d'un problème de dégradation des performances lors de l'exécution de la vue d'ensemble de la topologie sur des vues contenant un grand nombre de composants (plus de 4000).
+* *Formatage de l'Emoji CLI :* Le formatage a été corrigé pour les champs contenant des Emojis dans le CLI.
+
+=== Correction des bugs de l'agent
+
+* *Certificats auto-signés de l'agent RBAC :* Correction d'un problème de prise en charge des certificats auto-signés dans l'agent RBAC.
+* *Validation SSL de l'agent RBAC Sauter :* L'agent RBAC prend désormais en charge le paramètre `global.skipSslValidation`.

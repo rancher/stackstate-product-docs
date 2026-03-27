@@ -1,0 +1,254 @@
+= 在隔离模式下安装 {stackstate-product-name}
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name}
+
+本文件提供了在隔离环境中使用 Helm 图表安装 {stackstate-product-name} 的逐步指南。该过程包括在具有互联网访问的主机上准备必要的 Docker 镜像和 Helm 图表，将它们转移到私有网络中的主机，复制 Docker 镜像到私有注册表，然后部署 Helm 图表。
+
+== 先决条件
+
+=== 在本地主机（互联网访问）
+
+* *操作系统*：Linux or MacOS
+* *已安装工具*：
+ ** https://www.docker.com/products/docker-desktop/[Docker]
+ ** https://helm.sh/docs/intro/install/[Helm CLI]
+ ** 用于从源注册表下载 Docker 镜像的脚本（链接将在本指南后面提供）。
+* *互联网访问*：需要从Quay.io拉取Docker镜像和从ChartMuseum拉取Helm图表。
+
+=== 在私有网络主机上
+
+* *访问*：对主机的SSH访问。
+* *已安装工具*：
+ ** https://www.docker.com/products/docker-desktop/[Docker]
+ ** https://helm.sh/docs/intro/install/[Helm CLI]
+ ** 用于从源注册表下载 Docker 镜像的脚本（链接将在本指南后面提供）。
+ ** 网络访问和凭据以将镜像上传到私有Docker注册表。
+ ** 配置好的Kubeconfig以在目标集群上安装Helm图表。
+
+== 准备 Docker 镜像和 Helm 图表
+
+在本地主机上运行以下命令以获取所需的 Docker 镜像和 Helm 图表：
+
+*将 Helm 仓库添加到本地 Helm 缓存：*
+
+[,bash]
+----
+# Adding the Helm repository for {stackstate-product-name}
+helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+helm repo update
+----
+
+*获取图表的最新版本。这些命令将下载图表的 TGZ 压缩包：*
+
+[,bash]
+----
+# Downloading the chart for {stackstate-product-name}
+# The file will be named suse-observability-k8s-A.B.C.tgz
+helm fetch suse-observability/suse-observability
+
+# Downloading the helper chart that generates values for {stackstate-product-name}
+# The file will be named suse-observability-values-L.M.N.tgz
+helm fetch suse-observability/suse-observability-values
+----
+
+*下载 Bash 脚本以保存 Docker 镜像：*
+
+[,bash]
+----
+# o11y-get-images.sh
+curl -LO https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability/installation/o11y-get-images.sh
+# o11y-save-images.sh
+curl -LO https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability/installation/o11y-save-images.sh
+
+# Make the scripts executable
+chmod a+x o11y-get-images.sh o11y-save-images.sh
+----
+
+*提取并保存 Docker 镜像：*
+
+[,bash]
+----
+# Extract the list of images from the Helm chart and save it to a file.
+./o11y-get-images.sh -f suse-observability-A.B.C.tgz > o11y-images.txt
+----
+
+[NOTE]
+====
+将 `suse-observability-A.B.C.tgz` 替换为之前下载的图表压缩包的实际文件名。*
+====
+
+
+[,bash]
+----
+# Save Docker images to an archive.
+# The script expects the file o11y-images.txt to contain the list of images used by {stackstate-product-name}.
+# The Docker images will be saved to o11y-images.tar.gz.
+./o11y-save-images.sh -i o11y-images.txt -f o11y-images.tar.gz
+----
+
+== 将所需文件复制到远程主机
+
+将以下文件从本地主机复制到私有网络中的主机：
+
+* o11y-images.txt（{stackstate-product-name} 图表所需的镜像列表）
+* o11y-images.tar.gz（包含 {stackstate-product-name} 的 Docker 镜像的压缩包）
+* https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability/installation/o11y-load-images.sh[o11y-load-images.sh]（将 Docker 镜像上传到注册表的 Bash 脚本）
+* 之前下载的 Helm 图表：
+ ** suse-observability-A.B.C.tgz
+ ** suse-observability-values-L.M.N.tgz
+
+== 从压缩包恢复 Docker 镜像到私有注册表
+
+*将镜像上传到私有注册表：*
+
+[,bash]
+----
+# Load Docker images from the archive and push them to the private registry.
+# Replace <private-registry> with your private registry's URL.
+export DST_REGISTRY_USERNAME="..."
+export DST_REGISTRY_PASSWORD="..."
+./o11y-load-images.sh -d registry.example.com:5043 -i o11y-images.txt -f o11y-images.tar.gz
+----
+
+[NOTE]
+====
+如果目标注册表不使用身份验证，则环境变量 `DST_REGISTRY_USERNAME` 和 `DST_REGISTRY_PASSWORD` 不得配置或必须设置为空值。*
+====
+
+
+== 安装 {stackstate-product-name}
+
+在隔离环境中安装 {stackstate-product-name} Helm 图表需要覆盖 Docker 镜像 URL 中使用的注册表。本指南遵循 xref:/k8s-suse-rancher-prime#_installation[安装] 设置，但使用预先下载的 Helm 压缩包和私有 Docker 注册表。
+
+[tabs]
+====
+推荐的方法::
++
+--
+[NOTE]
+=====
+从版本 `global.suseObservability` 开始提供 `2.8.0` 配置方法。对于早期版本，请使用遗留方法。
+=====
+
+创建一个 `values.yaml` 文件，包含您的配置，包括私有注册表：
+
+[source,yaml]
+----
+global:
+  # Required: Your private registry URL
+  imageRegistry: "registry.example.com:5043"
+
+  suseObservability:
+    # Required: Your {stackstate-product-name} license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    sizing:
+      profile: "150-ha"
+
+    # Required: Plain text Admin password
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password with adminPasswordBcrypt
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Pull secret for private registry authentication
+    pullSecret:
+      username: "registry-user"
+      password: "registry-pass"
+----
+
+使用下载的图表归档进行部署：
+
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values values.yaml \
+    suse-observability \
+    suse-observability-A.B.C.tgz
+----
+
+[NOTE]
+=====
+使用推荐的方法，您只需下载 `suse-observability` 图表（而不是 `suse-observability-values`）。镜像列表是从主图表中提取的。
+=====
+--
+遗留方法（已弃用）::
++
+--
+[WARNING]
+=====
+此方法已弃用。对于新安装，请使用上述推荐的方法。对于使用此方法的现有安装，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南] 以过渡到新的配置格式。
+=====
+
+创建一个 private-registry.yaml 文件，内容如下：
+
+[,yaml]
+----
+global:
+  imageRegistry: registry.example.com:5043
+----
+
+*生成 Helm 图表值文件的命令：*
+
+.helm_template.sh
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+    --set license='<licenseKey>' \
+    --set baseUrl='<baseURL>' \
+    --set rancherUrl='<rancherURL>' \
+    --set sizing.profile='<sizing.profile>' \
+    suse-observability-values suse-observability-values-L.M.N.tgz \
+    --output-dir $VALUES_DIR
+----
+
+如果私有注册表需要身份验证，请包含拉取密钥的用户名和密码：
+
+.helm_template.sh
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+    --set license='<licenseKey>' \
+    --set baseUrl='<baseURL>' \
+    --set rancherUrl='<rancherURL>' \
+    --set sizing.profile='<sizing.profile>' \
+    --set pullSecret.username='registry-user' \
+    --set pullSecret.password='registry-pass' \
+    suse-observability-values suse-observability-values-L.M.N.tgz \
+    --output-dir $VALUES_DIR
+----
+
+*部署 {stackstate-product-name} Helm 图表：*
+
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values private-registry.yaml \
+    suse-observability \
+    suse-observability-A.B.C.tgz
+----
+--
+====
+
+*验证部署：*
+
+[,bash]
+----
+kubectl get pod -n suse-observability
+----

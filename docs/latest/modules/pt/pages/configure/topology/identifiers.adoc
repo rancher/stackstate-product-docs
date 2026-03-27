@@ -1,0 +1,136 @@
+= Identificadores
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Visão Geral
+
+Os identificadores são usados no SUSE Observability para identificar objetos, como elementos de topologia (componentes e relações) e funções. Esta página descreve os diferentes tipos de identificadores usados para elementos de topologia e como os identificadores de escopo global são estruturados no SUSE Observability.
+
+== Identificadores de topologia
+
+Os elementos de topologia usam dois tipos de identificadores no SUSE Observability:
+
+* *Identificadores de escopo de integração* - usados para identificar componentes e relações dentro de uma integração. Cada componente ou relação tem apenas um identificador de escopo de integração. O identificador é arbitrário, mas deve ser consistente dentro do escopo da própria integração.
+* *Identificadores de escopo global* - usados para mesclar componentes entre integrações, por exemplo, ServiceNow e o SUSE Observability Agent. Cada componente pode ter múltiplos identificadores de escopo global, enquanto relações não têm identificadores globais. Eles são atribuídos pelo SUSE Observability e formatados de acordo com a xref:/configure/topology/identifiers.adoc#_global_scope_identifiers[convenção de identificador global do SUSE Observability].
+
+O exemplo de código abaixo mostra um componente com ambos os tipos de identificadores.
+
+* Identificador de escopo de integração - `this-host-unique-identifier`
+* Identificador de escopo global - `urn:host:/this-host-fqdn`
+
+
+[,text]
+----
+self.component("this-host-unique-identifier", "Host", {
+    "name": "this-host",
+    "domain": "Webshop",
+    "layer": "Machines",
+    "identifiers": ["urn:host:/this-host-fqdn"],
+    "labels": ["host:this-host", "region:eu-west-1"],
+    "environment": "Production"
+})
+----
+
+
+== Identificadores do SUSE Observability Agent
+
+Os identificadores de escopo global usados pelo SUSE Observability Agent para identificar elementos de topologia sincronizados estão listados na tabela abaixo.
+
+|===
+| Tipo de recurso | Formato de identificador URN
+
+| Host
+| `urn:host:/[hostName]`
+
+| Processo
+| `urn:process:/[hostName]:[pid]:[createTime]`
+
+| Container
+| `urn:container:/[hostName]:[containerId]`
+
+| Serviço descoberto com rastros
+| `urn:service:/[serviceName]`
+
+| Instância de serviço descoberta com rastros
+| `urn:service-instance:/[serviceName]:/[hostName]`
+|===
+
+Veja os xref:/configure/topology/identifiers.adoc#_stackstate_agent[identificadores de escopo global de exemplo da SUSE Observability Agent].
+
+== Identificadores de escopo global
+
+Quando a SUSE Observability recebe componentes com identificadores de escopo global correspondentes de diferentes fontes externas, os componentes e suas propriedades (rótulos, fluxos, verificações) são mesclados em um único componente. Isso torna possível combinar dados de diferentes fontes em uma única visão de um ambiente de TI.
+
+Identificadores de escopo global na SUSE Observability são um URN globalmente único que corresponde à seguinte convenção:
+
+[,text]
+----
+urn:<prefix>:<type-name>:<free-form>
+----
+
+Observe que nem todos os caracteres são permitidos em um identificador URN. Você pode verificar seus identificadores com a seguinte regex URN:
+
+[,text]
+----
+^urn:[a-z0-9][a-z0-9-]{0,31}:[a-z0-9()+,\-.:=@;$_!*'%/?#]+$
+----
+
+O formato dos segmentos `<prefix>` e `<type-name>:<free-form>` é descrito abaixo.
+
+=== Prefixo
+
+O segmento `prefix` é uma parte obrigatória de um identificador global. Ele nomeia o escopo ao qual o identificador pertence e é usado puramente para fins organizacionais.
+
+[NOTE]
+====
+Quando o prefixo inclui um nome de StackPack, o objeto estará sob o controle desse StackPack. Isso significa que o objeto será desinstalado quando o StackPack for desinstalado.
+====
+
+
+Os prefixos URN reconhecidos são:
+
+* `stackpack:<name>` - objetos pertencentes a StackPacks.
+* `stackpack:<name>:shared` - objetos compartilhados entre instâncias de um StackPack.
+* `stackpack:<name>:instance:{{instanceId}}` - objetos pertencentes a uma instância específica de um StackPack, onde `{{instanceId}}` é um identificador que retorna o ID fornecido durante o processo de instalação do StackPack para cada instância específica do StackPack.
+* `system:auto` - objetos criados pelo sistema que não pertencem a nenhum StackPack específico.
+
+=== Nome do tipo e forma livre
+
+O identificador é identificado de forma única pelos segmentos `<type-name>:<free-form>`.
+
+* `<type-name>` corresponde ao tipo de objeto de domínio do objeto ao qual o identificador está atribuído (não é sensível a maiúsculas e minúsculas).
+* `<free-form>` é arbitrário, mas deve ser único para o tipo. O formato do segmento de forma livre é decidido pelo usuário. Não precisa corresponder ao nome do objeto (se houver) e pode consistir em múltiplos segmentos.
+
+== Identificadores de exemplo
+
+=== StackPack Comum
+
+Identificadores de escopo global URN de exemplo do StackPack comum. Os objetos serão desinstalados quando o StackPack comum for desinstalado.
+
+* Tipo de componente servidor:
+ ** `urn:stackpack:common:component-type:server`
+
+=== SUSE Observability Agent
+
+Identificadores de escopo global URN de exemplo do Agente de Observabilidade SUSE.
+
+* Host:
+ ** `urn:host:/example.org`
+* Processo:
+ ** `urn:process:/db.infra.company.org:161841:1602158335000`
+* Container:
+ ** `urn:container:/compnode5.k8s.example.org:8b18c68a820904c55b4909d7f5a9a52756d45e866c07c92bf478bcf6cd240901`
+* Serviço descoberto com rastros:
+ ** `urn:service:/prod-db`
+* Instância de serviço descoberta com rastros:
+ ** `urn:service-instance:/prod-db:/main.example.org`
+
+=== Outros StackPacks
+
+Identificadores de escopo global URN de exemplo de vários StackPacks. Os objetos serão desinstalados quando o StackPack nomeado for desinstalado.
+
+* Verifique a função Estado de Execução de Evento AWS compartilhada entre instâncias do StackPack AWS:
+ ** `urn:stackpack:aws:shared:check-function:aws-event-run-state`
+* Tipo de componente cmdb_ci_netgear no StackPack ServiceNow:
+ ** `urn:stackpack:servicenow:componenttype:cmdb_ci_netgear`

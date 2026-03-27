@@ -1,0 +1,507 @@
+= 恢复备份
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+[NOTE]
+====
+此页面适用于 {stackstate-product-name} v2.7.0 或更高版本。
+====
+
+== 概述
+
+本页面描述了如何使用备份 CLI 恢复 {stackstate-product-name} 数据存储的备份。
+
+[WARNING]
+====
+*从备份恢复将清除或覆盖现有数据。此操作无法撤销。*
+
+在确认恢复操作之前，请始终验证备份名称和名称空间。
+
+*GitOps 工作流受影响*
+此备份工具直接修改您集群中的 K8s 资源：
+
+- 将 StatefulSets/Deployments 的副本数缩放为 0
+- 添加用于恢复跟踪的注释
+
+这些更改将与您的 GitOps 工作流发生冲突，因为它们绕过了基于 Git 的协调。在备份操作期间，GitOps 控制器可能会尝试还原这些更改。
+*重要说明：*在备份恢复期间，必须禁用 SUSE Observability Helm 图表部署的自动协调，以防止冲突。
+====
+
+[NOTE]
+====
+*在使用 CLI 之前，请确保：*
+
+* 您正在使用最新版本的备份 CLI。
+* CLI 需要一个具有当前上下文的 kubeconfig，指向安装了 SUSE Observability 的集群。
+====
+
+== 下载备份 CLI
+
+使用以下命令为您的平台下载最新版本的备份 CLI。该二进制文件名为 `sts-backup`。
+
+[tabs]
+====
+macOS（Apple Silicon）::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz
+----
+
+--
+macOS (Intel)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz
+----
+
+--
+Linux（ARM64）::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz
+----
+
+--
+Linux（x86_64）::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz
+----
+
+--
+Windows (x86_64)::
++
+--
+
+[,powershell]
+----
+$VERSION = (Invoke-RestMethod -Uri "https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest").tag_name
+Invoke-WebRequest -Uri "https://github.com/StackVista/stackstate-backup-cli/releases/download/$VERSION/stackstate-backup-cli-$($VERSION.TrimStart('v')).windows-x86_64.zip" -OutFile "stackstate-backup-cli.zip"
+Expand-Archive -Path "stackstate-backup-cli.zip" -DestinationPath "."
+----
+
+--
+====
+
+[TIP]
+====
+为了方便，将 `sts-backup` 二进制文件复制到您的 `$PATH` 中的一个目录（例如，在 Linux/macOS 上的 `/usr/local/bin`），这样您就可以在任何地方运行它，而无需指定完整路径。
+====
+
+== 配置和拓扑数据（StackGraph）
+
+=== 列出 StackGraph 备份
+
+要列出 StackGraph 备份，请执行以下命令：
+
+[,bash]
+----
+sts-backup stackgraph list --namespace <NAMESPACE>
+----
+
+将 `<NAMESPACE>` 替换为安装 {stackstate-product-name} 的名称空间。
+
+输出应如下所示：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Stackgraph backups in bucket 'sts-stackgraph-backup'...
+NAME                            LAST MODIFIED            SIZE
+sts-backup-20251128-0300.graph  2025-11-28 03:08:42 UTC  2GiB
+----
+
+备份创建时的时间戳是备份名称的一部分。
+
+
+=== 恢复 StackGraph 备份
+
+要恢复 StackGraph 备份，请使用以下方法之一：
+
+==== 恢复特定备份
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 恢复最新备份
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --latest
+----
+
+==== 常用标志
+
+* `--yes` 或 `-y` - 跳过确认提示（对自动化很有用）
+* `--background` - 在后台运行恢复，而不等待完成
+
+==== 后台恢复
+
+使用 `--background` 时，恢复异步运行。启动恢复后，使用以下命令检查状态并完成：
+
+[,bash]
+----
+sts-backup stackgraph check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` 命令：
+
+* 检查恢复作业状态
+* 使用 `--wait` 标志，等待作业完成
+* 自动扩展在恢复期间缩减的部署
+* 完成后清理资源
+
+[NOTE]
+====
+如果没有 `--background` 的恢复被中断（例如，通过 Ctrl+C），您必须运行 `check-and-finalize` 来扩展部署并清理资源。
+====
+
+== 设置
+
+设置备份包括已安装的 StackPacks 及其配置和用户创建的其他自定义内容，例如监视器、自定义视图和服务令牌。设置备份是轻量级的（通常只有几兆字节），并且可以快速恢复，停机时间最小。
+
+=== 列出设置备份
+
+要列出设置备份，请执行以下命令：
+
+[,bash]
+----
+sts-backup settings list --namespace <NAMESPACE>
+----
+
+将 `<NAMESPACE>` 替换为安装 SUSE Observability 的名称空间。
+
+输出应如下所示：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Settings backups in bucket 'sts-configuration-backup'...
+NAME                          LAST MODIFIED            SIZE
+sts-backup-20251128-1328.sty  2025-11-28 13:29:12 UTC  2MiB
+----
+
+备份创建时的时间戳是备份名称的一部分。
+
+=== 恢复设置备份
+
+[CAUTION]
+====
+恢复设置备份还将删除所有拓扑，包括健康状态、警报和拓扑历史。
+====
+
+要恢复设置备份，请使用以下方法之一：
+
+==== 恢复特定备份
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 恢复最新备份
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --latest
+----
+
+==== 常用标志
+
+* `--yes` 或 `-y` - 跳过确认提示（对自动化很有用）
+* `--background` - 在后台运行恢复，而不等待完成
+
+==== 后台恢复
+
+使用 `--background` 时，恢复异步运行。启动恢复后，使用以下命令检查状态并完成：
+
+[,bash]
+----
+sts-backup settings check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` 命令：
+
+* 检查恢复作业状态
+* 使用 `--wait` 标志，等待作业完成
+* 自动扩展在恢复期间缩减的部署
+* 完成后清理资源
+
+[NOTE]
+====
+如果没有 `--background` 的恢复被中断（例如，通过 Ctrl+C），您必须运行 `check-and-finalize` 来扩展部署并清理资源。
+====
+
+== 指标（Victoria Metrics）
+
+根据配置文件 `nonha` 或 `ha`，Victoria Metrics 以不同模式部署：
+
+* *nonha profile* - 单节点模式，包含一个 Victoria Metrics 实例 (`victoria-metrics-0`)
+* *ha profile* - HA（镜像）模式，包含两个 Victoria Metrics 实例 (`victoria-metrics-0` 和 `victoria-metrics-1`)
+
+=== 列出 Victoria Metrics 备份
+
+要列出 Victoria Metrics 备份，请执行以下命令：
+
+[,bash]
+----
+sts-backup victoria-metrics list --namespace <NAMESPACE>
+----
+
+将 `<NAMESPACE>` 替换为安装 SUSE Observability 的名称空间。
+
+==== 单节点模式输出（nonha profile）
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:05 UTC
+----
+
+==== HA 模式输出（ha profile）
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-1-20251030152500  2025-11-28 09:35:08 UTC
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:04 UTC
+
+NOTE: In HA mode, backups from both instances (victoria-metrics-0 and victoria-metrics-1) are listed.
+      The restore command accepts either backup to restore both instances.
+----
+
+在 HA 模式下，为两个实例创建具有不同前缀的备份 (`victoria-metrics-0` 和 `victoria-metrics-1`)。在恢复时，您可以指定任一备份 - 恢复操作将把所选备份恢复到两个实例。
+
+=== 恢复 Victoria Metrics 备份
+
+[NOTE]
+====
+在恢复过程中，所有新指标将由 `vmagent` 缓存。确保 `vmagent` 有足够的内存来缓存指标。
+====
+
+要恢复 Victoria Metrics 备份，请使用以下方法之一：
+
+==== 恢复特定备份
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== 恢复最新备份
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --latest
+----
+
+==== 常用标志
+
+* `--yes` 或 `-y` - 跳过确认提示（对自动化很有用）
+* `--background` - 在后台运行恢复，而不等待完成
+
+==== 后台恢复
+
+使用 `--background` 时，恢复异步运行。启动恢复后，使用以下命令检查状态并完成：
+
+[,bash]
+----
+sts-backup victoria-metrics check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` 命令：
+
+* 检查恢复作业状态
+* 使用 `--wait` 标志，等待作业完成
+* 自动扩展在恢复期间缩减的 StatefulSets
+* 完成后清理资源
+
+[NOTE]
+====
+如果没有 `--background` 的恢复被中断（例如，通过 Ctrl+C），您必须运行 `check-and-finalize` 来扩展 StatefulSets 并清理资源。
+====
+
+== OpenTelemetry（ClickHouse）
+
+=== 列出 ClickHouse 备份
+
+要列出 ClickHouse 备份，请执行以下命令：
+
+[,bash]
+----
+sts-backup clickhouse list --namespace <NAMESPACE>
+----
+
+将 `<NAMESPACE>` 替换为安装 SUSE Observability 的名称空间。
+
+输出应如下所示：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-clickhouse-backup:7171 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Clickhouse backups...
+NAME                             CREATED              SIZE
+incremental_2025-11-28T09-45-00  2025-11-28 09:45:03  65MiB
+incremental_2025-11-28T08-45-00  2025-11-28 08:45:03  223MiB
+full_2025-11-28T00-45-00         2025-11-28 00:45:03  3GiB
+incremental_2025-11-27T23-45-00  2025-11-27 23:45:03  118MiB
+----
+
+以 `full_` 开头的备份名称为完整备份，而以 `incremental_` 开头的名称为增量备份。
+
+=== 恢复 ClickHouse 备份
+
+[NOTE]
+====
+恢复过程会自动缩减产生数据的工作负载（如 OpenTelemetry 导出器），以防止在恢复期间数据丢失。
+====
+
+要恢复 ClickHouse 备份，请使用以下方法之一：
+
+==== 恢复特定备份
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --snapshot <BACKUP_NAME>
+----
+
+==== 恢复最新备份
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --latest
+----
+
+==== 常用标志
+
+* `--yes` 或 `-y` - 跳过确认提示（对自动化很有用）
+* `--background` - 在后台运行恢复，而不等待完成
+
+==== 后台恢复
+
+使用 `--background` 时，恢复异步运行。启动恢复后，使用以下命令检查状态并完成：
+
+[,bash]
+----
+sts-backup clickhouse check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` 命令：
+
+* 检查恢复操作状态
+* 使用 `--wait` 标志，等待操作完成
+* 执行恢复后的 SQL 命令
+* 自动扩展在恢复期间缩减的 StatefulSets
+* 完成后清理资源
+
+[NOTE]
+====
+如果没有 `--background` 的恢复被中断（例如，通过 Ctrl+C），您必须使用操作 ID 运行 `check-and-finalize` 以扩展 StatefulSets 并清理资源。
+====
+
+== 遥测数据（Elasticsearch）
+
+=== 列出 Elasticsearch 快照
+
+要列出 Elasticsearch 快照，请执行以下命令：
+
+[,bash]
+----
+sts-backup elasticsearch list --namespace <NAMESPACE>
+----
+
+将 `<NAMESPACE>` 替换为安装 SUSE Observability 的名称空间。
+
+输出应如下所示：
+
+[,bash]
+----
+Setting up port-forward to suse-observability-elasticsearch-master-headless:9200 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Fetching snapshots from repository 'sts-backup'...
+SNAPSHOT                                         STATE    START TIME                DURATION (ms)  FAILURES
+sts-backup-20251128-1135-dpkj2dqrszo6cscpgfhrhg  SUCCESS  2025-11-28T11:35:10.967Z  329158         0
+----
+
+快照拍摄时的时间戳是快照名称的一部分。
+
+=== 恢复Elasticsearch快照
+
+[NOTE]
+====
+恢复过程会在恢复快照之前自动删除所有与模式 `sts*` 匹配的 STS 索引。这包括滚动数据流以确保干净的恢复。
+====
+
+要恢复 Elasticsearch 快照，请使用以下方法之一：
+
+==== 恢复特定快照
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --snapshot <SNAPSHOT_NAME>
+----
+
+==== 恢复最新快照
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --latest
+----
+
+==== 常用标志
+
+* `--yes` 或 `-y` - 跳过确认提示（对自动化很有用）
+* `--background` - 在后台运行恢复，而不等待完成
+
+==== 后台恢复
+
+使用 `--background` 时，恢复异步运行。启动恢复后，使用以下命令检查状态并完成：
+
+[,bash]
+----
+sts-backup elasticsearch check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+`check-and-finalize` 命令：
+
+* 检查恢复操作状态
+* 使用 `--wait` 标志，等待操作完成
+* 自动扩展在恢复期间缩减的部署
+* 完成后清理资源
+
+[NOTE]
+====
+如果没有 `--background` 的恢复被中断（例如，通过 Ctrl+C），您必须使用操作 ID（快照名称）运行 `check-and-finalize` 以扩展部署并清理资源。
+====

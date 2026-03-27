@@ -1,0 +1,367 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= はじめに
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: OpenTelemetryからトポロジーを導出するための入門ガイド
+
+== 概要
+
+この文書は、StackPackの一部としてパッケージ化されたコンポーネントおよび関係マッピングを使用して、OpenTelemetry（OTel）トレースデータからトポロジーを構築するための入門ガイドを提供します。
+
+このガイドは、既に存在するテレメトリデータを使用して、製品内で即座に視覚化できるトポロジーに焦点を当てています。
+生成される例のトポロジーは、OpenTelemetryリソース属性から導出されたプロセスを実行するサービスインスタンスのモデルを示します。
+
+== 前提条件
+
+* すでにOpenTelemetryトレースを収集しています。
+* StackPackを作成または拡張しています。
+* YAMLおよび基本的なOTelの概念（リソース、スパン）に慣れています。
+
+このガイドは以下に焦点を当てます：
+
+* トレースベースのトポロジー（`TRACES`信号のみ）
+* サービスインスタンス（論理サービスではありません）
+* ランタイムプロセスの可視性
+
+[NOTE]
+====
+このガイドでは、コンポーネントおよび関係マッピングがYAML構成として表現され、StackPackの一部としてパッケージ化、テスト、展開されます。
+====
+
+== トポロジーの構成
+
+目標は、追加のユーザー構成なしで即座に利用可能なランタイム実行トポロジーを視覚化することです。
+
+具体的には、以下をモデル化したいと考えています：
+
+[source]
+----
+service instance (component) -> executes (relation) -> process (component)
+----
+
+各要素の内容は次のとおりです。
+
+* `service instance`は、計測されたサービスの実行インスタンスを表します。
+* `process`は、そのサービスを実行しているオペレーティングシステムプロセスを表します。
+* `executes`関係は、サービスインスタンスが特定のプロセスによって支えられ、そのプロセス内で実行されていることを示します。
+
+このすべてのトポロジーは、OpenTelemetryトレースデータから自動的に導出されます。
+
+== トレースデータ
+
+サービスアイデンティティに加えて、トレースリソースにはプロセスレベルの属性が含まれています。
+
+* `process.pid`
+* `process.executable.name`
+* `process.executable.path`
+* `process.command_args`
+* `process.runtime.name`
+* `process.runtime.version`
+
+これらの属性により、スパン相関やヒューリスティックなしでプロセスレベルのトポロジーをモデル化することができます。
+
+== トポロジーへのトレース：メンタルモデル
+
+設定を書く前に、トポロジーマッピングが概念的にどのように機能するかを理解することが重要です。
+
+=== コンポーネント
+
+コンポーネントマッピングは、テレメトリーデータからトポロジーノードがどのように作成されるかを説明します。
+
+各コンポーネントマッピング：
+
+* 条件を使用してテレメトリを選択します。
+* 式を使用して値を抽出します。
+* 安定した識別子によって識別される単一の論理コンポーネントを生成します。
+
+このガイドには、次の章があります。
+
+* サービスインスタンスはOpenTelemetry StackPackによって提供されます。
+* プロセスはOpenTelemetryリソース属性から派生します。
+
+=== 関係
+
+関係マッピングは、2つのコンポーネント間の接続がどのように作成されるかを説明します。
+
+各関係マッピング：
+
+* `sourceId`と`targetId`を解決します。
+* 関係タイプを割り当てます。
+* 有向エッジを生成します。
+
+関係は、ソースコンポーネントとターゲットコンポーネントの両方が存在する場合に作成されます。
+
+== トレースからサービスコンポーネントを作成する
+
+=== 「サービス」とは何かを定義する
+
+マッピングを書く前に、設計上の決定を行う必要があります。
+
+このガイドでは、サービスは次のように定義されます：
+
+* `service.namespace` + `service.name` によって識別されます。
+* デプロイメント間で安定しています。
+* サービスインスタンスに依存しません。
+
+これにより、トポロジーが読みやすく、低いカーディナリティが保たれます。
+
+== サービスインスタンスコンポーネント
+
+サービスインスタンスコンポーネントは、すでにOpenTelemetry StackPackによって定義され、提供されています。
+
+各サービスインスタンス：
+
+* `service.name`、`service.namespace`、および `service.instance.id` から派生します。
+* サービスの具体的な実行インスタンスを表します。
+* 信号（トレースとメトリクス）間で安定しています。
+
+このマッピングはすでに存在するため、このガイドでは再定義されません。
+その代わりに、私たちはそれを基に構築します。
+
+== トレースからプロセスコンポーネントを作成する
+
+=== 「プロセス」の意味を定義する
+
+このガイドでは、プロセスは次のように定義されます：
+
+* `host.name`、`process.pid` および実行可能なメタデータによって識別されます。
+* 単一のランタイム環境にスコープされています。
+* OpenTelemetryリソース属性からのみ派生しています。
+
+これにより、トポロジーは低カーディナリティを維持しつつ、有用なランタイムの詳細が公開されます。
+
+=== プロセスコンポーネントマッピング
+
+次のコンポーネントマッピングは、観測されたプロセスごとに1つのトポロジーコンポーネントを作成します。
+
+[,yaml]
+----
+_type: "OtelComponentMapping"
+name: "OTel Process"
+description: "Represents an operating system process derived from OpenTelemetry"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "executableName"
+    value: >-
+      ${
+        'process.executable.name' in resource.attributes ?
+         resource.attributes['process.executable.name'] :
+          'process.command' in resource.attributes ?
+           resource.attributes['process.command'] :
+            'process.command_args' in resource.attributes ?
+             resource.attributes['process.command_args'] :
+                resource.attributes['process.executable.path']
+      }
+output:
+  identifier: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  name: "${vars.hostname}/${vars.executableName}:${vars.pid}"
+  typeName: "process"
+  typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:process"
+  layerName: "Applications"
+  domainName: "Open Telemetry"
+  required:
+    tags:
+      - source: "process-component"
+        target: "custom"
+      - source: "${resource.attributes}"
+        pattern: "process.(.*)"
+        target: "process.${1}"
+expireAfter: 900000
+----
+
+==== このマッピングの動作方法
+
+* トレースデータのみを処理します（TRACES信号）。
+* `host.name`と`process.pid`が存在する場合にプロセスコンポーネントが作成されます。
+* 識別子はプロセスのライフタイムの間、安定しています。
+* フィルタリングを支援するためにカスタムタグが追加されます（検証段階用）。
+
+`<stackpack-name>`をあなたのStackPackの名前に置き換えてください（まだ持っていない場合は、`mystackpack`のように好きな名前を使用してください）。
+
+== 実行関係を作成する
+
+サービスインスタンスとプロセスがコンポーネントとして存在するようになったので、接続できます。
+
+=== サービスインスタンスはプロセスを実行します。
+
+次の関係マッピングは、サービスインスタンスからプロセスへの`executes`関係を作成します。
+
+このマッピングは、OpenTelemetry StackPackによって提供される既存の「ホストがサービスインスタンスを実行する」関係をベースにしています。
+
+[,yaml]
+----
+_type: "OtelRelationMapping"
+name: "Executes Relation (Service Instance -> Process)"
+description: "Service instance executes a process"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'service.name' in resource.attributes &&
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "namespace"
+    value: "${'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ? resource.attributes['service.namespace'] : 'default'}"
+  - name: "service"
+    value: "${resource.attributes['service.name']}"
+  - name: "instanceId"
+    value: >-
+      ${
+        'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
+        resource.attributes['service.instance.id'] :
+        resource.attributes['service.name']
+      }
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+output:
+  sourceId: "urn:opentelemetry:namespace/${vars.namespace}:service/${vars.service}:serviceInstance/${vars.instanceId}"
+  targetId: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  typeName: "executes"
+expireAfter: 900000
+----
+
+==== このマッピングの動作方法
+
+* トレースデータのみを処理します（`TRACES`信号）。
+* サービスインスタンスとプロセスデータの両方が存在する場合に関係が作成されます。
+* スパンの相関は必要ありません。
+* `targetId`式は、プロセスコンポーネントマッピングの`output.identifier`式と同じである必要があります。
+
+関係識別子は`sourceId`と`targetId`から（自動的に）構築され、形式は次のようになります：`sourceId-relationId`
+
+`<stackpack-name>`をあなたのStackPackの名前に置き換えてください（まだ持っていない場合は、`mystackpack`のように好きな名前を使用してください）。
+
+== OTelマッピングの検証
+
+マッピングの正確性を本番環境にデプロイする前に検証するための2つのオプションがあります。
+
+1. `sts stackpack test-deploy` コマンドを使用して、マッピングを含む StackPack をパッケージ化、アップロードし、実行中の {stackstate-product-name} インスタンスにインストールまたはアップグレードします。
+2. `sts otel-component-mapping apply` および `sts otel-relation-mapping apply` コマンドを使用して、マッピングを個別に作成または更新し、実行中の {stackstate-product-name} インスタンスに適用します。
+
+=== StackPack 内でマッピングを一緒にテストします。
+
+両方のマッピングが StackPack 内に存在する場合、一緒にテストできます。詳細については、xref:/setup/cli/cli-sts.adoc[StackPack CLI] ドキュメントを参照してください。
+
+`sts stackpack test-deploy --yes` コマンドを使用すると、次のことができます：
+
+* StackPack をパッケージ化、アップロード、インストール/アップグレードします。
+* StackPack に存在する宣言型コンポーネントおよび関係マッピングを検証します（例：式の正確性、提供されたフィルタリングに基づく入力信号データの正しい参照）。
+
+[NOTE]
+====
+`sts stackpack test` コマンドは、マッピングを通じて例のトレースデータを供給しません。
+マッピングが正しいトポロジーを生成することを確認するために、Open Telemetry トレースデータが SUSE Observability に送信されることを確認してください。
+`sts stackpack test` の使用方法についての詳細は、xref:/setup/custom-integrations/develop.adoc[カスタム統合の開発 (StackPack)] を参照してください。
+====
+
+=== マッピングを個別にテストします。
+
+上記のコンポーネントおよび関係マッピングが YAML ファイルで定義されていると仮定すると、個別に適用できます。
+
+`<stackpack-name>`をあなたのStackPackの名前に置き換えてください（まだ持っていない場合は、`mystackpack`のように好きな名前を使用してください）。
+
+[,sh]
+----
+$ sts otel-component-mapping apply -f process-component-mapping.yaml
+✅ OTel component mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-component-mapping:process, Name: OTel Process
+
+$ sts otel-relation-mapping apply -f process-relation-mapping.yaml
+✅ OTel Relation Mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance, Name: Executes Relation (Service Instance -> Process)
+----
+
+== 結果のトポロジー
+
+これらのマッピングが適用されると、結果のトポロジーはトレースデータから完全に派生したサービスプロセスのトポロジーグラフを形成します。
+
+例えば、OTel デモアプリからの `checkoutservice` を使用すると、視覚的にトポロジーは次のように表示されるべきです：
+
+----
+checkoutservice (instance) ─> executes ─> checkoutservice (process)
+----
+
+このトポロジーは、新しいトレースが到着するたびに継続的に更新され、トラフィックが停止すると自動的に期限切れになります。
+
+=== {stackstate-product-name} で結果のトポロジーを表示します。
+
+{stackstate-product-name} UI を使用して、マッピングが期待されるトポロジーに具現化されていることを視覚的に確認します。
+
+1. 設定された`baseUrl` Helm値で{stackstate-product-name} UIを開きます
+2. 左側のサイドバーで、`Open Telemetry > Services Instances`をクリックします
+3. サービスインスタンスのリストから`checkoutservice`を見つけ、サービスインスタンス名をクリックしてコンポーネントの概要/ハイライトページを開きます
+4. 上部のサブナビゲーションバーで、`Topology`を選択します
+5. `Outgoing`層に`od-checkoutservice-<hostId>/checkoutservice:1 (process)`ノードが表示されているはずです
+6. プロセスノードを選択し、`Explore component`をクリックします
+7. `checkoutservice -> executes -> checkoutservice (process)`を視覚化する小さなトポロジーが表示されるはずです
+
+トポロジーが期待通りに表示されない場合は、xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[Troubleshooting]ガイドを参照してデバッグのヒントを得てください。
+
+image:custom-integrations/otel-mappings/topology_from_otel_guide_topology_result.png[トポロジー結果]
+
+プロセスコンポーネントマッピングが適用された結果として作成されたすべてのプロセスコンポーネントを表示するには、タイプフィルターを使用して`sts topology inspect`コマンドを実行します。
+
+[,sh]
+----
+$ sts topology inspect --type process
+NAME                                                             | TYPE    | IDENTIFIERS
+od-productcatalogservice-cf9d7b456-rlmp5/productcatalogservice:1 | process | urn:opentelemetry:process/od-productcatalogservice-cf9d7b456-rlmp5:1
+od-adservice-6c9dfcfdbf-5pdqr//opt/java/openjdk/bin/java:1       | process | urn:opentelemetry:process/od-adservice-6c9dfcfdbf-5pdqr:1
+od-frontend-685db864d9-6sh4d/node:17                             | process | urn:opentelemetry:process/od-frontend-685db864d9-6sh4d:17
+od-paymentservice-bf8f84b5d-n8k77/node:17                        | process | urn:opentelemetry:process/od-paymentservice-bf8f84b5d-n8k77:17
+od-quoteservice-859b8c5c4c-nkmgq/public/index.php:7              | process | urn:opentelemetry:process/od-quoteservice-859b8c5c4c-nkmgq:7
+od-checkoutservice-78885bf588-59p9d/checkoutservice:1            | process | urn:opentelemetry:process/od-checkoutservice-78885bf588-59p9d:1
+od-accountingservice-7c546cb977-xjp2c/accountingservice:1        | process | urn:opentelemetry:process/od-accountingservice-7c546cb977-xjp2c:1
+----
+
+== クリーンアップ
+
+このガイドで作成されたマッピングを削除するには、次のコマンドを使用してください：
+
+`<stackpack-name>`をあなたのStackPackの名前に置き換えます。
+
+[,sh]
+----
+$ sts otel-component-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process
+✅ OTel Component Mapping deleted: urn:stackpack:mystackpack:shared:otel-component-mapping:process
+
+$ sts otel-relation-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance
+✅ OTel Relation Mapping deleted: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance
+----
+
+
+== まとめ
+
+このガイドでは、あなたは：
+
+* 既存のサービスインスタンスコンポーネントに基づいて構築しました。
+* OpenTelemetryリソース属性から派生したプロセスコンポーネント。
+
+== 次のステップ
+
+この画面からは、次の操作を実行できます。
+
+* プロセスをホストまたはコンテナに接続します。
+* データベースまたはメッセージングの関係を導入します。
+* ランタイム特有の層（JVM、Go、Node.js）を導入します。
+* メトリクスベースのサービスグラフを探索します。
+* スタックパックに追加のトポロジー層を拡張してください。
+* 詳細なコンポーネントと関係のマッピング xref:/setup/custom-integrations/otelmappings/schemas-ref.adoc[reference] に慣れてください。
+
+endif::ss-ff-stackpacks2_enabled[]

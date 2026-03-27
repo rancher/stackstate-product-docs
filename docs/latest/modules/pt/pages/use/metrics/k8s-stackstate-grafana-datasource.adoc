@@ -1,0 +1,85 @@
+= SUSE Observability como uma fonte de dados Grafana
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: Use o SUSE Observability como uma fonte de dados Grafana
+
+O SUSE Observability pode ser usado como uma fonte de dados Grafana. Isso permitirá usar o Grafana como uma ferramenta de visualização para seus dados do SUSE Observability. Isso é útil se você já tiver alguns painéis que deseja continuar usando. Como o SUSE Observability expõe uma API compatível com Prometheus, você pode usar a https://grafana.com/docs/grafana/latest/datasources/prometheus[fonte de dados Prometheus] no Grafana para se conectar ao SUSE Observability. Isso também torna o SUSE Observability utilizável com outras soluções compatíveis com Prometheus.
+
+== Pré-requisitos
+
+Antes de adicionar o SUSE Observability como uma fonte de dados no Grafana, você precisa configurar um ServiceToken para autenticar com o SUSE Observability. O SUSE Observability recomenda criar uma função dedicada com permissões para esta finalidade.
+
+Você pode fazer isso através da CLI do SUSE Observability:
+
+[,sh]
+----
+> sts rbac create-subject --subject grafana
+✅ Created subject 'grafana'
+> sts rbac grant --subject grafana --permission get-metrics
+✅ Granted permission 'get-metrics' on 'system' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | system
+----
+
+Isso criará uma nova função no SUSE Observability chamada `grafana` e concederá a permissão `get-metrics`. Você pode então criar um ServiceToken para essa função:
+
+[,sh]
+----
+> sts service-token create --name grafana --roles grafana
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+Saiba mais sobre xref:/setup/security/authentication/service_tokens.adoc[gerenciamento de ServiceTokens].
+
+O ServiceToken retornado pode ser usado para autenticar com o SUSE Observability. Agora você pode adicionar o SUSE Observability como uma fonte de dados no Grafana.
+
+== Crie uma nova fonte de dados do SUSE Observability no Grafana
+
+Com o ServiceToken criado, você pode agora adicionar o SUSE Observability como uma fonte de dados no Grafana. Para fazer isso, vá para a interface do Grafana e navegue até a página de configuração da fonte de dados. Clique no botão `Add data source` e selecione `Prometheus` na lista de fontes de dados.
+
+image::k8s/k8s-grafana-new-datasource.png[nova fonte de dados do Grafana]
+
+Na página de configuração da fonte de dados, insira os seguintes detalhes de configuração:
+
+* *Nome*: SUSE Observability
+* *URL*: `https://<tenant-name>.app.stackstate.io/prometheus`
+* *Cabeçalhos HTTP Personalizados*
+ ** *Cabeçalho*: `X-API-Key`
+ ** *Valor*: `<service-token>`
+
+image::k8s/k8s-grafana-datasource.png[Configuração da fonte de dados Grafana]
+
+Clique no botão `Save & Test` para salvar a fonte de dados. Se a configuração estiver correta, você deve ver uma mensagem verde `Data source is working`.
+
+== Restringir acesso a métricas
+
+Quando você usa xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC], é possível conceder acesso a métricas em nível de cluster ou namespace.
+
+Para conceder acesso a todas as métricas de um cluster:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:YOUR_CLUSTER:__any__
+✅ Granted permission 'get-metrics' on 'k8s:YOUR_CLUSTER:__any__' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----
+
+Para conceder acesso a todas as métricas de um namespace:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+✅ Granted permission 'get-metrics' on 'k8s:OTHER_CLUSTER:SINGLE_NAMESPACE' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+----
+
+Inspecione todas as permissões que foram concedidas ao sujeito:
+[,sh]
+----
+> sts rbac describe-permissions --subject grafana
+Got subject from the following subject sources: Observability
+
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:YOUR_NAMESPACE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----

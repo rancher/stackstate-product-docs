@@ -1,0 +1,131 @@
+= サンプリング
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+サンプリングは、SUSE Observabilityにエクスポートされるデータの量を減らすために使用され、テレメトリデータの品質をできるだけ損なわないようにします。サンプリングを適用する主な理由は、コスト（ネットワーク、ストレージなど）を削減することです。
+
+アプリケーションが生成するデータが少ない場合、サンプリングの必要はなく、テレメトリデータの不足により監視を妨げる可能性さえあります。しかし、アプリケーションにトラフィックが多い場合、たとえば1秒あたり1000スパン以上の場合、サンプリングを適用することが意味を持つことがあります。
+
+サンプリングには、ヘッドサンプリングとテイルサンプリングの2つの主なタイプがあります。
+
+== ヘッドサンプリング
+
+ヘッドサンプリングは、データをエクスポートするかどうかのサンプリング決定をできるだけ早く行います。したがって、決定は全体のトレースに基づくことはできず、利用可能な非常に限られた情報のみに基づくことになります。otelコレクターには、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[確率的サンプリングプロセッサ]があり、一貫した確率サンプリングを実装しています。サンプラーは構成可能で、トレースID（トレースに便利）または属性のハッシュ（ログに便利）に基づいてサンプリング決定を行います。これにより、トレースのすべてのスパンが常にサンプリングされるか、されないかが保証され、SUSE Observabilityに完全なトレースが得られます。
+
+ヘッドサンプリングの利点は次のとおりです：
+
+* 理解しやすい
+* 効率的
+* 構成が簡単
+
+しかし、欠点として、トレース全体に基づいてサンプリングの決定を下すことができないため、たとえば、すべての失敗したトレースをサンプリングし、成功したトレースについてはごく一部のみをサンプリングするという方法は採用できません。
+
+ヘッドサンプリングを有効にするには、プロセッサを構成し、パイプラインに含めます。この例では、トレースIDに基づいて4つのトレースのうち1つをサンプリングします：
+
+[,yaml]
+----
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+----
+
+== テイルサンプリング
+
+テイルサンプリングは、トレースが（ほぼ）完了するまでサンプリングの決定を延期します。これにより、テイルサンプラーは、失敗したトレースや遅いトレースを常にサンプリングするなど、トレース全体に基づいてサンプリングの決定を行うことができます。特定の属性やサービス参加に基づいてサンプリングするなど、さらに多くの可能性があります。
+
+OpenTelemetryコレクターは、テイルサンプリングポリシーを適用するために使用できるhttps://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[テイルサンプリングプロセッサ]を提供します。
+
+テイルサンプリングの主な利点は、個々のスパンが作成される際に利用可能な部分的な情報ではなく、完全なトレースデータに基づいてサンプリングの決定を行う際の追加の柔軟性を提供することです。
+
+
+[WARNING]
+====
+有利ではありますが、テイルサンプリングには以下の欠点があります：
+
+* 設定が難しく、理解しづらい。
+* サンプリングの決定が行われるまで、トレースのスパンを保存するために状態を持つ必要があります。
+* したがって、リソース使用量も（かなり）増加します。
+* サンプラーが追いつかない可能性があり、そのために追加の監視とスケーリングが必要です。
+====
+
+テイルサンプリングを有効にするには、プロセッサを設定し、パイプラインに含めます。
+
+[,yaml]
+----
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+    - name: rate-limited-composite
+      type: composite
+      composite:
+        max_total_spans_per_second: 500
+        policy_order: [errors, slow-traces, rest]
+        composite_sub_policy:
+        - name: errors
+          type: status_code
+          status_code:
+            status_codes: [ ERROR ]
+        - name: slow-traces
+          type: latency
+          latency:
+            threshold_ms: 1000
+        - name: rest
+          type: always_sample
+        rate_allocation:
+        - policy: errors
+          percent: 33
+        - policy: slow-traces
+          percent: 33
+        - policy: rest
+          percent: 34
+----
+
+サンプルの例：
+
+* 1秒あたり最大500スパン
+* 最大の33%までエラーのあるトレース内のすべてのスパン
+* 最大の33%まで1秒より遅いトレース内のすべてのスパン
+* 許可される最大レートまでの他のスパン
+
+設定オプションや異なるポリシーの詳細については、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[テールサンプリングのREADME]を使用してください。
+
+ただし、完全に設定して忘れることはできません。リソース使用量が増え始めた場合は、テイルサンプリングを処理するために複数のコレクターを使用してスケールアウトする必要があり、そのためにはトレースIDに基づいてトラフィックをルーティングするためのhttps://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[ルーティング]も必要になります。
+
+== スパンメトリクスと組み合わせたトレースのサンプリング
+
+開始ガイドのセクションでは、コレクターの設定にサンプリングが含まれていません。サンプリングを追加する際には、トレースから計算されるメトリクスをできるだけ正確に保つように注意する必要があります。特にテイルサンプリングは、通常、エラーの相対的な量がはるかに高いため、非常に偏ったメトリクスをもたらす可能性があります。これを避けるために、トレースパイプラインを複数の部分に分割し、フォワードコネクタで接続します。設定を変更して、追加のコネクタとサンプリングプロセッサを含めます。そして、パイプラインを以下のように変更します：
+
+[,yaml]
+----
+connectors:
+  # enable the forwarder
+  forward:
+processors:
+  # Configure the probabilistic sampler to sample 25% of the traffic
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [forward]
+    traces/spanmetrics:
+      receivers: [forward]
+      processors: []
+      exporters: [spanmetrics]
+    traces/sampling:
+      receivers: [forward]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, otlp/stackstate]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/stackstate]
+----
+
+この例では、トラフィックの25%をサンプリングするように設定された確率的サンプラーを使用しています。状況に応じてパーセンテージを調整するか、代わりに<<_tail_sampling,テイルサンプラー>>に切り替えることをお勧めします。パイプラインの設定はテイルサンプラーでも同じで、`probabilistic_sampler`への参照を`tail_sampling`に置き換えるだけです。

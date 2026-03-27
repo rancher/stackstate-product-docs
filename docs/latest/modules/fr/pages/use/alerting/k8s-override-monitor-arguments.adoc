@@ -1,0 +1,103 @@
+= Remplacer les arguments de seuil du moniteur via les annotations Kubernetes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+SUSE Observability fournit xref:/use/alerting/k8s-monitors.adoc[des moniteurs prêts à l'emploi], qui offrent une surveillance des problèmes courants pouvant survenir dans un cluster Kubernetes. Ces moniteurs fonctionnent avec certains arguments par défaut qui conviennent à la plupart des cas d'utilisation, mais il est parfois nécessaire d'adapter leur comportement en remplaçant certains de ces arguments par défaut comme `threshold` ou `failureState`.
+Le mécanisme pour déclarer les remplacements se fait via des annotations de ressources Kubernetes qui indiquent à quel moniteur et composant ils doivent s'appliquer. Par exemple, nous pourrions remplacer le `failureState` pour le moniteur `Available service endpoints` pour un service spécifique où nous voulons signaler un état `CRITICAL` lorsqu'il échoue plutôt que le `DEVIATING` par défaut.
+
+== Procédure
+
+* <<_how_to_build_my_annotation,Procédure pour construire mon annotation>>
+* <<_what_monitors_allow_overriding_arguments,Quels moniteurs permettent de remplacer des arguments ?>>
+* <<_build_an_override_for_a_custom_monitor,Construire un remplacement pour un moniteur personnalisé>>
+
+À titre d'exemple, les étapes remplaceront les arguments pour le moniteur `Available service endpoints` des services HTTP Kubernetes.
+
+== Procédure pour construire mon annotation
+
+Les clés des annotations de remplacement pour les moniteurs SUSE Observability suivent la convention suivante :
+
+----
+monitor.${owner}.stackstate.io/${monitorShorName}
+----
+
+La propriété `owner` représente qui a créé un tel moniteur, pour les moniteurs prêts à l'emploi c'est `kubernetes-v2`, et la propriété `monitorShorName` représente l'identifiant du moniteur et peut être extrait de la propriété `identifier` d'un moniteur qui peut être lu depuis la CLI lors de la liste ou de l'inspection des moniteurs.
+
+----
+sts monitor list
+
+ID              | STATUS  | IDENTIFIER                                                                          | NAME                                        | FUNCTION ID     | TAGS
+8051105457030   | ENABLED | urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint | Available service endpoints                 | 233276809885571 | [services]
+----
+
+Dans notre exemple, l'identifiant est `urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint` et le `monitorShorName` correspond au tout dernier segment comme dans `service-available-endpoint`, donc la clé d'annotation est :
+
+[,bash]
+----
+monitor.kubernetes-v2.stackstate.io/service-available-endpoint
+----
+
+la charge utile de l'annotation est un objet JSON où les arguments facultatifs suivants peuvent être définis :
+
+* `threshold` : facultatif. Un seuil numérique à comparer.
+* `failureState` : facultatif. Soit "CRITIQUE" soit "DÉVIANT". "CRITIQUE" apparaîtra en rouge dans SUSE Observability et "DÉVIANT" en orange, pour indiquer une gravité différente.
+* `enabled` : facultatif. Booléen qui détermine si le moniteur produirait un état de santé pour ce composant.
+
+L'annotation complète ressemblerait alors à
+
+[,bash]
+----
+    monitor.kubernetes-v2.stackstate.io/service-available-endpoint: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL",
+        "enabled": true
+      }
+----
+
+== Quels moniteurs permettent de remplacer des arguments ?
+
+* xref:/use/alerting/kubernetes-monitors.adoc#_available_service_endpoints[Points de terminaison de service disponibles]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_limits_resourcequota[Limites d'UC quota de ressources]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_requests_resourcequota[Demandes d'UC quota de ressources]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_limits_resourcequota[Limites de mémoire quota de ressources]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_requests_resourcequota[Demandes de mémoire quota de ressources]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_disk_pressure[Pression sur le disque du nœud]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_memory_pressure[Pression sur la mémoire du nœud]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_pid_pressure[Pression sur le PID du nœud]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_readiness[Disponibilité du nœud]
+* xref:/use/alerting/kubernetes-monitors.adoc#_orphaned_persistent_volumes[Volumes persistants orphelins] (Seulement la propriété `enabled`)
+* xref:/use/alerting/kubernetes-monitors.adoc#_out_of_memory_for_containers[Hors de mémoire pour les conteneurs]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_5xx_error_ratio[Ratio d'erreur HTTP - 5xx]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_response_time_q95_is_above_3_seconds[HTTP - temps de réponse - Q95 est supérieur à 3 secondes]
+
+== Créez un remplacement pour un moniteur personnalisé
+
+Tout moniteur de seuil personnalisé créé en utilisant le guide à xref:/use/alerting/k8s-add-monitors-cli.adoc[Ajouter un moniteur de seuil aux composants en utilisant le CLI] est adapté pour remplacer des arguments, comme xref:/use/alerting/k8s-add-monitors-cli.adoc#_write_the_outline_of_the_monitor[l'exemple le montre], un identifiant pour un moniteur personnalisé est structuré comme ``urn:custom:monitor:{monitorShortName}`` et la clé d'annotation de remplacement pour un tel identifiant est censée être
+
+[,bash]
+----
+monitor.custom.stackstate.io/${monitorShortName}
+----
+
+L'exemple utilise l'identifiant `urn:custom:monitor:deployment-has-replicas`, donc la clé d'annotation serait
+
+[,bash]
+----
+monitor.custom.stackstate.io/deployment-has-replicas
+----
+
+Et l'annotation complète ressemblerait à
+
+[,bash]
+----
+    monitor.custom.stackstate.io/deployment-has-replicas: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL"
+        "enabled": true
+      }
+----

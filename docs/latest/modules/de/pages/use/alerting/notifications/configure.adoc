@@ -1,0 +1,67 @@
+= Benachrichtigungen konfigurieren
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Um eine neue Benachrichtigung zu konfigurieren, sind dies die Schritte:
+
+* <<_create_a_new_notification,Erstellen Sie eine neue Benachrichtigung>>
+* <<_configure_when_to_notify,Konfigurieren Sie, wann benachrichtigt werden soll>>
+* <<_where_to_send_notifications,Definieren Sie, wohin die Benachrichtigungen gesendet werden sollen>>
+
+== Erstellen Sie eine neue Benachrichtigung
+
+Öffnen Sie die Benachrichtigungsseite über den Link in der unteren Hälfte des Hamburger-Menüs in der SUSE Observability UI. Dies öffnet eine Übersicht aller bereits konfigurierten Benachrichtigungen, einschließlich ihres Status.
+
+Sie können überprüfen, ob die gewünschte Benachrichtigung bereits existiert. Falls nicht, erstellen Sie eine neue mit der Schaltfläche "Neue Benachrichtigung hinzufügen".
+
+== Konfigurieren Sie, wann benachrichtigt werden soll
+
+image::k8s/notifications-add-new-notification.png[Hinzufügen einer neuen Benachrichtigung]
+
+Konfigurieren Sie die Benachrichtigung:
+
+. Name - Wählen Sie einen Namen, der kurz ist, aber dennoch beschreibt, was der Zweck dieser Benachrichtigung ist. Es dient Ihrer eigenen Referenz in der Übersicht der Benachrichtigungen.
+. Status - Die Benachrichtigung kann vorübergehend deaktiviert werden, falls sie noch nicht benötigt wird oder sich als zu aufdringlich erweist.
+. Benachrichtigen, wenn - Ein kritischer Gesundheitszustand löst immer eine Benachrichtigung aus, aber optional können auch abweichende Zustände einbezogen werden.
+. Geltungsbereich - Im Beispiel werden Gesundheitszustände für alle Monitore auf Pods im Standard-Kubernetes-Namespace gesendet. Verwenden Sie die verfügbaren Filter im <<_scope,Geltungsbereich>>-Abschnitt, um diese Auswahl zu ändern.
+
+=== Bereich
+
+Es gibt 4 mögliche Geltungsbereichsfilter. Standardmäßig wird für jeden kritischen (und optional abweichenden) Gesundheitszustand eine Benachrichtigung gesendet. Die Filter werden verwendet, um diesen Geltungsbereich einzuschränken. Ein Gesundheitszustand führt nur dann zu einer Benachrichtigung, wenn er mit allen Filtern übereinstimmt.
+
+* Monitore: Wählen Sie einen oder mehrere spezifische Monitore aus. Benachrichtigungen werden nur für Gesundheitszustände der ausgewählten Monitore gesendet.
+* Monitor-Tags: Wählen Sie einen oder mehrere Monitor-Tags aus. Benachrichtigungen werden nur für Gesundheitszustände von Monitoren gesendet, die mindestens einen der ausgewählten Tags haben.
+* Komponententypen: Wählen Sie einen oder mehrere Komponententypen aus. Benachrichtigungen werden nur für Gesundheitszustände von Komponenten der ausgewählten Typen gesendet.
+* Komponententags: Wählen Sie einen oder mehrere Komponententags aus. Benachrichtigungen werden nur für Gesundheitszustände von Komponenten gesendet, die mindestens einen übereinstimmenden Wert für jeden einzelnen Schlüssel in den ausgewählten Tags haben.
+
+.Beispiel für Komponententags
+[%collapsible]
+====
+Angenommen, die ausgewählten Tags sind [ `k8s-scope:prod-us/checkout`, `k8s-scope:prod-emea/checkout`, `team:blue` ].  Die Schlüssel in diesem Fall sind `k8s-scope` und `team`.
+
+Dann werden diese Komponenten übereinstimmen:
+
+* eine Komponente mit Tags [ `k8s-scope:prod-emea/checkout`, `team:blue` ]
+* eine Komponente mit Tags [ `k8s-scope:prod-us/checkout`, `team:blue` ]
+
+Diese Komponenten passen hingegen nicht:
+
+* eine Komponente mit Tags [ `k8s-scope:prod-emea/checkout` ]
+* eine Komponente mit Tags [ `k8s-scope:prod-us/checkout`, `team:green` ]
+* eine Komponente mit Tags [ `k8s-scope:prod-emea/carts`, `team:blue` ]
+====
+
+== Wohin sollen die Benachrichtigungen gesendet werden?
+
+SUSE Observability kann Benachrichtigungen über Kanäle an verschiedene externe Systeme senden. Unterstützte Kanäle sind:
+
+* xref:/use/alerting/notifications/channels/slack.adoc[Slack] - Benachrichtigungen an Slack senden
+* xref:/use/alerting/notifications/channels/teams.adoc[Teams] - Benachrichtigungen an Microsoft Teams senden
+* xref:/use/alerting/notifications/channels/webhook.adoc[Webhook] - Benachrichtigungen an einen Webhook senden, der Webhook-Endpunkt kann die SUSE Observability-Nutzlast in jede benötigte benutzerdefinierte Drittanbieter-API übersetzen
+* xref:/use/alerting/notifications/channels/opsgenie.adoc[OpsGenie] - Benachrichtigungen an OpsGenie senden
+
+Im Allgemeinen sendet SUSE Observability zwei Arten von Nachrichten für Benachrichtigungen:
+
+. Eine `open` Nachricht, wenn ein Gesundheitszustand kritisch oder abweichend wird. Diese Nachricht kann wiederholt werden, wenn es Änderungen im Gesundheitszustand gibt
+. Eine `close` Nachricht, wenn der Gesundheitszustand nicht mehr kritisch oder abweichend ist oder wenn aus anderen Gründen (die Komponente ist verschwunden, der Monitor wurde entfernt usw.) die Benachrichtigung nicht mehr aktiv ist.

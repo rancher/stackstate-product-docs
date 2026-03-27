@@ -1,0 +1,67 @@
+= 配置通知
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+要配置新的通知，请按照以下步骤操作：
+
+* <<_create_a_new_notification,创建一个新的通知>>
+* <<_configure_when_to_notify,配置何时通知>>
+* <<_where_to_send_notifications,定义通知应发送到哪里>>
+
+== 创建一个新的通知
+
+通过在SUSE Observability UI的汉堡菜单下半部分的链接打开通知页面。这将打开所有已配置通知的概览，包括它们的状态。
+
+您可以检查所需的通知是否已经存在。如果没有，请使用"添加新通知"按钮创建一个新的。
+
+== 配置何时通知
+
+image::k8s/notifications-add-new-notification.png[添加新通知]
+
+配置通知：
+
+. 名称 - 选择一个简短但仍能描述此通知意图的名称。这是供您在通知概览中参考的。
+. 状态 - 如果通知暂时不需要，可以禁用该通知，以防它变得过于嘈杂等。
+. 何时通知 - 关键健康状态始终会触发通知，但也可以选择包括偏离状态。
+. 范围 - 在示例中，所有监视器在默认Kubernetes名称空间中的健康状态将被发送。使用<<_scope,范围>>部分中的可用过滤器来更改此选择。
+
+=== 范围
+
+有4个可能的范围过滤器。默认情况下，将为每个关键（可选偏差）健康状态发送通知。这些过滤器用于限制此范围。只有当健康状态匹配所有过滤器时，才会导致发送通知。
+
+* 监视器：选择一个或多个特定监视器。仅会为所选监视器的健康状态发送通知。
+* 监视器标签：选择一个或多个监视器标签。仅会为具有至少一个所选标签的监视器的健康状态发送通知。
+* 组件类型：选择一个或多个组件类型。仅会为所选类型的组件的健康状态发送通知。
+* 组件标签：选择一个或多个组件标签。仅会为具有每个所选标签中至少一个匹配值的组件的健康状态发送通知。
+
+.示例组件标签
+[%collapsible]
+====
+假设所选标签为 [ `k8s-scope:prod-us/checkout`, `k8s-scope:prod-emea/checkout`, `team:blue` ]。 在这种情况下，键为 `k8s-scope` 和 `team`。
+
+那么这些组件将匹配：
+
+* 具有标签 [ `k8s-scope:prod-emea/checkout`, `team:blue` ] 的组件
+* 具有标签 [ `k8s-scope:prod-us/checkout`, `team:blue` ] 的组件
+
+这些组件将不匹配：
+
+* 带有标签的组件 [ `k8s-scope:prod-emea/checkout` ]
+* 具有标签 [ `k8s-scope:prod-us/checkout`, `team:green` ] 的组件
+* 具有标签 [ `k8s-scope:prod-emea/carts`, `team:blue` ] 的组件
+====
+
+== 在哪里发送通知？
+
+SUSE Observability 可以通过渠道向不同的外部系统发送通知。支持的渠道有：
+
+* xref:/use/alerting/notifications/channels/slack.adoc[Slack] - 向Slack发送通知
+* xref:/use/alerting/notifications/channels/teams.adoc[Teams] - 向Microsoft Teams发送通知
+* xref:/use/alerting/notifications/channels/webhook.adoc[Webhook] - 向webhook发送通知，webhook端点可以将SUSE Observability负载转换为任何所需的自定义第三方API
+* xref:/use/alerting/notifications/channels/opsgenie.adoc[Opsgenie] - 向 OpsGenie 发送通知
+
+一般来说，SUSE Observability 会发送两种类型的通知消息：
+
+. 当健康状态变为关键或偏离时，发送 `open` 消息。当健康状态发生变化时，此消息可以重复。
+. 当健康状态不再关键或偏离，或由于其他原因（组件消失、监视器被去除等）通知不再处于活动状态时，发送 `close` 消息。
