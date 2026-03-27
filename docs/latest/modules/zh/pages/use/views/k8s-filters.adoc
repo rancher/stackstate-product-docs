@@ -1,0 +1,142 @@
+= 过滤器
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+视图用户界面右上角的*过滤器*菜单允许您过滤视图中显示的组件（拓扑）和事件。一旦应用，过滤器将影响视图中所有视角的内容。
+
+image::k8s/k8s-filters.png[视图过滤器]
+
+== 过滤拓扑
+
+拓扑过滤器可用于选择在任何可用视角中显示的拓扑组件子集。虽然事件过滤器对于所有视图类型都是相同的，但拓扑过滤器取决于您所处的视图类型。阅读更多：
+
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_kubernetes_views[Kubernetes视图上的拓扑过滤器]
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_other_view_types[其他视图类型上的拓扑过滤器]
+
+=== Kubernetes视图上的拓扑过滤器
+
+在xref:/use/views/k8s-views.adoc[Kubernetes视图]中，拓扑过滤器仅限于一小组基本过滤器，这些过滤器在所有Kubernetes视图中保持不变：`clusters`和/或`namespaces`。Kubernetes视图的持久拓扑过滤器位于用户界面常规`filters`菜单之外，并且彼此之间没有相互依赖（例如，选择一个集群并不会*自动*更新`namespaces`过滤器以仅反映该集群的命名空间）。
+
+image::k8s/k8s-filters-kube-topology.png[Kubernetes拓扑过滤器]
+
+=== 其他视图类型上的拓扑过滤器
+
+对于其他视图类型，您可以使用基本或高级拓扑过滤器浏览您的拓扑。阅读相关详情：
+
+* xref:/use/views/k8s-filters.adoc#_basic_topology_filters[基本拓扑过滤器]
+* xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[高级拓扑过滤器]
+* xref:/use/views/k8s-filters.adoc#_topology_filtering_limits[拓扑过滤限制]
+
+==== 基本拓扑过滤器
+
+过滤拓扑的主要方式是使用可用的基本过滤器。当您设置过滤器时，打开的视角将更新，仅显示与过滤器匹配的拓扑子集的可视化或数据。设置多个过滤器将进一步缩小您的搜索范围。您可以为每个过滤器设置多个值，以扩展您的搜索。
+
+|===
+| 过滤器 | 说明
+
+| 层、域、环境和组件类型
+| 按导入或创建组件时包含的组件详细信息进行过滤。
+
+| 组件健康状况
+| 仅包括与相关健康检查报告的命名健康状态相符的组件。
+
+| 组件标签
+| 仅包括具有特定标签的组件。
+
+| 包括组件
+| 此处指定的组件将与其他过滤器返回的组件*一起包含*在拓扑中。
+|===
+
+要使用基本过滤器过滤拓扑，请单击用户界面右上角的*过滤器*菜单，并在*拓扑*垂直选项卡下选择*切换到基本*。
+
+image::k8s/k8s-filters-basic-topology.png[基本拓扑过滤器]
+
+==== 高级拓扑过滤器
+
+您可以使用内置的xref:/develop/reference/k8sTs-stql_reference.adoc[SUSE Observability Query Language (STQL)]构建一个高级拓扑过滤器，聚焦于拓扑的特定区域。
+
+要使用STQL查询过滤拓扑，请单击用户界面右上角的*过滤器*菜单，并在*拓扑*垂直选项卡下选择*切换到STQL*。
+
+下面的STQL查询示例将返回符合以下条件的组件：
+
+* 在*域* `security check`中
+* 并且具有*健康*状态为`Clear`或`Deviating`
+* 或是名称为`ai_engine`的*组件*
+
+[,yaml]
+----
+(domain IN ("security check") AND healthstate IN ("CLEAR", "DEVIATING")) OR name IN ("ai_engine")
+----
+
+image::k8s/k8s-filters-advanced-topology.png[高级拓扑过滤器]
+
+==== 基本过滤器和高级过滤器的兼容性
+
+您可以通过在*过滤器菜单*的*拓扑*垂直选项卡下选择*切换到基本*或*切换到STQL*来切换基本过滤和高级过滤。
+
+始终可以从基本过滤切换到高级过滤。所选的基本过滤器将直接转换为STQL查询。对于简单查询，也可以从高级过滤切换到基本过滤，但某些高级查询与基本过滤器不兼容。
+
+➡️ xref:/develop/reference/k8sTs-stql_reference.adoc#_compatibility_basic_and_advanced_filters[了解更多关于基本和高级拓扑过滤器的兼容性]
+
+==== 其他过滤器
+
+下面列出的高级过滤器与基本过滤兼容，但不能作为基本过滤器设置或调整。
+
+* *withNeighborsOf* - 当高级过滤器包含函数xref:/develop/reference/k8sTs-stql_reference.adoc#_withneighborsof[withNeighborsOf]时，查询邻居的组件数量显示在*其他过滤器*框中。为了与基本过滤兼容，`withNeighborsOf`函数必须使用`OR`运算符与其他过滤器连接。
+* *identifier* - 当高级过滤器通过xref:/develop/reference/k8sTs-stql_reference.adoc#_filters[identifier]选择组件时，查询的组件标识符数量在*其他过滤器*框中报告。为了与基本过滤兼容，必须指定`identifier`过滤器并使用运算符`OR identifier IN (...)`与其他过滤器连接。
+
+基本拓扑过滤器中的*其他过滤器*框列出了所有这些高级过滤器及其影响的组件数量。
+
+[NOTE]
+====
+*其他过滤器*框仅提供已设置且与基本过滤兼容的高级过滤器的详细信息。
+====
+
+
+==== 拓扑过滤限制
+
+为了优化性能，对可以加载以生成拓扑可视化的元素数量施加了限制。过滤限制的默认值为10000个元素。如果xref:/use/views/k8s-filters.adoc#_basic_topology_filters[基本过滤器]或xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[高级过滤器查询]超过过滤限制，将在屏幕上显示一条消息，并且不会显示拓扑可视化。
+
+请注意，过滤限制适用于需要*加载*的元素总数，而不是最终将显示的元素数量。
+
+在下面的示例中，我们首先 LOAD 拓扑中每个组件的所有邻居，然后仅 DISPLAY 属于`applications`层的邻居。这可能会因过滤限制错误而失败，因为它需要加载拓扑中的所有组件。
+
+[,text]
+----
+withNeighborsOf(direction = "both", components = (name = "*"), levels = "15")
+   AND layer = "applications"
+----
+
+要成功生成此拓扑可视化，我们需要重新编写查询，以保持加载的组件数量低于配置的过滤限制，或者增加过滤限制。通过仅过滤`applications`层中的组件，我们将 DISPLAY 与上述查询相同的组件，而无需首先 LOAD 所有组件。因此，此查询不太可能导致过滤限制错误。
+
+[,yaml]
+----
+layer = "applications"
+----
+
+== 过滤事件
+
+SUSE Observability UI 左侧的 *视图过滤器* 面板可用于过滤在 xref:/use/views/k8s-events-perspective.adoc[事件视角] 中显示的事件。它们也包含在右侧面板的 *事件* 列表、*视图摘要* 选项卡以及详细信息选项卡——*组件详细信息* 和 *直接关系详细信息* 中。
+
+可以使用以下事件过滤器：
+
+|===
+| 过滤器 | 说明
+
+| *类别*
+| 仅显示来自一个或多个xref:/use/views/k8s-events-perspective.adoc#_event_category[类别]的事件。
+
+| *类型*
+| 单击*类型*过滤框以打开当前时间窗口中为当前过滤组件生成的所有事件类型的列表。您可以选择一个或多个事件类型以细化显示的事件。
+
+| *源*
+| 事件可以由SUSE Observability生成，或通过集成从外部源系统（如Kubernetes或ServiceNow）检索。单击*源*过滤框以打开当前时间窗口中为当前过滤组件生成的所有事件的源系统列表。选择一个或多个源系统以仅查看这些事件。
+
+| *标签*
+| 当从外部系统检索事件时，相关事件属性将作为标签添加。例如`status:open`或`status:production`。这可以帮助识别与特定问题或环境相关的事件。
+|===
+
+image::k8s/k8s-filters-events.png[事件过滤器]

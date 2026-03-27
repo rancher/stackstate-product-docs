@@ -1,0 +1,150 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= モニタのスキーマとリファレンス
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、`Monitor`のスキーマと、構造、式の構文および意味に関する詳細な説明を示します。
+
+== モニタのスキーマ
+
+モニタは、モニタ関数がどのくらいの頻度で実行され、どの引数を使用するかを指定します。
+
+[,yaml]
+----
+_type: "Monitor"
+name: string
+description?: string
+function: string
+arguments:
+  <dependent on monitor function>
+intervalSeconds: integer
+remediationHint?: string
+status?: "ENABLED" | "DISABLED"       # defaults to "DISABLED"
+tags:
+  <key>: <value>
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name}はこれがモニタであることを知る必要があるため、値は常に`Monitor`である必要があります。
+* `name`:モニタの名前
+* `description`:モニタの説明。
+* `function`:モニタを実行するモニタ関数への参照。
+* `intervalSeconds`:モニタが実行される間隔。通常のリアルタイムメトリックには30秒が推奨されます。長時間実行される分析メトリッククエリには、より大きな間隔が推奨されます。
+* `remediationHint`:モニタがエラーとなった場合に、ユーザーが実行できる操作の説明。フォーマットはマークダウンで、オプションでハンドルバー変数を使用して、時系列や他のデータに基づいてヒントをカスタマイズできます（xref:use/alerting/k8s-add-monitors-cli.adoc#_write_the_remediation_hint[以下に詳細な説明があります]）。
+* `status`:`"DISABLED"`または`"ENABLED"`のいずれか。モニタが実行されるかどうかを決定します。
+* `tags`:モニタにタグを追加して、{stackstate-product-name}およびhttp://your-instance/#/monitorsのインスタンスにおけるモニタ概要の整理に役立てます。
+* `identifier`:設定を更新する際にモニタを一意に識別する`urn:stackpack:<stackpack-name>:monitor:....`の形式の識別子。
+
+== モニタ関数
+
+=== しきい値
+
+指定されたメトリッククエリのしきい値を超えたときに健康状態をトリガーします。特定のリソースに対しては、xref:/use/alerting/k8s-override-monitor-arguments.adoc[注釈の助けを借りて]異なるしきい値を設定できます。
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:threshold" }}
+arguments:
+  metric:
+    query: string
+    unit: string
+    aliasTemplate: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  urnTemplate: string
+  titleTemplate: string
+----
+
+* `query`:PromQLクエリ。{stackstate-product-name}インスタンスのxref:/use/metrics/k8sTs-explore-metrics.adoc[メトリックエクスプローラー]を使用し、関心のあるメトリックのクエリを構築します。
+* `unit`:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を描画するために使用されます。すべての単位については、xref:/develop/reference/k8sTs-chart-units.adoc[サポートされている単位]のリファレンスを参照してください。
+* `aliasTemplate`:メトリックチャートにおける時系列のエイリアスです。これは、`${my_label}`プレースホルダーを使用して時系列からラベルを置き換えることができるテンプレートです。
+* `comparator`:しきい値とメトリックを比較するために、LTE/LT/GTE/GTのいずれかを選択してください。`<metric> <comparator> <threshold>`が真である時系列は、エラー状態を生成します。
+* `threshold`:比較対象となる数値のしきい値です。
+* `failureState`:"CRITICAL"または"DEVIATING"のいずれかです。"CRITICAL"は{stackstate-product-name}で赤として表示され、"DEVIATING"はオレンジとして表示され、異なる重大度を示します。
+* `urnTemplate`:モニタの結果がxref:use/alerting/k8s-add-monitors-cli.adoc#_bind_the_results_of_the_monitor_to_the_correct_components[紐付けられる]コンポーネントのURNを構築するためのテンプレートです。
+* `titleTemplate`:モニターの結果のタイトルです。複数のモニター結果が同じコンポーネントにバインドできるため、`${my_label}`プレースホルダーを使用して時系列ラベルを置き換えることが可能です。
+
+=== 派生状態
+
+各コンポーネントの健康状態が観察に基づいている依存関係から、その状態を導出します。最上位の依存関係の最も重要な状態を生成します。
+詳細については、xref:/setup/custom-integrations/monitors/derived-state-monitors.adoc[派生状態モニター]ページを参照してください。
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+arguments:
+  componentTypes: string
+----
+
+* `componentTypes`:派生状態に寄与するコンポーネントタイプ。 `,`（カンマ）で区切られた値の単一の文字列として指定されます。
+
+=== トポロジカルしきい値
+
+指定されたメトリッククエリのしきい値を超えたときに健康状態をトリガーします。メトリッククエリは、トポロジークエリによって返されたコンポーネントの名前、タグ、およびプロパティを参照できます。特定のリソースに異なるしきい値を設定できます。xref:/use/alerting/k8s-override-monitor-arguments.adoc[注釈の助けを借りて]。
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:topological-threshold"  }}
+arguments:
+  queries:
+    topologyQuery: string
+    promqlQuery: string
+    aliasTemplate: string
+    unit: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  titleTemplate: string
+----
+
+* `queries`:実行するクエリ
+** `topologyQuery`:コンポーネントを選択するためのSTQLクエリ
+** `promqlQuery`:時間系列を選択するためにコンポーネントのラベルとプロパティを使用できるPromQLクエリ
+** `unit`:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を描画するために使用されます。すべての単位については、xref:/develop/reference/k8sTs-chart-units.adoc[サポートされている単位]のリファレンスを参照してください。
+** `aliasTemplate`:メトリックチャートにおける時系列のエイリアスです。これは、`${my_label}`プレースホルダーを使用して時系列からラベルを置き換えることができるテンプレートです。
+* `comparator`:しきい値とメトリックを比較するために、LTE/LT/GTE/GTのいずれかを選択してください。`<metric> <comparator> <threshold>`が真である時系列は、エラー状態を生成します。
+* `threshold`:比較対象となる数値のしきい値です。
+* `failureState`:"CRITICAL"または"DEVIATING"のいずれかです。"CRITICAL"は{stackstate-product-name}で赤として表示され、"DEVIATING"はオレンジとして表示され、異なる重大度を示します。
+* `titleTemplate`:モニターの結果のタイトルです。複数のモニター結果が同じコンポーネントにバインドできるため、`${my_label}`プレースホルダーを使用して時系列ラベルを置き換えることが可能です。
+
+=== 動的なしきい値
+
+現在の値が予測されたベースライン間隔の外にあるときにアラートが発生します。この間隔は、週ごとおよび日ごとの季節パターンを考慮して、過去のデータに基づいて動的に計算されます。
+このモニタ機能は、自律異常検出スタックパックがインストールされている場合にのみ利用可能です。
+
+詳細については、xref:/setup/custom-integrations/monitors/dynamic-threshold-monitors.adoc[動的なしきい値モニタ]ページを参照してください。
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+arguments:
+  telemetryQuery:
+    query: string
+    unit: string
+    aliasTemplate: string
+  topologyQuery: string
+  falsePositiveRate: float
+  checkWindowMinutes: integer
+  historicWindowMinutes: integer
+  historySizeWeeks: 1 | 2 | 3 (integer)
+  includePreviousDay: boolean
+  removeTrend: boolean
+----
+
+* `telemetryQuery`: 評価するためのテレメトリ
+** `query`:ベースライン設定および異常検出に使用されるPromQLクエリ
+** `unit`:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を描画するために使用されます。すべての単位については、xref:/develop/reference/k8sTs-chart-units.adoc[サポートされている単位]のリファレンスを参照してください。
+** `aliasTemplate`:メトリックチャートの時系列に対するエイリアスです。これは、`${my_label}`プレースホルダーを使用して時系列のラベルを置き換えることができるテンプレートです。
+* `topologyQuery`:コンポーネントを選択するためのSTQLクエリ
+* `falsePositiveRate`: `!!float 1e-8` - 異常行動に対するモニタの感度。 値が低いほど、より多くの（偽）陽性を抑制しますが、偽陰性（見逃された異常）を引き起こす可能性もあります。
+* `checkWindowMinutes`: `10`分 - チェックウィンドウは、迅速なアラート（小さい値）と正しく特定された異常（大きい値）の間でバランスを取る必要がある。 実際には、少数のデータポイントがうまく機能します。
+* `historicWindowMinutes`: `120`（2時間） - 現在時刻を中心に括られ、かつ1週間以上前の同じ時間帯、つまり現在時刻の1時間前から1時間後までのデータを指します。 チェックウィンドウの2時間前も使用されます。 動的なしきい値モニタは、この過去のデータの分布をチェックウィンドウ内のデータポイントと比較します。
+* `historySizeWeeks`: `2` - 過去の文脈のためにデータが取得される週の数。 `1`, `2`または`3`である可能性があります。
+* `removeTrend`: トレンド行動を持つメトリック（例えば、リクエスト数）については、絶対値が週ごとに異なるため、このトレンド（平均値）を考慮することができます。
+* `includePreviousDay`: 通常 `false` - 週ごとのパターンがなく、日ごとのパターンのみを持つ指標では、より新しいデータを使用できます。
+
+endif::[]

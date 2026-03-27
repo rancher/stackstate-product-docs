@@ -1,0 +1,51 @@
+= Gesundheitsdaten über HTTP senden
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+SUSE Observability kann Gesundheitsinformationen aus Ihren eigenen Datenquellen entweder über HTTP oder die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] synchronisieren.
+
+== SUSE Observability Receiver API
+
+Die SUSE Observability Receiver API akzeptiert Topologie, Metriken, Ereignisse und Gesundheitsdaten in einem gemeinsamen JSON-Objekt. Der Standardort für die Receiver-API ist die `<STACKSTATE_RECEIVER_API_ADDRESS>`, die unter Verwendung der `<STACKSTATE_BASE_URL>` und <``STACKSTATE_RECEIVER_API_KEY>`` erstellt wurde.
+
+Die `<STACKSTATE_RECEIVER_API_ADDRESS>` für SUSE Observability, die auf Kubernetes oder OpenShift bereitgestellt wird, ist:
+
+[,text]
+----
+https://<STACKSTATE_BASE_URL>/receiver/stsAgent/intake?api_key=<STACKSTATE_RECEIVER_API_KEY>
+----
+
+Die `<STACKSTATE_BASE_URL>` und `<STACKSTATE_RECEIVER_API_KEY>` werden während der Installation von SUSE Observability festgelegt, für Details siehe xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_values_yaml[Kubernetes Installation - Konfigurationsparameter].
+
+== JSON
+
+=== Gemeinsames JSON-Objekt
+
+Topologie, Telemetrie und Gesundheitsdaten werden über HTTP POST an die Receiver-API gesendet. Es gibt ein gemeinsames JSON-Objekt, das für alle Nachrichten verwendet wird.
+
+[,javascript]
+----
+{
+  "collection_timestamp": 1548855554, // the epoch timestamp for the collection
+  "events": {}, // used to send events data
+  "internalHostname": "localdocker.test", // the host sending this data
+  "metrics": [], // used to send metrics data
+  "service_checks": [],
+  "topologies": [], // used to send topology data
+  "health": // used for sending health data
+}
+----
+
+=== JSON-Gesundheitslast
+
+SUSE Observability akzeptiert Gesundheitsdaten basierend auf einem gewählten xref:/configure/health/health-synchronization.adoc#_consistency_models[Konsistenzmodell]. Die Nachrichten, die für jedes Modell gesendet werden können, sind auf den folgenden Seiten beschrieben:
+
+* xref:/configure/health/send-health-data/repeat_snapshots.adoc[Wiederholte Snapshots JSON]
+* xref:/configure/health/send-health-data/transactional_increments.adoc[Transaktionale Inkremente JSON]
+
+== Siehe auch
+
+* xref:/setup/cli/cli-sts.adoc[Installieren Sie die SUSE Observability CLI]

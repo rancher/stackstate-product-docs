@@ -1,0 +1,49 @@
+= 对 Node.js 应用程序进行自动检测/监控
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 自动检测/监控
+
+Node.js 的自动检测/监控是通过将自动检测/监控的 JavaScript 库包含到您的应用程序中来完成的。支持广泛的 https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/metapackages/auto-instrumentations-node#_supported_instrumentations[库和框架]。
+
+自动检测/监控不需要对应用程序进行任何修改。要设置它，请按照以下步骤操作：
+
+. 将 Open Telemetry 自动检测/监控 SDK 添加到您的应用程序：
++
+[,bash]
+----
+npm install --save @opentelemetry/api
+npm install --save @opentelemetry/auto-instrumentations-node
+----
+
+. 更新启动您的应用程序的命令以加载 SDK，可以通过更新 Docker 镜像的入口点或命令，或通过更新 Kubernetes 清单中的 `command` 来实现。添加 `--require @opentelemetry/auto-instrumentations-node/register`：
++
+[,bash]
+----
+node --require @opentelemetry/auto-instrumentations-node/register app.js
+----
+
+. 使用额外的环境变量 xref:/setup/otel/instrumentation/sdk-exporter-config.adoc[配置服务名称和导出端点] 部署您的应用程序，支持的协议有 gRPC 和基于 HTTP 的 protobuf。
+. 通过在您的服务名称的指标/跟踪浏览器中搜索指标/跟踪，验证 SUSE Observability 是否正在接收跟踪和/或指标。
+
+有关更多详细信息，请参阅 https://opentelemetry.io/docs/languages/js/automatic/[Open Telemetry 文档]。
+
+[CAUTION]
+====
+通过环境变量配置的自动检测/监控仅支持跟踪，直到此 https://github.com/open-telemetry/opentelemetry-js/issues/4551[Open Telemetry 问题] 解决为止。要启用自动检测/监控代码的指标，需要进行更改。请按照 https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[Open Telemetry 文档] 中的说明进行更改。
+====
+
+
+== 手动检测/监控
+
+当您需要从不受自动检测/监控支持的代码部分获取指标、跟踪或日志时，可以使用手动检测/监控。例如不受支持的库、自家代码或业务级指标。
+
+要捕获该数据，您需要修改您的应用程序。
+
+. 将 Open Telemetry SDK 作为依赖项包含
+. 在您的应用程序中添加代码，以在需要时捕获指标、跨度或日志。
+
+有关此内容的详细文档，请参阅https://opentelemetry.io/docs/languages/js/instrumentation/[Open Telemetry Javascript SDK 文档页面]。
+
+确保您使用 OTLP 导出器，并从代码中正确配置导出器端点。另请参阅https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[Open Telemetry 文档]。假设您按照xref:/setup/otel/collector.adoc[文档]设置了导出器，则需要配置的端点是`http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317`，使用 gRPC。如果 gRPC 有问题，请参阅xref:/setup/otel/instrumentation/sdk-exporter-config.adoc#_grpc_vs_http[gRPC 与 HTTP]。

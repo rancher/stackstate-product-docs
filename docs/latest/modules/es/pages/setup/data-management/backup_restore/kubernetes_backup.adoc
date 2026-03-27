@@ -1,0 +1,831 @@
+= Copia de seguridad de Kubernetes (heredada)
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+[WARNING]
+====
+*Esta página describe el enfoque de copia de seguridad heredado utilizando scripts. Para {stackstate-product-name} v2.7.0 o superior, utiliza la nueva xref:/setup/data-management/backup_restore/backup_enable.adoc[CLI de copia de seguridad] en su lugar.*
+
+**Cambios importantes en v2.7.0:**
+
+* `backup.enabled` se reemplaza con `global.backup.enabled` - los despliegues de Helm fallarán si `backup.enabled` se establece en `true`
+* Todas las copias de seguridad se controlan con un único valor `global.backup.enabled` en lugar de una habilitación individual para cada almacén de datos
+* Los valores de `*.restore.enabled` han sido eliminados
+====
+
+== Descripción general
+
+{stackstate-product-name} tiene un mecanismo de copia de seguridad y restauración integrado que se puede configurar para almacenar copias de seguridad en los clústeres locales, en AWS S3 o en Azure Blob Storage.
+
+=== Ámbito de la copia de seguridad
+
+Los siguientes datos se pueden respaldar automáticamente:
+
+* *Datos de configuración y topología* almacenados en StackGraph
+* *Métricas* almacenadas en la(s) instancia(s) de Victoria Metrics de SUSE Observability
+* *Datos de telemetría* almacenados en la instancia de Elasticsearch de SUSE Observability
+* *Datos de OpenTelemetry* almacenados en la instancia de ClickHouse de SUSE Observability
+
+Los siguientes datos *no* serán respaldados:
+
+* Actualizaciones de topología y telemetría en tránsito almacenadas en Kafka – estas solo tienen valor temporal y no serían útiles cuando se restaura una copia de seguridad
+* Estado de negociaciones del nodo maestro almacenado en ZooKeeper - este estado de tiempo de ejecución sería incorrecto al restaurarse y se determinará automáticamente en tiempo de ejecución
+* Estado de configuración de Kubernetes y estado de volumen persistente en bruto - este estado se puede reconstruir reinstalando SUSE Observability y restaurando las copias de seguridad.
+* Registros de Kubernetes - estos son efímeros.
+
+=== Opciones de almacenamiento
+
+Las copias de seguridad se envían a una instancia de https://min.io/[MinIO (min.io)], que se inicia automáticamente mediante el Helm chart `suse-observability` cuando se habilitan las copias de seguridad automáticas. MinIO es un sistema de almacenamiento de objetos con la misma API que AWS S3. Puede almacenar sus datos localmente o actuar como un gateway a https://docs.min.io/docs/minio-gateway-for-s3.html[AWS S3 (min.io)], https://docs.min.io/docs/minio-gateway-for-azure.html[Azure Blob Storage (min.io)] y otros sistemas.
+
+La instancia de MinIO integrada se puede configurar para almacenar las copias de seguridad en tres ubicaciones:
+
+* xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[AWS S3]
+* xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[Azure Blob Storage]
+* xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[Kubernetes storage]
+
+== Habilitar copias de seguridad
+
+=== AWS S3
+
+[CAUTION]
+====
+
+*Cifrado*
+
+Las claves gestionadas por Amazon S3 (SSE-S3) deben utilizarse al cifrar los buckets de S3 que almacenan las copias de seguridad.
+
+⚠️ El cifrado con claves de AWS KMS almacenadas en el Servicio de Gestión de Claves de AWS (SSE-KMS) no es compatible. Esto resultará en errores como este en los registros de Elasticsearch:
+
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)",`
+====
+
+
+Para habilitar copias de seguridad programadas en buckets de AWS S3, añade el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar SUSE Observability:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  stackGraph:
+    bucketName: AWS_STACKGRAPH_BUCKET
+  elasticsearch:
+    bucketName: AWS_ELASTICSEARCH_BUCKET
+  configuration:
+    bucketName: AWS_CONFIGURATION_BUCKET
+victoria-metrics-0:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+victoria-metrics-1:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+clickhouse:
+  backup:
+    bucketName: AWS_CLICKHOUSE_BUCKET
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+Reemplaza los siguientes valores:
+
+* `YOUR_ACCESS_KEY` y `YOUR_SECRET_KEY` son las credenciales que se utilizarán para asegurar el sistema MinIO. Estas credenciales se establecen en el sistema MinIO y son utilizadas por los trabajos de copia de seguridad automáticos y los trabajos de restauración. También son necesarias si deseas acceder manualmente al sistema MinIO.
+ ** TU_CLAVE_DE_ACCESO debe contener de 5 a 20 caracteres alfanuméricos.
+ ** TU_CLAVE_SECRETA debe contener de 8 a 40 caracteres alfanuméricos.
+* `AWS_ACCESS_KEY` y `AWS_SECRET_KEY` son las credenciales de AWS para el usuario IAM que tiene acceso a los buckets de S3 donde se almacenarán las copias de seguridad. Consulta a continuación la directiva de permisos que debe adjuntarse a ese usuario.
+* `AWS_STACKGRAPH_BUCKET`, `AWS_CONFIGURATION_BUCKET`, `AWS_ELASTICSEARCH_BUCKET`, `AWS_VICTORIA_METRICS_BUCKET` y `AWS_CLICKHOUSE_BUCKET` son los nombres de los buckets de S3 donde se deben almacenar las copias de seguridad. Nota: Los nombres de los buckets de AWS S3 son globales en toda AWS, por lo tanto, los buckets de S3 con el nombre por defecto (`sts-elasticsearch-backup`, `sts-configuration-backup`, `sts-stackgraph-backup`, `sts-victoria-metrics-backup` y `sts-clickhouse-backup`) probablemente no estarán disponibles.
+
+El usuario IAM identificado por `AWS_ACCESS_KEY` y `AWS_SECRET_KEY` debe ser configurado con la siguiente directiva de permisos para acceder a los buckets S3:
+
+[,javascript]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowListMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        },
+        {
+            "Sid": "AllowWriteMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET/*",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET/*",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET/*",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET/*",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        }
+    ]
+}
+----
+
+=== Azure Blob Storage
+
+Para habilitar copias de seguridad en una cuenta de Azure Blob Storage, añade el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar SUSE Observability:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+Reemplaza los siguientes valores:
+
+* `AZURE_STORAGE_ACCOUNT_NAME` - el https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[nombre de la cuenta de almacenamiento de Azure (learn.microsoft.com)]
+* `AZURE_STORAGE_ACCOUNT_KEY` - el https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[clave de la cuenta de almacenamiento de Azure (learn.microsoft.com)] donde se deben almacenar las copias de seguridad.
+
+Las copias de seguridad de StackGraph, Elasticsearch y Victoria Metrics se almacenan en contenedores BLOB llamados `sts-stackgraph-backup`, `sts-configuration-backup`, `sts-elasticsearch-backup`, `sts-victoria-metrics-backup`, `sts-clickhouse-backup` respectivamente. Estos nombres se pueden cambiar configurando los valores de Helm `backup.stackGraph.bucketName`, `backup.elasticsearch.bucketName`, `victoria-metrics-0.backup.bucketName`, `victoria-metrics-1.backup.bucketName` y `clickhouse.backup.bucketName` respectivamente.
+
+=== Kubernetes storage
+
+[CAUTION]
+====
+Si MinIO está configurado para almacenar sus datos en el almacenamiento de Kubernetes, se utiliza un PersistentVolumeClaim (PVC) para solicitar almacenamiento del clúster de Kubernetes. El tipo de almacenamiento asignado depende de la configuración del clúster.
+
+Se aconseja utilizar AWS S3 para clústeres que se ejecutan en Amazon AWS y Azure Blob Storage para clústeres que se ejecutan en Azure por las siguientes razones:
+
+. Los clústeres de Kubernetes que se ejecutan en un proveedor de nube suelen mapear PVCs a almacenamiento en bloques, como Elastic Block Storage para AWS o Azure Block Storage. El almacenamiento en bloques es caro, especialmente para grandes volúmenes de datos.
+. Los Volúmenes Persistentes se destruyen cuando se destruye el clúster que los creó. Eso significa que una eliminación (accidental) de tu clúster también destruirá todas las copias de seguridad almacenadas en Volúmenes Persistentes.
+. Los Volúmenes Persistentes no pueden ser accedidos desde otro clúster. Eso significa que no es posible restaurar SUSE Observability desde una copia de seguridad realizada en otro clúster.
+====
+
+
+Para habilitar copias de seguridad en el almacenamiento local del clúster, habilita MinIO añadiendo el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar SUSE Observability:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+Reemplaza los siguientes valores:
+
+* `YOUR_ACCESS_KEY` y `YOUR_SECRET_KEY` - las credenciales que se utilizarán para asegurar el sistema MinIO. Los trabajos de copia de seguridad automáticos y los trabajos de restauración los utilizarán. También son necesarios para acceder manualmente al almacenamiento de MinIO. `YOUR_ACCESS_KEY` debe contener de 5 a 20 caracteres alfanuméricos y `YOUR_SECRET_KEY` debe contener de 8 a 40 caracteres alfanuméricos.
+
+== Datos de configuración y topología (StackGraph)
+
+Las copias de seguridad de datos de configuración y topología (StackGraph) son copias de seguridad completas, almacenadas en un solo archivo con la extensión `.graph`. Cada archivo contiene una copia de seguridad completa y puede ser movido, copiado o eliminado según sea necesario.
+
+=== Programa de copias de seguridad
+
+Por defecto, las copias de seguridad de StackGraph se crean diariamente a las 03:00 AM hora del servidor.
+
+El programa de copias de seguridad se puede configurar utilizando el valor de Helm `backup.stackGraph.scheduled.schedule`, especificado en https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[la sintaxis de programación cron de Kubernetes (kubernetes.io)].
+
+=== Retención de copias de seguridad
+
+Por defecto, las copias de seguridad de StackGraph se mantienen durante 30 días. Como las copias de seguridad de StackGraph son copias de seguridad completas, esto puede requerir mucho almacenamiento.
+
+El delta de retención de copias de seguridad se puede configurar utilizando el valor de Helm `backup.stackGraph.scheduled.backupRetentionTimeDelta`, especificado en el formato del argumento de fecha de GNU `--date`. Por ejemplo, el valor por defecto es `30 days ago`. Consulta https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[Elementos relativos en cadenas de fecha] para más ejemplos.
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de StackGraph, establece el horario de copias de seguridad a una fecha lejana en el pasado utilizando el valor de Helm `backup.stackGraph.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Métricas (Victoria Metrics)
+
+[WARNING]
+====
+Victoria Metrics utiliza copias de seguridad incrementales sin versionado de un bucket, lo que significa que la nueva copia de seguridad *reemplaza completamente la anterior*.
+
+En caso de que te encuentres con una de las siguientes situaciones:
+
+* montar un volumen vacío en el directorio `/storage` de las instancias de Victoria Metrics
+* eliminar el directorio `/storage` o los archivos dentro de las instancias de Victoria Metrics
+
+La siguiente copia de seguridad (vacía) creada será etiquetada con una nueva versión y la anterior, antes de que el volumen se vaciara, será preservada.
+A partir de ese momento, ambas copias de seguridad se <<_list_victoria_metrics_backups,listarán como disponibles para restaurar>>.
+====
+
+
+Las métricas (Victoria Metrics) utilizan instantáneas para almacenar datos en copias de seguridad incrementales. Muchas instancias de Victoria Metrics pueden almacenar copias de seguridad en el mismo bucket, cada una de ellas se almacenará en un directorio separado. Todos los archivos ubicados en el directorio deben ser tratados como un todo único y solo pueden ser movidos, copiados o eliminados como un todo.
+
+[NOTE]
+====
+Los despliegues de alta disponibilidad deben desplegarse con dos instancias de Victoria Metrics. Las copias de seguridad están habilitadas/configuradas de forma independiente para cada una de ellas.
+
+Los siguientes fragmentos de código/comandos se proporcionan para la primera instancia de Victoria Metrics `victoria-metrics-0`. Para hacer una copia de seguridad/configurar la segunda instancia deberías usar `victoria-metrics-1`.
+====
+
+
+=== Programa de copias de seguridad
+
+Por defecto, las copias de seguridad de Victoria Metrics se crean cada 1h.
+
+* `victoria-metrics-0` - 25 minutos después de la hora
+* `victoria-metrics-1` - 35 minutos después de la hora
+
+El horario de copias de seguridad se puede configurar utilizando el valor de Helm `victoria-metrics-0.backup.scheduled.schedule` de acuerdo con https://github.com/aptible/supercronic/tree/master/cronexpr[formato cronexpr].
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de Victoria Metrics, establece el horario de copia de seguridad para ambas instancias a una fecha muy anterior:
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== OpenTelemetry (ClickHouse)
+
+ClickHouse utiliza copias de seguridad tanto incrementales como completas. Por defecto, las copias de seguridad completas se ejecutan diariamente a las 00:45, y las copias de seguridad incrementales se realizan cada hora. Cada copia de seguridad crea un nuevo directorio y las copias de seguridad antiguas (directorios) se eliminan automáticamente. Todos los archivos ubicados en un directorio de copias de seguridad se tratan como un grupo singular y solo pueden ser movidos, copiados o eliminados como un grupo. Se recomienda utilizar la herramienta `clickhouse-backup` disponible en el Pod `suse-observability-clickhouse-shard0-0` para gestionar las copias de seguridad.
+
+=== Programa de copias de seguridad
+
+Por defecto, las copias de seguridad de ClickHouse se crean.
+
+* Copia de seguridad completa - a las 00:45 todos los días
+* Copia de seguridad incremental - 45 minutos después de la hora (de 3 a.m. a 12 a.m.)
+
+[CAUTION]
+====
+Las copias de seguridad tienen problemas con la ejecución paralela. Si una segunda copia de seguridad comienza antes de que la primera se complete, interrumpirá la primera copia de seguridad. Por lo tanto, es crucial evitar la ejecución paralela. Por ejemplo, la primera copia de seguridad incremental debe ejecutarse tres horas después de la completa.
+====
+
+
+El horario de copias de seguridad se puede configurar utilizando el valor de Helm `clickhouse.backup.scheduled.full_schedule` y `clickhouse.backup.scheduled.incremental_schedule` de acuerdo con https://github.com/aptible/supercronic/tree/master/cronexpr[formato cronexpr].
+
+=== Retención de copias de seguridad
+
+Por defecto, la herramienta mantiene las últimas 308 copias de seguridad (completas e incrementales), lo que equivale a aproximadamente 14 días.
+
+La retención de copias de seguridad se puede configurar utilizando el valor de Helm `clickhouse.backup.config.keep_remote`.
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de ClickHouse, establece los horarios de copia de seguridad completa e incremental a una fecha muy anterior:
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Datos de telemetría (Elasticsearch)
+
+Las instantáneas de datos de telemetría (Elasticsearch) son incrementales y se almacenan en archivos con la extensión `.dat`. Los archivos en la ubicación de almacenamiento de copias de seguridad de Elasticsearch deben tratarse como un todo único y solo se pueden mover, copiar o eliminar en su totalidad.
+
+Los fragmentos de configuración proporcionados en la sección xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_enable_backups[habilitar copias de seguridad] habilitarán las instantáneas diarias de Elasticsearch.
+
+=== Desactivar instantáneas programadas
+
+Para desactivar las instantáneas programadas de Elasticsearch, establece la programación de instantáneas a una fecha lejana en el pasado utilizando el valor de Helm `backup.elasticsearch.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+=== Horario de instantáneas
+
+Por defecto, las instantáneas de Elasticsearch se crean diariamente a las 03:00 AM, hora del servidor.
+
+El horario de copias de seguridad se puede configurar utilizando el valor de Helm `backup.elasticsearch.scheduled.schedule`, especificado en https://www.elastic.co/guide/en/elasticsearch/reference/7.6/cron-expressions.html[la sintaxis de programación cron de Elasticsearch (elastic.co)].
+
+=== Retención de instantáneas
+
+Por defecto, las instantáneas de Elasticsearch se mantienen durante 30 días, con un mínimo de 5 instantáneas y un máximo de 30 instantáneas.
+
+El tiempo de retención y el número de instantáneas mantenidas se pueden configurar utilizando los siguientes valores de Helm:
+
+* `backup.elasticsearch.scheduled.snapshotRetentionExpireAfter`, especificado en https://www.elastic.co/guide/en/elasticsearch/reference/7.6/common-options.html#_time_units[unidades de tiempo de Elasticsearch (elastic.co)].
+* `backup.elasticsearch.scheduled.snapshotRetentionMinCount`
+* `backup.elasticsearch.scheduled.snapshotRetentionMaxCount`
+
+[NOTE]
+====
+Por defecto, la tarea de retención en sí https://www.elastic.co/guide/en/elasticsearch/reference/7.6/slm-settings.html#_slm_retention_schedule[se ejecuta diariamente a la 1:30 AM UTC (elastic.co)]. Si estableces que las instantáneas expiren más rápido que en un día, por ejemplo, con fines de prueba, necesitarás cambiar el horario de la tarea de retención.
+====
+
+
+=== Índices de instantáneas.
+
+Por defecto, se crea una instantánea para los índices de Elasticsearch cuyos nombres comienzan con `sts`.
+
+Los índices para los cuales se crea una instantánea se pueden configurar utilizando el valor de Helm `backup.elasticsearch.scheduled.indices`, especificado en https://www.w3schools.com/js/js_json_arrays.asp[formato de matriz JSON (w3schools.com)].
+
+== Restaurar copias de seguridad e instantáneas.
+
+Los scripts para listar y restaurar copias de seguridad e instantáneas se pueden descargar desde la https://github.com/StackVista/helm-charts/releases/latest[última versión del Helm chart de SUSE Observability]. Descarga y extrae el `backup-scripts-<version>.tar.gz` para comenzar.
+
+[NOTE]
+====
+*Antes de usar los scripts, asegúrate de que:*
+
+* El binario `kubectl` está instalado y configurado para conectarse a:
+ .. El clúster de Kubernetes donde se ha instalado SUSE Observability.
+ .. El espacio de nombres dentro de ese clúster donde se ha instalado SUSE Observability.
+* El valor de Helm `global.backup.enabled` está configurado en `true`.
+====
+
+
+=== Listar copias de seguridad de StackGraph
+
+Para listar las copias de seguridad de StackGraph, ejecuta el siguiente comando:
+
+[,bash]
+----
+./restore/list-stackgraph-backups.sh
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+job.batch/stackgraph-list-backups-20210222t111942 created
+Waiting for job to start...
+=== Listing StackGraph backups in bucket "sts-stackgraph-backup"...
+sts-backup-20210215-0300.graph
+sts-backup-20210216-0300.graph
+sts-backup-20210217-0300.graph
+sts-backup-20210218-0300.graph
+sts-backup-20210219-0300.graph
+sts-backup-20210220-0300.graph
+sts-backup-20210221-0300.graph
+sts-backup-20210222-0300.graph
+===
+job.batch "stackgraph-list-backups-20210222t111942" deleted
+----
+
+La marca de tiempo cuando se tomó la copia de seguridad es parte del nombre de la copia de seguridad.
+
+[NOTE]
+====
+Las líneas en la salida que comienzan con `Error from server (BadRequest):` son esperadas. Aparecen cuando el script está esperando a que el pod se inicie.
+====
+
+
+=== Restaurar una copia de seguridad de StackGraph
+
+[CAUTION]
+====
+*Para evitar la pérdida inesperada de datos existentes, por defecto, una copia de seguridad solo puede ser restaurada en un entorno limpio.*
+Si estás completamente seguro de que cualquier dato existente puede ser sobrescrito, puedes anular esta función de seguridad utilizando el comando `-force`.
+Solo ejecuta el comando de restauración cuando estés seguro de que deseas restaurar la copia de seguridad.
+====
+
+
+Para restaurar una copia de seguridad de StackGraph en un entorno limpio, selecciona un nombre de copia de seguridad y pásalo como el primer parámetro en el siguiente comando:
+
+[,bash]
+----
+./restore/restore-stackgraph-backup.sh sts-backup-20210216-0300.graph
+----
+
+Para restaurar una copia de seguridad de StackGraph en un *entorno con datos existentes*, selecciona un nombre de copia de seguridad y pásalo como el primer parámetro en el siguiente comando junto a un segundo parámetro `-force`:
+[NOTE]
+====
+*Ten en cuenta que los datos existentes serán sobrescritos cuando se restaure la copia de seguridad.*
+
+Solo haz esto si estás completamente seguro de que cualquier dato existente puede ser sobrescrito.
+====
+
+
+[,bash]
+----
+./restore/restore-stackgraph-backup.sh sts-backup-20210216-0300.graph -force
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+job.batch/stackgraph-restore-20210222t112142 created
+Waiting for job to start...
+=== Downloading StackGraph backup "sts-backup-20210216-0300.graph" from bucket "sts-stackgraph-backup"...
+download: s3://sts-stackgraph-backup/sts-backup-20210216-1252.graph to ../../tmp/sts-backup-20210216-0300.graph
+=== Importing StackGraph data from "sts-backup-20210216-0300.graph"...
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by org.codehaus.groovy.vmplugin.v7.Java7$1 (file:/opt/docker/lib/org.codehaus.groovy.groovy-2.5.4.jar) to constructor java.lang.invoke.MethodHandles$Lookup(java.lang.Class,int)
+WARNING: Please consider reporting this to the maintainers of org.codehaus.groovy.vmplugin.v7.Java7$1
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+===
+job.batch "stackgraph-restore-20210222t112142" deleted
+----
+
+En caso de que estés ejecutando un comando de restauración que falta la bandera `-force` en una base de datos no vacía, la salida contendrá un error como este:
+
+[,bash]
+----
+ERROR com.stackvista.graph.migration.Restore - Restore isn't possible in a non empty.
+----
+
+[NOTE]
+====
+Las líneas que comienzan con `WARNING:` son esperadas. Se generan mediante Groovy ejecutándose en JDK 11 y se pueden ignorar.
+====
+
+
+=== Listar copias de seguridad de Victoria Metrics
+
+Para listar las copias de seguridad de Victoria Metrics, ejecuta el siguiente comando:
+
+[,bash]
+----
+./restore/list-victoria-metrics-backups.sh
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+job.batch/victoria-metrics-list-backups-20231016t125557 created
+Waiting for job to start...
+Waiting for job to start...
+=== Fetching timestamps of last completed incremental backups
+victoria-metrics-0 victoria-metrics-0-20231128160000 "Wed, 29 Nov 2023 07:36:00 GMT"
+victoria-metrics-0 victoria-metrics-0-20231129092200 "Wed, 29 Nov 2023 10:56:00 GMT"
+
+===
+job.batch "victoria-metrics-list-backups-20231016t125557" deleted
+----
+
+donde puedes ver la instancia de Victoria Metrics, la versión específica de la copia de seguridad y la última vez que se completó una copia de seguridad.
+
+=== Restaurar una copia de seguridad de Victoria Metrics
+
+[CAUTION]
+====
+*La funcionalidad de restauración siempre sobrescribe datos. Debes tener cuidado de evitar la pérdida inesperada de datos existentes.*
+====
+
+
+[CAUTION]
+====
+*La funcionalidad de restauración requiere detener una instancia de Victoria Metrics durante el proceso.*
+
+Todas las nuevas métricas serán almacenadas en caché por `vmagent` durante el proceso de restauración, por favor asegúrate de que `vmagent` tenga suficiente memoria para almacenar en caché las métricas.
+====
+
+
+Para restaurar una copia de seguridad de Victoria Metrics, selecciona un nombre de instancia y una versión de copia de seguridad y pásalos como parámetros en el siguiente comando:
+
+[,bash]
+----
+./restore/restore-victoria-metrics-backup.sh victoria-metrics-0 victoria-metrics-0-20231128160000
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+=== Scaling down the Victoria Metrics instance
+statefulset.apps/suse-observability-victoria-metrics-0 scaled
+=== Allowing pods to terminate
+=== Starting restore job
+job.batch/victoria-metrics-restore-backup-20231017t092607 created
+=== Restore job started. Follow the logs with the following command:
+kubectl logs --follow job/victoria-metrics-restore-backup-20231017t092607
+=== After the job has completed clean up the job and scale up the Victoria Metrics instance pods again with the following commands:
+kubectl delete job victoria-metrics-restore-backup-20231017t092607
+kubectl scale statefulsets suse-observability-victoria-metrics-0 --replicas=1
+----
+
+Luego sigue los registros para comprobar el estado del trabajo
+
+----
+2023-10-17T07:26:42.564Z    info    VictoriaMetrics/lib/backup/actions/restore.go:194    restored 53072307269 bytes from backup in 0.445 seconds; deleted 639118752 bytes; downloaded 1204539 bytes
+2023-10-17T07:26:42.564Z    info    VictoriaMetrics/app/vmrestore/main.go:64    gracefully shutting down http server for metrics at ":8421"
+2023-10-17T07:26:42.564Z    info    VictoriaMetrics/app/vmrestore/main.go:68    successfully shut down http server for metrics in 0.000 seconds
+----
+
+Después de la finalización (*asegúrate de que la copia de seguridad se haya restaurado correctamente*), es necesario seguir los comandos impresos por el comando anterior:
+
+* eliminar el trabajo de restauración
+* aumentar la escala de la instancia de Victoria Metrics
+
+=== Listar copias de seguridad de ClickHouse
+
+[NOTE]
+====
+El siguiente script necesita permiso para ejecutar el comando `kubectl exec`.
+====
+
+
+Para listar las copias de seguridad de ClickHouse, ejecuta el siguiente comando:
+
+[,bash]
+----
+./restore/list-clickhouse-backups.sh
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+full_2024-06-17T18-50-00          34.41KiB   17/06/2024 18:50:00   remote                                      tar, regular
+incremental_2024-06-17T18-51-00   7.29KiB    17/06/2024 18:51:00   remote   +full_2024-06-17T18-50-00          tar, regular
+incremental_2024-06-17T18-54-00   7.29KiB    17/06/2024 18:54:00   remote   +incremental_2024-06-17T18-51-00   tar, regular
+incremental_2024-06-17T18-57-00   7.29KiB    17/06/2024 18:57:00   remote   +incremental_2024-06-17T18-54-00   tar, regular
+full_2024-06-17T19-00-00          26.41KiB   17/06/2024 19:00:00   remote                                      tar, regular
+incremental_2024-06-17T19-00-00   6.52KiB    17/06/2024 19:00:00   remote   +incremental_2024-06-17T18-57-00   tar, regular
+incremental_2024-06-17T19-03-00   25.37KiB   17/06/2024 19:03:00   remote   +incremental_2024-06-17T19-00-00   tar, regular
+incremental_2024-06-17T19-06-00   7.29KiB    17/06/2024 19:06:00   remote   +incremental_2024-06-17T19-03-00   tar, regular
+----
+
+donde se imprime:
+
+* nombre, el nombre comienza con `full_` - es una copia de seguridad completa, `incremental_` - es una copia de seguridad incremental
+* tamaño,
+* fecha de creación,
+* `remote` - una copia de seguridad se sube a un almacenamiento remoto como S3
+* copia de seguridad padre - utilizada por copias de seguridad incrementales
+* formato y compresión
+
+=== Restaurar una copia de seguridad de ClickHouse
+
+[CAUTION]
+====
+*La funcionalidad de restauración sobrescribe los datos. Todas las tablas en la `otel` base de datos se eliminan y se restauran desde la copia de seguridad. Ten cuidado de evitar la pérdida inesperada de datos.*
+====
+
+
+[NOTE]
+====
+El siguiente script necesita permiso para ejecutar el comando `kubectl exec`.
+====
+
+
+[CAUTION]
+====
+*La funcionalidad de restauración requiere detener todos los productores (como los exportadores de OpenTelemetry). El script reduce las cargas de trabajo antes de la copia de seguridad y las aumenta después de que finaliza la copia de seguridad.*
+====
+
+
+Para restaurar una copia de seguridad de ClickHouse, selecciona una versión de copia de seguridad y pásala como parámetro en el siguiente comando:
+
+[,bash]
+----
+./restore/restore-clickhouse-backup.sh incremental_2024-06-17T18-57-00
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+...
+2024/06/17 19:14:19.509498  info download object_disks start backup=incremental_2024-06-17T19-06-00 operation=restore_data table=otel.otel_traces_trace_id_ts_mv
+2024/06/17 19:14:19.509530  info download object_disks finish backup=incremental_2024-06-17T19-06-00 duration=0s operation=restore_data size=0B table=otel.otel_traces_trace_id_ts_mv
+2024/06/17 19:14:19.509549  info done                      backup=incremental_2024-06-17T19-06-00 duration=0s operation=restore_data progress=12/12 table=otel.otel_traces_trace_id_ts_mv
+2024/06/17 19:14:19.509574  info done                      backup=incremental_2024-06-17T19-06-00 duration=66ms operation=restore_data
+2024/06/17 19:14:19.509591  info done                      backup=incremental_2024-06-17T19-06-00 duration=167ms operation=restore version=2.5.13
+2024/06/17 19:14:19.509684  info clickhouse connection closed logger=clickhouse
+Data restored
+----
+
+=== Listar instantáneas de Elasticsearch
+
+Para listar las instantáneas de Elasticsearch, ejecuta el siguiente comando:
+
+[,bash]
+----
+./restore/list-elasticsearch-snapshots.sh
+----
+
+El resultado debe tener el siguiente aspecto:
+
+[,bash]
+----
+job.batch/elasticsearch-list-snapshots-20210224t133115 created
+Waiting for job to start...
+Waiting for job to start...
+=== Listing Elasticsearch snapshots in snapshot repository "sts-backup" in bucket "sts-elasticsearch-backup"...
+sts-backup-20210219-0300-mref7yrvrswxa02aqq213w
+sts-backup-20210220-0300-yrn6qexkrdgh3pummsrj7e
+sts-backup-20210221-0300-p481sih8s5jhre9zy4yw2o
+sts-backup-20210222-0300-611kxendsvh4hhkoosr4b7
+sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk
+===
+job.batch "elasticsearch-list-snapshots-20210224t133115" deleted
+----
+
+La marca de tiempo cuando se tomó la copia de seguridad es parte del nombre de la copia de seguridad.
+
+=== Eliminar índices de Elasticsearch
+
+[NOTE]
+====
+Puedes usar la bandera `--delete-all-indices` con el script de restauración para eliminar automáticamente todos los índices antes de restaurar. Para más información, consulta xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_restore_an_elasticsearch_snapshot[restaurar una instantánea de Elasticsearch].
+====
+
+Para eliminar manualmente los índices existentes de Elasticsearch y restaurar una instantánea, sigue estos pasos:
+
+. Detener la indexación - reduce todas las ampliaciones que utilizan Elasticsearch a 0:
++
+[,bash]
+----
+kubectl scale --replicas=0 deployment -l observability.suse.com/scalable-during-es-restore="true"
+----
+
+. Abre un reenvío de puerto al maestro de Elasticsearch:
++
+[,bash]
+----
+kubectl port-forward service/suse-observability-elasticsearch-master 9200:9200
+----
+
+. Obtén una lista de todos los índices:
++
+[,bash]
+----
+curl "http://localhost:9200/_cat/indices?v=true"
+----
++
+El resultado debe tener el siguiente aspecto:
++
+[,bash]
+----
+health status index                              uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+green  open   .ds-sts_k8s_logs-2025.09.28-004619 9p7RZwNCR-aQwInTMr5Bow   3   1   24511032            0        6gb            3gb          3gb
+green  open   sts_topology_events-2025.10.01     86I2JZIeRzqWkK1dolHzhg   1   1    1576132            0    111.6mb         55.8mb       55.8mb
+green  open   sts_topology_events-2025.10.02     T-bcrok_S1uVPLusQuCMxw   1   1     999748            0     75.2mb         37.6mb       37.6mb
+green  open   .ds-sts_k8s_logs-2025.09.30-004653 rwlcAr0sTPe9NaImtJLIiw   3   1   24387607            0        6gb            3gb          3gb
+green  open   sts_topology_events-2025.09.10     T0x-qvyUR2-dg4fyvdZIaQ   1   1    1746143            0    131.6mb         65.8mb       65.8mb
+----
+
+. Elimina un índice con el siguiente comando:
++
+[,bash]
+----
+curl -X DELETE "http://localhost:9200/INDEX_NAME?pretty"
+----
++
+Reemplaza `INDEX_NAME` con el nombre del índice a eliminar, por ejemplo:
++
+[,bash]
+----
+curl -X DELETE "http://localhost:9200/sts_internal_events-2021.02.19?pretty"
+----
+
+. La salida debería ser:
++
+[,javascript]
+----
+{
+"acknowledged" : true
+}
+----
+
+=== Restaurar una instantánea de Elasticsearch
+
+[WARNING]
+====
+*Cuando se restaura una instantánea, los índices existentes no se sobrescribirán.*
+
+Puedes usar la bandera `--delete-all-indices` para eliminar automáticamente todos los índices mediante el script de restauración, o eliminarlos manualmente como se describe en xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_delete_elasticsearch_indices[eliminar índices de Elasticsearch].
+
+====
+
+[WARNING]
+====
+*Si el `PersistentVolumes` de Elasticsearch se recreara* (por ejemplo, por eliminación accidental y tras el reinicio del pod), debes recrear la configuración de copia de seguridad de Elasticsearch utilizando cualquiera de los dos métodos a continuación:
+
+* Reinstalando el gráfico de Helm de SUSE Observability con la misma configuración utilizada para la instalación inicial (O)
+* Activando manualmente el CronJob de inicialización de copia de seguridad:
++
+[,bash]
+----
+kubectl create job --from=cronjob.batch/suse-observability-backup-init "suse-observability-backup-init-$(date +%s)"
+----
+====
+Para restaurar una instantánea de Elasticsearch, selecciona un nombre de instantánea y pásalo como el primer parámetro. Puedes especificar opcionalmente:
+
+* Una lista de índices, separados por comas, para restaurar. Si no se especifica, se restaurarán todos los índices que coincidan con el valor de Helm `backup.elasticsearch.scheduled.indices`. El valor por defecto es `"sts*"`).
+* Introducido en la versión `2.6.1`, puedes usar la bandera "--delete-all-indices" para eliminar automáticamente todos los índices existentes antes de restaurar.
+
+==== Restauración básica
+
+[,bash]
+----
+./restore/restore-elasticsearch-snapshot.sh \
+  sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk
+----
+
+==== Restaurar índices específicos
+
+[,bash]
+----
+./restore/restore-elasticsearch-snapshot.sh \
+  sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk \
+  "<INDEX_TO_RESTORE>,<INDEX_TO_RESTORE>"
+----
+
+==== Restaurar con eliminación automática de índices
+
+[,bash]
+----
+./restore/restore-elasticsearch-snapshot.sh \
+  sts-backup-20210223-0300-ppss8nx40ykppss8nx40yk \
+  --delete-all-indices
+----
+
+Al usar la bandera `--delete-all-indices`, confirma en el aviso para continuar con la acción:
+
+[,text]
+----
+WARNING: All indices will be deleted before restore!
+Are you sure you want to continue? (yes/no): yes
+=== Starting restore job
+job.batch/elasticsearch-restore-20251003t115746 created
+=== Restore job started. Follow the logs and clean up the job with the following commands:
+kubectl logs --follow job/elasticsearch-restore-20251003t115746
+kubectl delete job/elasticsearch-restore-20251003t115746
+----
+
+Sigue los registros para ver el progreso de eliminación y restauración:
+
+[,text]
+----
+kubectl logs --follow job/elasticsearch-restore-20251003t115746
+
+=== Deleting all indices matching pattern "sts*"...
+Found indices to delete:
+.ds-sts_k8s_logs-2025.10.03-000007
+.ds-sts_k8s_logs-2025.10.03-000004
+sts_topology_events-2025.10.02
+sts_topology_events-2025.10.03
+...
+=== All indices deleted successfully
+=== Restoring ElasticSearch snapshot "sts-backup-20251003-0925-aby7d1tgs9whvbm6qj04ug" (indices = "sts*") from snapshot repository "sts-backup" in bucket "sts-elasticsearch-backup"...
+{
+  "snapshot" : {
+    "snapshot" : "sts-backup-20251003-0925-aby7d1tgs9whvbm6qj04ug",
+    "indices" : [
+      ".ds-sts_k8s_logs-2025.10.02-000003",
+      "sts_topology_events-2025.10.02",
+      "sts_topology_events-2025.10.03"
+    ],
+    "shards" : {
+      "total" : 15,
+      "failed" : 0,
+      "successful" : 15
+    }
+  }
+}
+===
+----
+
+Después de que los índices hayan sido restaurados, escala todas las ampliaciones que utilizan Elasticsearch:
+
+[,bash]
+----
+kubectl scale --replicas=1 deployment -l observability.suse.com/scalable-during-es-restore="true"
+----

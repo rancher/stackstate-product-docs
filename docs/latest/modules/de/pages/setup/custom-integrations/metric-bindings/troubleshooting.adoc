@@ -1,0 +1,45 @@
+= Fehlerbehebung bei benutzerdefinierten Metrikdiagrammen
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+* <<_the_metric_chart_doesnt_show_on_the_highlights_page_of_a_component,Das Metrikdiagramm wird auf der Übersichtsseite eines Elements nicht angezeigt.>>
+* <<_the_metric_chart_doesnt_show_on_the_metrics_perspective_of_a_component,Das Metrikdiagramm wird in der Metrikansicht eines Elements nicht angezeigt.>>
+* <<_the_metric_chart_on_a_component_remains_empty_no_data,Das Metrikdiagramm eines Elements bleibt leer ("keine Daten").>>
+
+== Das Metrikdiagramm wird auf der Übersichtsseite eines Elements nicht angezeigt.
+
+Momentan ist es nicht möglich, die Metrikdiagramme, die auf der Übersichtsseite eines Elements angezeigt werden, anzupassen. Die Diagramme für benutzerdefinierte Metrikbindungen werden nur in der Metrikansicht angezeigt.
+
+== Das Metrikdiagramm wird in der Metrikansicht eines Elements nicht angezeigt.
+
+Die `scope` Abfrage zu einer Metrikbindung wird verwendet, um zu bestimmen, ob ein Element die Metrikbindung anzeigt. Wenn ein Element eine Metrikbindung nicht anzeigt, überprüfen Sie, ob die Topologieabfrage im Scope mit dem Element übereinstimmt.
+
+Überprüfen Sie zunächst, ob das Element tatsächlich die erwarteten Labels und/oder den erwarteten Elementtyp auf der Übersichtsseite hat; Name und Typ befinden sich oben, die Labels sind im Abschnitt "Über". Stellen Sie sicher, dass es keine Rechtschreibfehler in den Labelnamen oder Werten gibt.
+
+Überprüfen Sie, ob die Scope-Abfrage die korrekte Syntax hat:
+
+. Öffnen Sie die Erkundungsansicht über "Ansichten" im Menü und die blaue Schaltfläche "Erkunden" auf der rechten Seite. Oder direkt über die URL: `https://<your-stackstate-instance>/#/views/explore`
+. Öffnen Sie die Filter und wählen Sie `switch to STQL`.
+. Kopieren Sie nun die Abfrage aus dem Scope in das STQL-Feld und führen Sie die Abfrage aus.
+
+Die Übersicht zeigt nun alle Elemente, die mit der Abfrage übereinstimmen und das Diagramm erhalten werden.
+
+== Das Metrikdiagramm eines Elements bleibt leer ("keine Daten").
+
+Für das Metrikdiagramm, das keine Daten anzeigt, obwohl Daten erwartet wurden, öffnen Sie den Inspektor (das Symbol in der oberen rechten Ecke des Diagramms). Schalten Sie die Schaltfläche "Abfrage anzeigen" ein, um die Abfragen anzuzeigen.
+
+Stellen Sie sicher, dass die Abfrage keine der Parameter mehr enthält (d.h. alle Werte wie `${tags.cluster-name}` oder `${name}` wurden durch die Werte für die Komponente ersetzt). Wenn einige Parameter in der Abfrage zurückgelassen wurden, waren die Labels auf dieser Komponente nicht verfügbar. Überprüfen Sie daher die verwendeten Namen (in diesem Beispiel `cluster-name`) mit den auf der Komponente verfügbaren Labels. Stellen Sie auch sicher, dass es keine Tippfehler in den Namen gibt.
+
+Wenn alle Parameter ausgefüllt sind, kann es ein Problem mit der PromQL-Abfrage geben. Um das zu untersuchen, kopieren Sie die PromQL-Abfrage und öffnen Sie den Metriken-Explorer (über das Hauptmenü von {stackstate-product-name}). Fügen Sie die Abfrage in den Metriken-Explorer ein und führen Sie sie aus. Dies sollte immer noch ein leeres Ergebnis liefern.
+
+Entweder existiert die Metrik nicht, sie hat eines der Labels nicht oder das Label existiert, aber es gibt keine Zeitreihen, die dem Wert entsprechen. Die schnellste Methode, dies zu lösen, besteht darin, die Abfrage nur auf ihren Metriknamen umzuschreiben und diese auszuführen. Wenn es Ergebnisse gibt, existiert die Metrik (also keine Tippfehler). Das Tabellenresultat kann auch verwendet werden, um zu überprüfen, ob alle verwendeten Labels existieren. Stellen Sie sicher, dass es hier ebenfalls keine Tippfehler gibt.
+
+Wenn es Ergebnisse gibt, aber nur nicht für einen bestimmten Wert eines Labels (zum Beispiel für das `pod_name`-Label), ist die Abfrage in Ordnung, aber es gibt keine Zeitreihe für diese spezifische Metrik für diese spezifische Komponente. Dinge, die in diesem Fall zu überprüfen sind:
+
+* Werden die Daten für diese Komponente gesammelt (entweder über den {stackstate-product-name}-Agenten oder auf andere Weise)?
+* Berichtet die Komponente überhaupt über die Metrik?
+
+Wie Sie dies tun, hängt davon ab, wie die Datensammlung konfiguriert ist.

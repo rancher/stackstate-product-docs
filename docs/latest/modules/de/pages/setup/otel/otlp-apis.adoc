@@ -1,0 +1,73 @@
+= SUSE Observability Open Telemetrie-Protokollunterstützung
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observability unterstützt 2 Versionen des OTLP-Protokolls, die `grpc` Version (auch als OTLP bezeichnet) und `http/protobuf` (auch als OTLP über HTTP bezeichnet). In der Collector-Konfiguration können Sie wählen, welchen Exporteur Sie verwenden möchten, aber stellen Sie sicher, dass Sie die korrekte URL für SUSE Observability konfigurieren. Die `grpc` Version des Protokolls wird bevorzugt, da sie größere Nutzlasten und höhere Durchsatzraten ermöglicht. Sollte jedoch die Unterstützung für `grpc` in Ihrer Infrastruktur schlecht sein, können Sie zur HTTP-Version wechseln. Siehe auch xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[Fehlerbehebung]
+
+== SUSE Cloud Observability
+
+Die Endpunkte für SUSE Cloud Observability sind:
+
+* OTLP: `otlp-<your-suse-observability>.app.stackstate.io:443` (ohne das URL-Schema)
+* OTLP über HTTP: `https://otlp-http-<your-suse-observability>.app.stackstate.io` (mit dem URL-Schema: `https`)
+
+== Selbstgehostete SUSE Observability
+
+Für eine selbstgehostete Installation müssen Sie einen der Endpunkte oder beide aktivieren, indem Sie den Ingress für SUSE Observability wie xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_rule_for_open_telemetry[hier beschrieben] konfigurieren.
+
+Wenn SUSE Observability im selben Cluster wie der Collector läuft, können Sie es auch ohne Ingress verwenden, indem Sie die Service-Endpunkte nutzen. Dies ist jedoch nur möglich, wenn das HTTP-Protokoll verwendet wird:
+
+* OTLP über HTTP: `http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4318`
+
+Stellen Sie sicher, dass Sie `insecure: true` in der Collector-Konfiguration (siehe nächster Abschnitt) festlegen, um die Verwendung von einfachen HTTP-Endpunkten anstelle von HTTPS zu ermöglichen. 
+
+Das GRPC-Protokoll unterstützt das Senden von Anmeldeinformationen über eine unsichere Verbindung nicht, daher können Sie es nur in Kombination mit einer sicheren Ingress-Konfiguration verwenden.
+
+== Collector-Konfiguration
+
+=== OTLP-Protokoll
+
+Die Beispiele in der Collector-Konfiguration verwenden das OTLP-Protokoll wie folgt:
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+    endpoint: <otlp-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+=== OTLP HTTP-Protokoll
+
+Um das OTLP über HTTP-Protokoll zu verwenden, nutzen Sie den `otlphttp` Exporteur. Aktualisieren Sie auch alle Exporteur-Referenzen in Ihren Pipelines von `otlp/suse-observability` auf `otlphttp/suse-observability`! Verwenden Sie eine Suchen-und-Ersetzen-Funktion, um sicherzustellen, dass Sie alle Vorkommen ändern.
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlphttp/stackstate:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp-http endpoint, for example https://otlp-http-suse-observability.my.company.com:443
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable TLS entirely:
+    #  insecure: true
+    # To disalbe certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+Es steht weitere Konfiguration zur Verfügung, um die genauen Anforderungen und das Verhalten des Exporteurs zu steuern. Es ist beispielsweise auch möglich, ein benutzerdefiniertes CA-Stammzertifikat zu verwenden oder Client-Zertifikate zu aktivieren. Siehe die https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlpexporter/README.md[OTLP-Exporteur-Dokumentation] für die Einzelheiten.

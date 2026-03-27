@@ -1,0 +1,201 @@
+= Verwendung der CLI für Monitore
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Sie können die {stackstate-product-name} CLI verwenden, um Monitore zu inspizieren, auszuführen und zu modifizieren:
+
+[source,bash]
+----
+sts monitor
+Manage, test and develop monitors.
+
+Usage:
+  sts monitor [command]
+
+Available Commands:
+  apply       Create or edit a monitor from STY
+  clone       Clone a monitor
+  delete      Delete a monitor
+  describe    Describe a monitor in STY format
+  disable     Disable a monitor
+  edit        Edit a monitor
+  enable      Enable a monitor
+  list        List all monitors
+  run         Run a monitor
+  status      Get the status of a monitor
+
+Use "sts monitor [command] --help" for more information about a command.
+----
+
+== Debuggen von Monitoren
+
+Sie können verschiedene {stackstate-product-name} CLI-Befehle verwenden, um einen Monitor zu debuggen.
+
+=== Auflisten von Monitoren
+
+Der `sts monitor` Befehl kann alle Monitore auflisten:
+
+[,bash]
+----
+sts monitor list
+ID              | STATUS   | IDENTIFIER                                    | NAME                                          | FUNCTION ID     | TAGS
+68172545000282  | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx error rate (req/s)              | 208329585629344 | []
+                |          | 4xx-error-rate                                |                                               |                 |
+129505918833814 | DISABLED | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx response time (s) (95th percent | 208329585629344 | []
+                |          | 4xx-response-time-95th-percentile             | ile)                                          |                 |
+214616421668585 | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 5xx error rate (req/s)              | 208329585629344 | []
+                |          | 5xx-error-rate                                |                                               |                 |
+----
+
+=== Beschreiben von Monitoren
+
+Sie können die Definition eines vorhandenen Monitors mit dem `describe` Befehl abrufen:
+
+[,bash]
+----
+sts monitor describe --id 68172545000282
+_version: 1.0.93
+nodes:
+- _type: Monitor
+  arguments:
+    telemetryQuery: sum(rate(podparty_http_requests_count{code='4xx', direction='incoming', intra_pod!='true', local_pod_ns='${tags.namespace}', __multi__="${properties.local_pod_metric_selector__+}"}[${__rate_interval}]))
+    topologyQuery: (label = "stackpack:kubernetes" and type = "service")
+  description: Consumes health states from the AAD.
+  function: urn:stackpack:aad-v2:shared:monitor-function:aad
+  id: -6
+  identifier: urn:stackpack:aad-v2:shared:monitor:aad-http-4xx-error-rate
+  intervalSeconds: 60
+  name: 'AAD: HTTP 4xx error rate (req/s)'
+  remediationHint: It's complicated.
+  status: ENABLED
+  tags: []
+timestamp: 2026-01-14T11:30:40.470998684Z[Etc/UTC]
+----
+
+=== Ausführen von Monitoren
+
+Das Ausführen eines Monitors gibt Ihnen Einblick in die erzeugten Prüfzustände:
+
+[,bash]
+----
+sts monitor run --id <id>
+appliedLimit: 100
+checkStates:
+  CheckStates:
+    checkStates:
+      - checkStateId: 91116839897294-preprod%1dev.preprod.stackstate.io-stackstate%1nightly-suse%1observability%1clickhouse%1shard0
+        data: '{"displayTimeSeries":[{"name":"Metric and threshold","queries":[{"query":"sum by (cluster_name, namespace, statefulset) (increase(stackstate_clickhouse_backup_successful_uploads{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}[12h]))  or  sum by (cluster_name, namespace, statefulset) (stackstate_clickhouse_backup_number_backups_remote_expected{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}) * 0","alias":"Number of backups execution in 12h window","_type":"MonitorDisplayQuery"},{"query":"0.0","alias":"Threshold","_type":"MonitorDisplayQuery"}],"unit":"short","_type":"MonitorDisplayTimeSeries"}],"remediationHintTemplateData":{"componentUrnForUrl":"urn:kubernetes:%2Fpreprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset%2Fsuse-observability-clickhouse-shard0","labels":{"cluster_name":"preprod-dev.preprod.stackstate.io","namespace":"stackstate-nightly","statefulset":"suse-observability-clickhouse-shard0"},"threshold":0.0},"_type":"MonitorSyncedCheckStateData"}'
+        health: CLEAR
+        name: Backup performed in the last 12 hours
+        topologyElementIdentifier: urn:kubernetes:/preprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset/suse-observability-clickhouse-shard0
+...
+----
+
+
+=== Aktivieren/Deaktivieren von Monitoren
+
+Ein Monitor kann aktiviert oder deaktiviert werden. Aktiviert bedeutet, dass der Monitor Ergebnisse produziert, deaktiviert bedeutet, dass er alle Ausgaben unterdrückt. Verwenden Sie die folgenden Befehle, um zu aktivieren/deaktivieren:
+
+[,bash]
+----
+sts monitor disable --id 68172545000282
+✅ Monitor 68172545000282 has been disabled
+
+sts monitor enable --id 68172545000282
+✅ Monitor 68172545000282 has been enabled
+----
+
+
+=== Details zur Ausführung des Monitors
+
+Statistiken über die Ausführungen von Monitoren und die Latenz bei der Verarbeitung der resultierenden Prüfzustände können mit dem `status` Befehl abgerufen werden.
+
+[,bash]
+----
+sts monitor status --id 68172545000282
+
+Monitor Health State count: 650
+Monitor Status: ENABLED
+Monitor last run: 2026-01-14 12:16:25.979 +0000 UTC
+
+Monitor Stream errors:
+No data to display.
+
+Monitor health states mapped to topology:
+HEALTHSTATE | COUNT
+CLEAR       | 522
+DEVIATING   | 0
+CRITICAL    | 0
+UNKNOWN     | 128
+
+Monitor Stream metrics:
+METRIC                                     | VALUE BETWEEN NOW AND 300 SECONDS AGO | VALUE BETWEEN 300 AND 600 SECONDS AGO | VALUE BETWEEN 600 AND 900 SECONDS AGO
+latency (Seconds)                          | 42.345412844036574                    | 44.53073394495415                     | 46.725688073394615
+messages processed (per second)            | 10.833333333333                       | 10.833333333333                       | 10.833333333333
+monitor health states created (per second) |                                       |                                       |
+monitor health states updated (per second) | 0.0033333333333333                    | 0.0033333333333333                    | 0.02
+monitor health states deleted (per second) |                                       |                                       |
+
+Monitor health states with identifier matching exactly 1 topology element: 650
+----
+
+== Modifizieren von Monitoren
+
+[NOTE]
+====
+Die empfohlene Arbeitsweise besteht darin, Monitore (und alle anderen benutzerdefinierten Ressourcen, die in {stackstate-product-name} erstellt wurden) als YAML-Dateien in xref:/setup/custom-integrations/overview.adoc[einem StackPack] zu speichern. Von dort aus können Änderungen manuell angewendet oder vollständig automatisiert werden, indem die SUSE Observability CLI in einem CI/CD-System wie GitHub Actions oder GitLab-Pipelines verwendet wird.
+====
+
+=== Einen Monitor erstellen
+
+Sie können einen Monitor erstellen, indem Sie eine YAML-Datei anwenden, sagen wir `monitor.yaml`.  Es muss die folgende Gliederung haben:
+
+[source,bash]
+----
+nodes:
+- _type: "Monitor"
+  ...
+----
+
+[NOTE]
+====
+Beachten Sie den Einstiegspunkt `nodes:` in der ersten Zeile.  Das ist für Dateien in einem StackPack nicht erforderlich, muss aber vorhanden sein, wenn der `apply` Befehl verwendet wird.
+====
+
+Verwenden Sie die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI], um den Monitor zu erstellen oder zu aktualisieren:
+
+[,bash]
+----
+sts monitor apply -f monitor.yaml
+----
+
+Sie können xref:use/alerting/k8s-add-monitors-cli.adoc#_verifying_the_results_of_a_monitor[die Ergebnisse des Monitors überprüfen] auf der Übersichtsseite des Monitors.
+
+[CAUTION]
+====
+Der Bezeichner wird als der eindeutige Schlüssel eines Monitors verwendet. Ändern des Bezeichners erstellt einen neuen Monitor, anstatt den vorhandenen zu aktualisieren.
+====
+
+=== Einen Monitor löschen
+
+Um einen Monitor zu löschen, verwenden Sie
+
+[,bash]
+----
+sts monitor delete --id <id>
+----
+
+=== Einen Monitor live bearbeiten
+
+Um einen Monitor zu bearbeiten, bearbeiten Sie das Original des angewendeten Monitors und wenden Sie es erneut an. Oder es gibt einen `sts monitor edit` Befehl, um den konfigurierten Monitor direkt in der {stackstate-product-name} Instanz zu bearbeiten:
+
+[,bash]
+----
+sts monitor edit --id <id>
+----
+
+Die `<id>` in diesem Befehl ist nicht der Bezeichner, sondern die Zahl in der `Id` Spalte der `sts monitor list` Ausgabe.
+

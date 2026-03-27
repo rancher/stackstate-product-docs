@@ -1,0 +1,184 @@
+= 开始使用 AWS Lambda
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+为一个或多个 AWS Lambda 函数设置监控：
+
+* 被监控的 AWS Lambda 函数（使用 Open Telemetry 进行埋点）
+* Open Telemetry 收集器
+* SUSE Observability 或 SUSE Cloud Observability
+
+image::otel/open-telemetry-collector-lambda.png[AWS Lambda 使用 Open Telemetry 进行埋点，Open Telemetry 收集器在 Kubernetes 中运行]
+
+== Open Telemetry 收集器
+
+[NOTE]
+====
+对于生产环境，强烈建议安装收集器，因为它可以快速卸载数据，并且收集器可以处理额外的操作，如重试、批处理、加密或甚至敏感数据过滤。
+====
+
+
+安装 OTel（Open Telemetry）收集器，在本示例中，我们使用 Kubernetes 集群将其运行在接近 Lambda 函数的位置。也可以使用安装在虚拟机上的收集器进行类似的设置。这里使用的配置仅作为安全代理，快速卸载 Lambda 函数中的数据，并在受信任的网络基础设施内运行。
+
+=== 创建服务令牌
+
+有两种方法可以创建服务令牌：
+
+* **SUSE Observability UI** - 点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Open Telemetry`。 如果您之前没有这样做，请点击 `INSTALL` 按钮。点击 `CREATE NEW SERVICE TOKEN` 按钮并将值复制到剪贴板。
+* **SUSE Observability CLI** - 请参见 xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[管理服务令牌]
+
+服务令牌值必须在下面的说明中提到 `<SERVICE_TOKEN>` 的地方使用。
+
+=== 创建名称空间和服务令牌的密钥
+
+在 `open-telemetry` 名称空间中安装并使用服务令牌：
+
+[,bash]
+----
+kubectl create namespace open-telemetry
+kubectl create secret generic open-telemetry-collector \
+    --namespace open-telemetry \
+    --from-literal=API_KEY='<SERVICE_TOKEN>'
+----
+
+=== 配置并安装收集器
+
+我们使用 Open Telemetry 项目提供的 Helm 图表安装收集器。确保您已配置 Open Telemetry helm 图表库：
+
+[,bash]
+----
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+----
+
+为 Helm 图表创建一个 `otel-collector.yaml` 值文件。这是与 SUSE Observability 使用的一个良好起点，将 `<otlp-suse-observability-endpoint:port>` 替换为您的 OTLP 端点（请参见 xref:/setup/otel/otlp-apis.adoc[OTLP API] 获取您的端点），并将您的 Kubernetes 集群名称插入 `<your-cluster-name>` 位置。在使用入口配置时，还请确保在标记位置插入您自己的域名和相应的 TLS 证书密钥。
+
+.otel-collector.yaml
+[,yaml]
+----
+mode: deployment
+presets:
+  kubernetesAttributes:
+    enabled: true
+    # You can also configure the preset to add all the associated pod's labels and annotations to you telemetry.
+    # The label/annotation name will become the resource attribute's key.
+    extractAllPodLabels: true
+extraEnvsFrom:
+  - secretRef:
+      name: open-telemetry-collector
+image:
+  repository: "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  extensions:
+    # Use the API key from the env for authentication
+    bearertokenauth:
+      scheme: SUSEObservability
+      token: "${env:API_KEY}"
+  exporters:
+    otlp:
+      auth:
+        authenticator: bearertokenauth
+      # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+      endpoint: <otlp-suse-observability-endpoint:port>
+
+  service:
+    extensions: [health_check, bearertokenauth]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+      metrics:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+      logs:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: ingress-traefik-external
+    traefik.ingress.kubernetes.io/ingress.class: ingress-traefik-external
+    traefik.ingress.kubernetes.io/backend-protocol: GRPC
+    # "12.34.56.78/32" IP address of NatGateway in the VPC where the otel data is originating from
+    #  traefik.ingress.kubernetes.io/whitelist-source-range: "12.34.56.78/32"
+  hosts:
+    - host: "otlp-collector-proxy.<your-domain>"
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+          port: 4317
+  tls:
+    - secretName: <secret-for-tls-certificate>
+      hosts:
+        - "otlp-collector-proxy.<your-domain>"
+
+# Instead of ingress:
+
+# Alternative 1, load balancer service
+#service:
+#  type: LoadBalancer
+#  loadBalancerSourceRanges: 12.34.56.78/32 # The IP address of NatGateway in the VPC for the lambda functions
+
+# Alternative 2, node port service
+#service:
+#  type: NodePort
+#ports:
+#  otlp:
+#    nodePort: 30317
+----
+
+
+现在安装收集器，使用配置文件：
+
+[,bash]
+----
+helm upgrade --install opentelemetry-collector open-telemetry/opentelemetry-collector \
+  --values otel-collector.yaml \
+  --namespace open-telemetry
+----
+
+确保代理收集器可以被 Lambda 函数访问，方法是使入口公开可访问，或确保收集器 IP 与 Lambda 函数在同一 VPC 中。 建议使用源范围白名单来过滤来自不受信任和/或未知来源的数据（请参见 yaml 中的注释）。除了入口配置外，还可以通过以下方式将收集器暴露给 Lambda 函数：
+
+* 一个通过限制源范围来限制访问的 LoadBalancer 服务，参见 "替代方案 1"。
+* 一个用于收集器的 NodePort 服务，参见 "替代方案 2"。
+
+收集器提供了更多的配置接收器、处理器和导出器，更多详细信息请参见我们的 xref:/setup/otel/collector.adoc[收集器页面]。在生产环境中，通常会生成大量的跨度，您可能需要开始设置 xref:/setup/otel/sampling.adoc[采样]。
+
+== 为 Lambda 函数进行埋点
+
+Open Telemetry 支持使用 Lambda 层在多种语言中为 Lambda 函数进行埋点。这些 Lambda 层的配置应使用上一步中收集器的地址来传输数据。要为 Node.js Lambda 进行埋点，请参阅我们的 xref:/setup/otel/instrumentation/node.js/auto-instrumentation-of-lambdas.adoc[详细说明]。要为其他语言进行埋点，请使用与 Node.js 相同的配置，但使用其他 https://opentelemetry.io/docs/platforms/faas/lambda-auto-instrument/[Open Telemetry Lambda 层] 之一。
+
+== 查看结果
+
+前往 SUSE Observability，确保已安装 Open Telemetry Stackpack（通过主菜单 \-> Stackpacks）。
+
+过一段时间，如果您的 Lambda 函数正在接收一些流量，您应该能够在 OpenTelemetry \-> 服务和服务实例概览页面中找到这些函数。跟踪将在 xref:/use/traces/k8sTs-explore-traces.adoc[跟踪探索器] 和 xref:/use/views/k8s-traces-perspective.adoc[跟踪视角] 中显示，适用于服务和服务实例组件。跨度指标和特定语言的指标（如果可用）将在 xref:/use/views/k8s-metrics-perspective.adoc[指标视角] 中为组件提供。
+
+== 后续步骤
+
+ifdef::ss-ff-stackpacks2_enabled[]
+您可以通过遵循 xref:/setup/custom-integrations/metric-bindings/index.adoc[我们的指南] 为您的应用程序的组件（例如服务或服务实例）添加新的图表。还可以使用指标创建 xref:/use/alerting/k8s-monitors.adoc[新的监控器]，并设置 xref:/use/alerting/notifications/configure.adoc[通知]，以便在您的应用程序不可用或出现性能问题时收到通知。
+endif::[]
+
+ifndef::ss-ff-stackpacks2_enabled[]
+您可以通过遵循 xref:/use/metrics/k8s-add-charts.adoc[我们的指南] 为您的应用程序的组件（例如服务或服务实例）添加新的图表。还可以使用指标创建 xref:/use/alerting/k8s-monitors.adoc[新的监控器]，并设置 xref:/use/alerting/notifications/configure.adoc[通知]，以便在您的应用程序不可用或出现性能问题时收到通知。
+endif::[]
+
+== 详细信息：
+
+* xref:/use/security/k8s-service-tokens.adoc[服务令牌]
+* xref:/setup/otel/otlp-apis.adoc[Open Telemetry API]
+* xref:/setup/otel/collector.adoc[自定义 Open Telemetry Collector 配置]
+* xref:/setup/otel/instrumentation/README.adoc[Open Telemetry SDKs]

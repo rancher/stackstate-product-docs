@@ -1,0 +1,85 @@
+= SUSE Observability como origen de datos de Grafana
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: Utiliza SUSE Observability como origen de datos de Grafana
+
+SUSE Observability se puede utilizar como origen de datos para Grafana. Esto permitirá utilizar Grafana como herramienta de visualización para tus datos de SUSE Observability. Esto es útil si ya tienes algunos paneles que deseas seguir utilizando. Debido a que SUSE Observability expone una API compatible con Prometheus, puedes utilizar el https://grafana.com/docs/grafana/latest/datasources/prometheus[origen de datos de Prometheus] en Grafana para conectarte a SUSE Observability. Esto también hace que SUSE Observability sea utilizable con otras soluciones compatibles con Prometheus.
+
+== Requisitos previos
+
+Antes de que puedas añadir SUSE Observability como origen de datos en Grafana, necesitas configurar un ServiceToken para autenticarte con SUSE Observability. SUSE Observability recomienda crear un rol dedicado con permisos para este propósito.
+
+Puedes hacer esto a través de la CLI de SUSE Observability:
+
+[,sh]
+----
+> sts rbac create-subject --subject grafana
+✅ Created subject 'grafana'
+> sts rbac grant --subject grafana --permission get-metrics
+✅ Granted permission 'get-metrics' on 'system' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | system
+----
+
+Esto creará un nuevo rol en SUSE Observability llamado `grafana` y le otorgará el permiso `get-metrics`. Luego puedes crear un token de servicio para este rol:
+
+[,sh]
+----
+> sts service-token create --name grafana --roles grafana
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+Aprende más sobre xref:/setup/security/authentication/service_tokens.adoc[la gestión de ServiceTokens].
+
+El ServiceToken devuelto se puede utilizar para autenticarte con SUSE Observability. Ahora puedes añadir SUSE Observability como origen de datos en Grafana.
+
+== Crea un nuevo origen de datos de SUSE Observability en Grafana
+
+Con el ServiceToken creado, ahora puedes añadir SUSE Observability como origen de datos en Grafana. Para hacer esto, ve a la interfaz de usuario de Grafana y navega a la página de configuración de orígenes de datos. Haz clic en el botón `Add data source` y selecciona `Prometheus` de la lista de orígenes de datos.
+
+image::k8s/k8s-grafana-new-datasource.png[nuevo origen de datos de Grafana]
+
+En la página de configuración del origen de datos, introduce los siguientes detalles de configuración:
+
+* *Nombre*: SUSE Observability
+* *URL*: `https://<tenant-name>.app.stackstate.io/prometheus`
+* *Encabezados HTTP personalizados*
+ ** *Encabezado*: `X-API-Key`
+ ** *Valor*: `<service-token>`
+
+image::k8s/k8s-grafana-datasource.png[Configuración del origen de datos de Grafana]
+
+Haz clic en el botón `Save & Test` para guardar el origen de datos. Si la configuración es correcta, deberías ver un mensaje `Data source is working` en verde.
+
+== Restringir el acceso a las métricas
+
+Cuando utilices xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC], es posible conceder acceso a las métricas a nivel de clúster o de espacio de nombres.
+
+Para conceder acceso a todas las métricas de un clúster:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:YOUR_CLUSTER:__any__
+✅ Granted permission 'get-metrics' on 'k8s:YOUR_CLUSTER:__any__' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----
+
+Para conceder acceso a todas las métricas de un espacio de nombres:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+✅ Granted permission 'get-metrics' on 'k8s:OTHER_CLUSTER:SINGLE_NAMESPACE' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+----
+
+Inspeccionar todos los permisos que se han concedido al sujeto:
+[,sh]
+----
+> sts rbac describe-permissions --subject grafana
+Got subject from the following subject sources: Observability
+
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:YOUR_NAMESPACE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----

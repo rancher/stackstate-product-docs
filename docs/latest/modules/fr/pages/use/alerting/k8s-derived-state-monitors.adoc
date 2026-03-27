@@ -1,0 +1,41 @@
+= Moniteurs d'état dérivés
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+Dans les scénarios d'Observabilité où les composants logiques (métiers) manquent de moniteurs directs mais sont affectés par des problèmes dans leurs dépendances techniques, vous pouvez utiliser la fonction de moniteur d'état dérivé pour déduire un état à partir des composants techniques connectés pour le composant logique.
+Ce moniteur parcourt les dépendances des composants et sélectionne l'état de santé le plus critique basé sur des observations directes (par exemple, à partir de métriques), en ignorant tout état déjà dérivé. Il appliquera l'état dérivé à tous les composants sélectionnés via le paramètre `componentTypes`.
+Lors du parcours, seuls les composants avec des états de santé observés (non dérivés) sont pris en compte pour la dérivation de la santé. Les composants avec des états dérivés sont ignorés dans l'évaluation mais sont toujours parcourus pour atteindre des dépendances plus profondes--par exemple, des composants logiques dépendant d'autres composants logiques.
+
+== Exemple de moniteur d'état de santé dérivé
+
+Un moniteur implémenté en utilisant la fonction `derived-state-monitor` ressemble à :
+
+----
+  - _type: "Monitor"
+    name: "Aggregated health state of a Deployment, StatefulSet, ReplicaSet and DaemonSet"
+    tags:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - derived
+      - propagated
+    identifier: "urn:custom:monitor:..."
+    status: "DISABLED"
+    description: "Description"
+    function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+    arguments:
+      componentTypes: "deployment, replicaset, statefulset, daemonset"
+    intervalSeconds: 30
+    remediationHint: "Investigate component [{{ causeComponentName }}](/#/components/{{ causeComponentUrnForUrl }}) as is causing the workload to be unhealthy."
+----
+
+* La fonction a un seul argument `componentTypes` où vous pouvez exprimer les différents types de composants sous forme d'une seule chaîne de valeurs séparées par `,`.
+* La fonction offre trois valeurs à utiliser dans le guide de remédiation.
+ ** `componentName` étant le nom du composant logique.
+ ** `causeComponentName` étant le nom du composant à partir duquel l'état est propagé et son `causeComponentUrnForUrl` pour pouvoir créer un lien.
+
+Le moniteur peut être implémenté en utilisant le guide à xref:/use/alerting/k8s-add-monitors-cli.adoc[Ajouter un moniteur de seuil aux composants en utilisant la CLI]

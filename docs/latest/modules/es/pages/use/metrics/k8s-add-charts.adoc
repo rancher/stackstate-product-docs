@@ -1,0 +1,325 @@
+= Añadir gráficos personalizados a los componentes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+SUSE Observability ya proporciona muchos gráficos métricos por defecto en la mayoría de los tipos de componentes que representan recursos de Kubernetes. Se pueden añadir gráficos métricos adicionales a cualquier conjunto de componentes siempre que sea necesario. Al añadir métricas a los componentes hay 2 opciones:
+
+. Las métricas ya son recopiladas por SUSE Observability pero no se visualizan en un componente por defecto.
+. Las métricas aún no son recopiladas por SUSE Observability en absoluto y, por lo tanto, no están disponibles aún.
+
+Para la opción 1, los pasos a continuación te indicarán cómo crear un enlace de métrica que configurará SUSE Observability para añadir una métrica específica a un conjunto específico de componentes.
+
+En el caso de la opción 2, primero asegúrate de que las métricas están disponibles en SUSE Observability, enviándolas a SUSE Observability utilizando el xref:/use/metrics/k8s-prometheus-remote-write.adoc[protocolo de escritura remota de Prometheus]. Solo después de eso, continúa añadiendo gráficos para las métricas a los componentes.
+
+== Pasos
+
+Pasos para crear un enlace de métrica:
+
+. <<_write_the_outline_of_the_metric_binding,Escribe el esquema del enlace de métrica>>
+. <<_write_the_topology_query,Escribe la consulta de topología (STQL) para seleccionar los componentes>>
+. <<_write_the_promql_query,Escribe la consulta de PromQL para la métrica deseada>>
+. <<_bind_the_correct_time_series_to_each_component,Vincula la serie temporal correcta a cada componente>>
+. <<_create_or_update_the_metric_binding_in_suse_observability,Crea o actualiza el enlace de métrica en SUSE Observability>>
+
+Como ejemplo, los pasos añadirán un enlace de métrica para el `Replica counts` de las ampliaciones de Kubernetes. Esto es solo un ejemplo, este enlace de métrica ya existe en SUSE Observability por defecto.
+
+== Escribe el esquema del enlace de métrica
+
+Crea un nuevo archivo YAML llamado `metric-bindings.yaml` y añade esta plantilla YAML para crear tu propio enlace de métrica. Ábrelo en tu editor de código favorito para modificarlo a lo largo de esta guía. Al final, se utilizará la CLI de SUSE Observability para crear y actualizar los enlaces de métrica en SUSE Observability.
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit:
+  name:
+  description:
+  priority:
+  identifier: urn:custom:metric-binding:...
+  queries:
+    - expression:
+      alias:
+  scope:
+  layout:
+    metricPerspective:
+      tab:
+      section:
+      weight:
+    componentSummary:
+      weight:
+----
+
+Los campos en esta plantilla son:
+
+* `_type`: SUSE Observability necesita saber que esto es un enlace métrico, por lo que el valor siempre debe ser `MetricBinding`.
+* `chartType`: SUSE Observability soportará diferentes tipos de gráficos (`line`, `bar`, etc.), actualmente solo se soporta `line`.
+* `enabled`: Establecer en `false` para mantener el enlace métrico pero no mostrarlo a los usuarios.
+* `tags`: Se utilizará para organizar métricas en la interfaz de usuario, se puede dejar vacío usando `{}`.
+* `unit`: La unidad de los valores en la serie temporal devuelta por la consulta o consultas, utilizada para renderizar el eje Y del gráfico. Consulta la referencia de xref:/develop/reference/k8sTs-chart-units.adoc[unidades soportadas] para todas las unidades.
+* `name`: El nombre del enlace métrico.
+* `description`: Descripción opcional, mostrada al pasar el ratón sobre el nombre.
+* `priority`: [Obsoleto] Uno de `HIGH`, `MEDIUM` o `LOW`. Orden principal de clasificación para métricas en un componente (en el orden en que se mencionan aquí), el orden secundario de clasificación es el `name`.
+* `identifier`: Un URN (identificador de recurso universal), utilizado como el identificador único del enlace métrico. Debe comenzar con `urn:custom:metric-binding:`, el resto es de formato libre siempre que sea único entre todos los enlaces métricos.
+* `queries`: Una lista de consultas para mostrar en el gráfico para el enlace métrico (ver también las secciones siguientes).
+* `scope`: El ámbito de topología del enlace métrico, una consulta de topología que selecciona los componentes en los que se mostrará este enlace métrico.
+* `layout`: Cómo agrupar gráficos en diferentes vistas de perspectiva, por ejemplo, en xref:/use/views/k8s-metrics-perspective.adoc[perspectiva de métricas].
+
+Rellena primero todas las partes ya conocidas (con los recuentos de réplicas de ampliación como ejemplo).
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression:
+    alias:
+scope:
+----
+
+La sección de consultas y ámbito se completará en los siguientes pasos. Ten en cuenta que la unidad utilizada es `short`, que simplemente renderizará un valor numérico. En caso de que aún no estés seguro sobre la unidad de la métrica, puedes dejarlo abierto y decidir la unidad correcta al escribir la consulta PromQL.
+
+== Escribe la consulta de topología
+
+Utiliza la vista Explorar de la xref:/use/views/k8s-topology-perspective.adoc[perspectiva de Topología], http://your-instance/#/views/explore, y selecciona los componentes que necesitan mostrar la nueva métrica. Se pueden utilizar tanto las vistas básica como avanzada para hacer la selección. Los campos más comunes para seleccionar la topología en los enlaces métricos son `type` para el tipo de componente y `label` para seleccionar todas las etiquetas. Por ejemplo, para las ampliaciones:
+
+----
+type = "deployment" and label = "stackpack:kubernetes"
+----
+
+El filtro de tipo selecciona todas las ampliaciones, mientras que el filtro de etiquetas selecciona solo los componentes creados por el stackpack de Kubernetes (el nombre de la etiqueta es `stackpack` y el valor de la etiqueta es `kubernetes`). Este último también se puede omitir para obtener el mismo resultado.
+
+Cambia al modo avanzado para copiar la consulta de topología resultante y ponerla en el campo `scope` del enlace métrico.
+
+[NOTE]
+====
+Los enlaces métricos solo admiten los filtros de consulta, las funciones de consulta como `withNeighborsOf` no son compatibles y no se pueden utilizar.
+====
+
+
+== Escribe la consulta PromQL
+
+Ve al xref:/use/metrics/k8sTs-explore-metrics.adoc[explorador de métricas] de tu instancia de SUSE Observability, http://your-instance/#/metrics, y utilízalo para consultar la métrica de interés. El explorador tiene autocompletado para métricas, etiquetas, valores de etiquetas, pero también funciones PromQL y operadores para ayudarte. Comienza con un rango de tiempo corto de, por ejemplo, una hora para obtener los mejores resultados.
+
+Para el número total de réplicas utiliza la métrica `kubernetes_state_deployment_replicas`. Para hacer que los gráficos mostrados para esta métrica sean representativos de los datos de series temporales, extiende la consulta para hacer una agregación utilizando el parámetro `${__interval}`:
+
+----
+max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+----
+
+En este caso específico, utiliza `max_over_time` para asegurarte de que el gráfico siempre muestre el mayor número de réplicas en cualquier momento dado. Para rangos de tiempo más largos, esto significa que una pequeña caída en las réplicas no se mostrará; para enfatizar el número más bajo de réplicas, utiliza `min_over_time` en su lugar.
+
+Copia la consulta en la propiedad `expression` de la primera entrada en el campo `queries` del enlace métrico. Utiliza `Total replicas` como un alias. Este es el nombre que aparecerá en la leyenda del gráfico.
+
+[NOTE]
+====
+En SUSE Observability, el tamaño del gráfico de métricas determina automáticamente la granularidad de la métrica mostrada en el gráfico. Las consultas de PromQL se pueden ajustar para hacer un uso óptimo de este comportamiento y obtener un gráfico representativo de la métrica. xref:/use/metrics/k8s-writing-promql-for-charts.adoc[Escribir PromQL para gráficos] explica esto en detalle.
+====
+
+
+== Vincula la serie temporal correcta a cada componente.
+
+El enlace de métrica con todos los campos completados:
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression: max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+    alias: Total replicas
+scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Crearlo en SUSE Observability y ver el gráfico de "Conteo de réplicas" en un componente de ampliación da un resultado inesperado. El gráfico muestra los conteos de réplicas para todas las ampliaciones. Lógicamente, uno esperaría solo 1 serie temporal: el conteo de réplicas para esta ampliación específica.
+
+image::k8s/k8s-replica-counts-without-binding.png[El gráfico incorrecto para una sola ampliación, it shows the replica count for all deployments]
+
+Para solucionar esto, haz que la consulta de PromQL sea específica para un componente utilizando información del componente. Filtra en suficientes etiquetas de métricas para seleccionar solo la serie temporal específica para el componente. Esta es la "vinculación" de la serie temporal correcta al componente. Para cualquiera con experiencia en la creación de paneles de Grafana, esto es similar a un panel con parámetros que se utilizan en las consultas del panel. Cambiemos la consulta en el enlace de métrica a esto:
+
+----
+max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+----
+
+image::k8s/k8s-replica-counts-with-binding.png[Después de añadir los filtros parametrizados, el gráfico resultante se ve como se esperaba, only 1 time series for this component]
+
+La consulta de PromQL ahora filtra en 3 etiquetas, `cluster_name`, `namespace` y `deployment`. En lugar de especificar un valor real para estas etiquetas, se utiliza una referencia variable a los campos del componente. En este caso, se utilizan las etiquetas `cluster-name` y `namespace`, referenciadas usando `${tags.cluster-name}` y `${tags.namespace}`. Además, el nombre del componente se referencia con `${name}`.
+
+Las referencias de variable soportadas son:
+
+* Cualquier etiqueta de componente, usando `${tags.<label-name>}`
+* El nombre del componente, usando `${name}`
+
+image::k8s/k8s-carts-highlights.png[Página de Destacados del Componente que muestra las etiquetas y el nombre del componente (ambos destacados en rojo)]
+
+[NOTE]
+====
+El nombre del clúster, el espacio de nombres y una combinación del tipo y nombre del componente suelen ser suficientes para seleccionar las métricas de un componente específico de Kubernetes. Estas etiquetas, o etiquetas similares, suelen estar disponibles en la mayoría de métricas y componentes.
+====
+
+
+== Crea o actualiza el enlace de métrica en SUSE Observability
+
+Usa la SUSE Observability CLI para crear el enlace de métrica en SUSE Observability. Asegúrate de que el `metric-bindings.yaml` esté guardado y se vea así:
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Usa la xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] para crear el enlace de métricas:
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+Verifica los resultados en SUSE Observability abriendo la perspectiva de métricas para una ampliación. Si no estás satisfecho con el resultado, simplemente cambia el enlace de métricas en el archivo YAML y ejecuta el comando nuevamente para actualizarlo. La lista de nodos admite agregar muchos enlaces de métricas. Simplemente añade otra entrada de enlace de métricas al array YAML usando los mismos pasos que antes.
+
+[CAUTION]
+====
+El identificador se utiliza como la clave única de un enlace de métricas. Cambiar el identificador creará un nuevo enlace de métricas en lugar de actualizar el existente.
+====
+
+
+El comando `sts settings` tiene más opciones; por ejemplo, puede listar todos los enlaces de métrica:
+
+[,bash]
+----
+sts settings list --type MetricBinding
+----
+
+Finalmente, para eliminar un enlace de métricas, utiliza
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+El `<id>` en este comando no es el identificador, sino el número en la columna `Id` de la salida `sts settings list`.
+
+[NOTE]
+====
+La forma recomendada de trabajar es almacenar los enlaces de métrica (y cualquier otro recurso personalizado creado en SUSE Observability) como archivos YAML en un repositorio de Git. Desde allí, los cambios pueden aplicarse manualmente o puede ser totalmente automatizado utilizando la CLI de SUSE Observability en un sistema CI/CD como GitHub actions o GitLab pipelines.
+====
+
+
+== Otras opciones
+
+=== Más de 1 series temporales en un gráfico
+
+[NOTE]
+====
+Solo hay 1 unidad para un enlace de métricas (se representa en el eje y del gráfico). Como resultado, solo deberías combinar consultas que produzcan series temporales con la misma unidad en 1 enlace de métricas. A veces puede ser posible convertir la unidad. Por ejemplo, el uso de CPU puede ser reportado en milicores o núcleos; los milicores se pueden convertir a núcleos multiplicando por 1000 así: `(<original-query>) * 1000`.
+====
+
+
+Hay 2 formas de obtener más de 1 series temporales en un único enlace de métricas y, por lo tanto, en un único gráfico:
+
+. Escribe una consulta PromQL que devuelva múltiples series temporales para un único componente
+. Añade más consultas PromQL al enlace de métricas
+
+Para la primera opción se da un ejemplo en la xref:/use/metrics/k8s-add-charts.adoc#_using_metric_labels_in_aliases[próxima sección]. La segunda opción puede ser útil para comparar métricas relacionadas. Algunos casos de uso típicos:
+
+* Comparando réplicas totales frente a las deseadas y disponibles
+* Uso de recursos: límites, solicitudes y uso en un solo gráfico
+
+Para añadir más consultas a un enlace de métricas simplemente repite xref:/use/metrics/k8s-add-charts.adoc#_steps[pasos] 3. y 4. y añade la consulta como una entrada adicional en la lista de consultas. Para los recuentos de réplicas de ampliación, hay varias métricas relacionadas que se pueden incluir en el mismo gráfico:
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+    - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Available - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: max_over_time(kubernetes_state_deployment_replicas_unavailable{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Unavailable - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Desired - ${cluster_name} - ${namespace} - ${deployment}
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+image::k8s/k8s-replica-counts-multiple-timeseries.png[Enlace de métricas con múltiples métricas]
+
+=== Usando etiquetas de métrica en alias
+
+Cuando una única consulta devuelve múltiples series temporales por componente, esto se mostrará como múltiples líneas en el gráfico. Pero en la leyenda, todas usarán el mismo alias. Para poder ver la diferencia entre las diferentes series temporales, el alias puede incluir referencias a las etiquetas de métrica usando la sintaxis `${label}`. Por ejemplo, aquí hay un enlace de métricas para la métrica "Reinicios de contenedor" en un pod, ten en cuenta que un pod puede tener múltiples contenedores:
+
+----
+type: MetricBinding
+chartType: line
+enabled: true
+id: -1
+identifier: urn:custom:metric-binding:my-pod-restart-count
+name: Container restarts
+priority: MEDIUM
+queries:
+- alias: Restarts - ${container}
+  expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"})
+scope: (label = "stackpack:kubernetes" and type = "pod")
+unit: short
+----
+
+Ten en cuenta que el `alias` hace referencia a la etiqueta `container` de la métrica. Asegúrate de que la etiqueta esté presente en el resultado de la consulta; cuando falta la etiqueta, el `${container}` se renderizará como texto literal para ayudar en la resolución de problemas.
+
+=== Distribuciones
+
+Cada componente puede estar asociado con varias tecnologías o protocolos como k8s, redes, entornos de tiempo de ejecución (por ejemplo, JVM), protocolos (HTTP, AMQP), etc.
+En consecuencia, se puede mostrar una multitud de métricas diferentes para cada componente. Para una lectura más fácil, SUSE Observability puede organizar estos gráficos en pestañas y secciones.
+Para mostrar un gráfico (`MetricBinding`) dentro de una pestaña o sección específica, necesitas configurar la propiedad de diseño.
+Cualquier MetricsBinding sin un diseño especificado se mostrará en una pestaña y sección llamada `Other`.
+
+Aquí hay un ejemplo de configuración:
+
+----
+layout:
+  metricPerspective:
+    tab: Kubernetes Pod
+    section: Performance
+    weight: 2
+  componentSummary:
+    weight: 2
+----
+
+Campos:
+
+* `layout.metricPerspective` - Define las métricas a mostrar en `Metrics Perspective`. Las métricas se agrupan en pestañas y luego en secciones.
+* `layout.metricPerspective.tab` - Nombre de la pestaña. Las pestañas se ordenan alfabéticamente.
+* `layout.metricPerspective.section` - Nombre de la sección. Las secciones se ordenan alfabéticamente.
+* `layout.metricPerspective.weight` - Las métricas dentro de una sección se ordenan principalmente por peso (ascendente) y secundariamente por nombre (alfabético).
+* `layout.componentSummary` - Especifica las métricas a mostrar en la barra lateral `Components details` al seleccionar el componente. Los gráficos aparecen solo cuando esta propiedad está definida.
+* `layout.componentSummary.weight` - Esto representa el peso del gráfico. Los gráficos se ordenan en orden ascendente por peso y luego se muestran los primeros 3 gráficos.

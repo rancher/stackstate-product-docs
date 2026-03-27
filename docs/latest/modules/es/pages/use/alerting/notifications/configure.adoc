@@ -1,0 +1,67 @@
+= Configurar notificaciones
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Para configurar una nueva notificación, estos son los pasos:
+
+* <<_create_a_new_notification,Crear una nueva notificación>>
+* <<_configure_when_to_notify,Configurar cuándo notificar>>
+* <<_where_to_send_notifications,Definir dónde deben enviarse las notificaciones>>
+
+== Crear una nueva notificación
+
+Abre la página de notificaciones a través del enlace en la mitad inferior del menú en la interfaz de usuario de SUSE Observability. Esto abre una visión general de todas las notificaciones que ya están configuradas, incluyendo su estado.
+
+Puedes comprobar si la notificación deseada ya existe. Si no, crea una nueva con el botón "Añadir nueva notificación".
+
+== Configurar cuándo notificar
+
+image::k8s/notifications-add-new-notification.png[Añadiendo una nueva notificación]
+
+Configura la notificación:
+
+. Nombre - Elige un nombre que sea corto pero que aún describa cuál es la intención de esta notificación. Es para tu propia referencia en la visión general de notificaciones.
+. Estado - La notificación puede ser desactivada temporalmente en caso de que aún no sea necesaria, resulte ser demasiado ruidosa, etc.
+. Notificar cuándo - Un estado crítico de salud siempre activa una notificación, pero opcionalmente también se pueden incluir estados desviados.
+. Alcance - En el ejemplo, los estados de salud para todos los monitores en pods en el espacio de nombres predeterminado de Kubernetes serán enviados. Utiliza los filtros disponibles en la sección <<_scope,alcance>> para cambiar esta selección.
+
+=== Ámbito
+
+Hay 4 filtros de alcance posibles. Por defecto, se enviará una notificación por cada estado de salud crítico (y opcionalmente desviado). Los filtros se utilizan para limitar este alcance. Un estado de salud solo resultará en una notificación cuando coincida con todos los filtros.
+
+* Monitores: Selecciona uno o más monitores específicos. Las notificaciones solo se enviarán para los estados de salud de los monitores seleccionados.
+* Etiquetas de monitor: Selecciona una o más etiquetas de monitor. Las notificaciones solo se enviarán para los estados de salud de los monitores que tengan al menos una de las etiquetas seleccionadas.
+* Tipos de componentes: Selecciona uno o más tipos de componentes. Las notificaciones solo se enviarán para los estados de salud de los componentes de los tipos seleccionados.
+* Etiquetas de componentes: Selecciona una o más etiquetas de componentes. Las notificaciones solo se enviarán para los estados de salud de los componentes que tengan al menos un valor coincidente para cada clave distinta en las etiquetas seleccionadas.
+
+.Ejemplo de etiquetas de componentes
+[%collapsible]
+====
+Supón que las etiquetas seleccionadas son [ `k8s-scope:prod-us/checkout`, `k8s-scope:prod-emea/checkout`, `team:blue` ].  Las claves en este caso son `k8s-scope` y `team`.
+
+Entonces, estos componentes coincidirán:
+
+* un componente con etiquetas [ `k8s-scope:prod-emea/checkout`, `team:blue` ]
+* un componente con etiquetas [ `k8s-scope:prod-us/checkout`, `team:blue` ]
+
+Mientras que estos componentes no coincidirán:
+
+* un componente con etiquetas [ `k8s-scope:prod-emea/checkout` ]
+* un componente con etiquetas [ `k8s-scope:prod-us/checkout`, `team:green` ]
+* un componente con etiquetas [ `k8s-scope:prod-emea/carts`, `team:blue` ]
+====
+
+== ¿Dónde enviar notificaciones?
+
+SUSE Observability puede enviar notificaciones a diferentes sistemas externos a través de canales. Los canales soportados son:
+
+* xref:/use/alerting/notifications/channels/slack.adoc[Slack] - Enviar notificaciones a Slack
+* xref:/use/alerting/notifications/channels/teams.adoc[Teams] - Enviar notificaciones a Microsoft Teams
+* xref:/use/alerting/notifications/channels/webhook.adoc[Webhook] - Enviar notificaciones a un webhook, el endpoint del webhook puede traducir la carga útil de SUSE Observability a cualquier API personalizada de terceros que se necesite
+* xref:/use/alerting/notifications/channels/opsgenie.adoc[Opsgenie] - Enviar notificaciones a OpsGenie
+
+En general, SUSE Observability envía dos tipos de mensajes para notificaciones:
+
+. Un mensaje `open` cuando un estado de salud pasa a Crítico o Desviándose. Este mensaje puede repetirse cuando hay cambios en el estado de salud
+. Un mensaje `close` cuando el estado de salud ya no es Crítico o Desviándose o cuando por otras razones (el componente desapareció, el monitor fue eliminado, etc.) la notificación ya no está activa.

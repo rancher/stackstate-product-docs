@@ -1,0 +1,143 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Resolución de problemas de mapeos de OpenTelemetry
+:revdate: 26/11/2025
+:page-revdate: {revdate}
+:description:  Resolución de problemas de mapeos de OpenTelemetry
+
+== Descripción general
+
+El xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] se puede utilizar para solucionar problemas de sincronización de topologías de OpenTelemetry y corregir problemas que puedan impedir que los datos de topología se ingesten y se muestren correctamente en {stackstate-product-name}. Esta página describe los pasos generales de resolución de problemas a seguir al depurar un problema de este tipo.
+
+== Pasos generales de resolución de problemas
+
+. xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_list_open_telemetry_component_mappings[Verifica que el mapeo de OpenTelemetry exista].
+** Si no hay mapeos presentes, verifica la instalación del stackpack de OpenTelemetry.
+. Cuando falten componentes o relaciones de un cierto tipo, xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_show_an_open_telemetry_component_or_relation_mappings_status[obtén el estado del mapeo].
+** Revisa las métricas de latencia para determinar si los datos están fluyendo o si hay una falta de comunicación entre el recolector de OpenTelemetry y la plataforma.
+** Corrige los errores de mapeo reportados, ya que están impidiendo que algunos elementos de la topología se sincronicen.
+** Una posible razón por la que los mapeos no se procesan 'silenciosamente' como se esperaba podría ser la aplicación de condiciones/filtros en el campo de entrada. Por ejemplo, si una condición es falsa, no hay error, pero el mapeo es "omitido".
+
+== Comandos útiles de CLI
+
+=== Listar mapeos de componentes de OpenTelemetry
+
+Devuelve una lista de todos los mapeos actuales de OpenTelemetry.
+
+[,sh]
+----
+$ sts otel-component-mapping list
+NAME                   | IDENTIFIER
+Database               | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:database
+Function Component     | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:function
+Host Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:host
+Kubernetes Namespace   | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:namespace
+Kubernetes Pod         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:pod
+OTel Service Component | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service-instance
+OTel Service Instance  | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+Task Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:task 
+----
+
+=== Listar mapeos de relaciones de OpenTelemetry
+
+Devuelve una lista de todos los mapeos actuales de OpenTelemetry.
+
+[,sh]
+----
+$ sts otel-relation-mapping list
+NAME                                               | IDENTIFIER
+Database Relation                                  | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+Executes Relation (Function)                       | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-function
+Executes Relation (Host)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-host
+Executes Relation (Task)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-task
+Kubernetes to OTEL Relation                        | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:kubernetes-to-otel
+OTel Async Relation (Consumer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-consumer-peer
+OTel Async Relation (Producer -> Consumer)         | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-consumer
+OTel Async Relation (Producer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-peer
+OTel Synchronous Relation                          | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:synchronous
+OTel service instance provided-by service relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:provided-by
+----
+
+
+=== Mostrar el estado de un mapeo de componente o relación de OpenTelemetry
+
+El comando de estado del mapeo de componente de OpenTelemetry devuelve la latencia agregada, las métricas de rendimiento y el número de elementos de topología creados. Esto es útil al depurar por qué una parte particular de la topología tarda mucho en sincronizarse. La salida incluye una sección `Mapping errors` que señalará cualquier problema que ocurra al aplicar las reglas de mapeo a los datos de OpenTelemetry.
+
+[,sh]
+----
+$ sts otel-component-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+
+
+Otel Component Mapping:
+NAME                  | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+OTel Service Instance | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service | 9          | 0
+
+
+Otel Component Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 44.45    | 44.45         | 41.19
+----
+
+De manera análoga, hay un estado de mapeo de relación de OpenTelemetry.
+[,sh]
+----
+$ sts otel-relation-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+
+
+Otel Relation Mapping:
+NAME              | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+Database Relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database | 0          | 2
+
+
+Otel Relation Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 43.404   | 43.404        | 39.978
+
+
+Otel Relation Mapping Errors:
+No otel relation mapping errors found.
+----
+
+=== Obtén el componente completo de OpenTelemetry o el mapeo.
+
+Para ver rápidamente la definición completa del mapeo de un componente o mapeo de relación, utiliza el comando `get`:
+
+[,sh]
+----
+$ sts otel-component-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Output omitted for brevity
+----
+
+O para mapeos de relación:
+
+[,sh]
+----
+$ sts otel-relation-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Output omitted for brevity
+----
+
+=== Edita un componente de OpenTelemetry o un mapeo de relación.
+
+Si notas problemas en la definición del mapeo, edítala directamente utilizando el comando `edit`. Esto abrirá el mapeo en tu editor de texto predeterminado.
+
+[,sh]
+----
+$ sts otel-component-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Opens the mapping in your default text editor
+----
+
+O para mapeos de relación:
+
+[,sh]
+----
+$ sts otel-relation-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Opens the mapping in your default text editor
+----
+
+Si el mapeo fue modificado, los cambios se aplicarán cuando guardes y salgas del editor.
+
+[NOTE]
+====
+Recuerda actualizar las definiciones de mapeo en tus archivos fuente de StackPack para mantenerlas sincronizadas con cualquier cambio realizado a través de la CLI.
+====
+
+endif::ss-ff-stackpacks2_enabled[]

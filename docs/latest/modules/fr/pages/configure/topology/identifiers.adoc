@@ -1,0 +1,136 @@
+= Identificateurs 
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+Les identifiants sont utilisés dans SUSE Observability pour identifier des objets, tels que des éléments de topologie (composants et relations) et des fonctions. Cette page décrit les différents types d'identifiants utilisés pour les éléments de topologie et comment les identifiants de portée globale sont structurés dans SUSE Observability.
+
+== Identifiants de topologie
+
+Les éléments de topologie utilisent deux types d'identifiants dans SUSE Observability :
+
+* *Identifiants de portée d'intégration* - utilisés pour identifier les composants et les relations au sein d'une intégration. Chaque composant ou relation n'a qu'un seul identifiant de portée d'intégration. L'identifiant est arbitraire, mais doit être cohérent dans le cadre de l'intégration elle-même.
+* *Identifiants de portée globale* - utilisés pour fusionner des composants entre des intégrations, par exemple ServiceNow et l'Agent SUSE Observability. Chaque composant peut avoir plusieurs identifiants de portée globale, tandis que les relations n'ont pas d'identifiants globaux. Ils sont attribués par SUSE Observability et formatés conformément à la xref:/configure/topology/identifiers.adoc#_global_scope_identifiers[convention d'identifiant global SUSE Observability].
+
+L'exemple de code ci-dessous montre un composant avec les deux types d'identifiants.
+
+* Identifiant de portée d'intégration - `this-host-unique-identifier`
+* Identifiant de portée globale - `urn:host:/this-host-fqdn`
+
+
+[,text]
+----
+self.component("this-host-unique-identifier", "Host", {
+    "name": "this-host",
+    "domain": "Webshop",
+    "layer": "Machines",
+    "identifiers": ["urn:host:/this-host-fqdn"],
+    "labels": ["host:this-host", "region:eu-west-1"],
+    "environment": "Production"
+})
+----
+
+
+== Identifiants de l'Agent SUSE Observability
+
+Les identifiants de portée globale utilisés par l'Agent SUSE Observability pour identifier les éléments de topologie synchronisés sont listés dans le tableau ci-dessous.
+
+|===
+| Type de ressource | Format d'identifiant URN
+
+| Hôte
+| `urn:host:/[hostName]`
+
+| Processus
+| `urn:process:/[hostName]:[pid]:[createTime]`
+
+| Conteneur
+| `urn:container:/[hostName]:[containerId]`
+
+| Service découvert avec des traces
+| `urn:service:/[serviceName]`
+
+| Instance de service découverte avec des traces
+| `urn:service-instance:/[serviceName]:/[hostName]`
+|===
+
+Voir les xref:/configure/topology/identifiers.adoc#_stackstate_agent[exemples d'identifiants globaux URN de l'Agent SUSE Observability].
+
+== Identifiants de portée globale
+
+Lorsque SUSE Observability reçoit des composants avec des identifiants de portée globale correspondants provenant de différentes sources externes, les composants et leurs propriétés (étiquettes, flux, vérifications) sont fusionnés en un seul composant. Cela permet de combiner des données provenant de différentes sources en une seule représentation d'un paysage informatique.
+
+Les identifiants de portée globale dans SUSE Observability sont un URN globalement unique qui correspond à la convention suivante :
+
+[,text]
+----
+urn:<prefix>:<type-name>:<free-form>
+----
+
+Notez que tous les caractères ne sont pas autorisés dans un identifiant URN. Vous pouvez vérifier vos identifiants avec l'expression régulière URN suivante :
+
+[,text]
+----
+^urn:[a-z0-9][a-z0-9-]{0,31}:[a-z0-9()+,\-.:=@;$_!*'%/?#]+$
+----
+
+Le format des segments `<prefix>` et `<type-name>:<free-form>` est décrit ci-dessous.
+
+=== Préfixe
+
+Le segment `prefix` est une partie requise d'un identifiant global. Il nomme la portée à laquelle l'identifiant appartient et est utilisé uniquement à des fins organisationnelles.
+
+[NOTE]
+====
+Lorsque le préfixe inclut un nom de StackPack, l'objet sera sous le contrôle de ce StackPack. Cela signifie que l'objet sera désinstallé lorsque le StackPack sera désinstallé.
+====
+
+
+Les préfixes URN reconnus sont :
+
+* `stackpack:<name>` - objets appartenant aux StackPacks.
+* `stackpack:<name>:shared` - objets partagés entre les instances d'un StackPack.
+* `stackpack:<name>:instance:{{instanceId}}` - objets appartenant à une instance spécifique d'un StackPack, où `{{instanceId}}` est un crochet qui renvoie l'ID fourni lors du processus d'installation du StackPack pour chaque instance spécifique du StackPack.
+* `system:auto` - objets créés par le système qui n'appartiennent à aucun StackPack spécifique.
+
+=== Type-nom et libre-forme
+
+L'identifiant est identifié de manière unique par les segments `<type-name>:<free-form>`.
+
+* `<type-name>` correspond au type d'objet de domaine de l'objet auquel l'identifiant est attribué (insensible à la casse).
+* `<free-form>` est arbitraire, mais doit être unique pour le type. Le format du segment libre est décidé par l'utilisateur. Il n'est pas nécessaire qu'il corresponde au nom de l'objet (s'il y en a un) et peut lui-même se composer de plusieurs segments.
+
+== Identifiants d'exemple
+
+=== StackPack commun
+
+Identifiants d'exemple d'URN à portée globale provenant du StackPack commun. Les objets seront désinstallés lorsque le StackPack commun sera désinstallé.
+
+* Type de composant serveur :
+ ** `urn:stackpack:common:component-type:server`
+
+=== SUSE Observability Agent
+
+Identifiants d'exemple d'URN à portée globale provenant de l'Agent SUSE Observability.
+
+* Hôte:
+ ** `urn:host:/example.org`
+* Processus :
+ ** `urn:process:/db.infra.company.org:161841:1602158335000`
+* Conteneur:
+ ** `urn:container:/compnode5.k8s.example.org:8b18c68a820904c55b4909d7f5a9a52756d45e866c07c92bf478bcf6cd240901`
+* Service découvert avec des traces :
+ ** `urn:service:/prod-db`
+* Instance de service découverte avec des traces :
+ ** `urn:service-instance:/prod-db:/main.example.org`
+
+=== Autres StackPacks
+
+Identifiants d'exemple d'URN à portée globale provenant de divers StackPacks. Les objets seront désinstallés lorsque le StackPack nommé sera désinstallé.
+
+* Vérifiez la fonction d'état d'exécution d'AWS Event partagée entre les instances de StackPack AWS :
+ ** `urn:stackpack:aws:shared:check-function:aws-event-run-state`
+* Type de composant cmdb_ci_netgear dans le StackPack ServiceNow :
+ ** `urn:stackpack:servicenow:componenttype:cmdb_ci_netgear`

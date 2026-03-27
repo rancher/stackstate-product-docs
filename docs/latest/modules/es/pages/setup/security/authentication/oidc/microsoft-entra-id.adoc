@@ -1,0 +1,59 @@
+= Microsoft Entra ID
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+:experimental:
+
+== Creando una aplicación en Entra ID
+
+. Registra una aplicación en Entra ID siguiendo https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app?tabs=client-secret[esta guía]
+ .. Como nombre para mostrar, puedes usar, por ejemplo, `SUSE Observability`
+ .. Selecciona la plataforma `Web` y especifica la URL de redirección: `https://<your-stackstate-installation>/loginCallback?client_name=StsOidcClient`
+ .. Al añadir credenciales, utiliza las credenciales `client secret` y asegúrate de almacenar el secreto
+. Las otras secciones en la sección `Prepare for development` no son obligatorias, pero para una instalación en producción deberías seguirlas para establecer un propietario y posiblemente preaprobar ciertos ámbitos (consulta la siguiente sección para los ámbitos que solicitará SUSE Observability)
+. Finalmente, asegúrate de que SUSE Observability reciba los grupos para un usuario (necesario para la autorización) añadiendo la reclamación de grupos al registro de la aplicación usando https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims?tabs=appui#_configure_groups_optional_claims[esta guía]. Selecciona qué tipos de grupos deseas exponer, el resto de este documento asume que no personalizaste las propiedades del token y que SUSE Observability recibe el ID del grupo.
+
+== Configurando SUSE Observability
+
+Usando la información del registro de la aplicación, crea un nuevo archivo `authentication.yaml` para SUSE Observability:
+
+----
+stackstate:
+  authentication:
+    oidc:
+      # The client id is in the list of essentials on the overview page of the App registration
+      clientId: "<Application (client) ID>"
+      secret: "<Application (client) secret>"
+      # The Directory (Tenant) ID is in the list of essentials on the overview page of the App registration
+      discoveryUri: "https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0/.well-known/openid-configuration"
+      jwsAlgorithm: RS256
+      scope: ["openid", "email", "profile", "offline_access"]
+      jwtClaims:
+        usernameField: "email"
+        groupsField: groups
+    roles:
+      guest: []
+      powerUser: []
+      admin: [ "aaaaaaaa-bbbb-1111-2222-aabbccddeeff", "eeeeeeeeee-bbbb-1111-2222-aabbccddeeff" ]
+      k8sTroubleshooter: []
+----
+
+Obtén los valores para:
+
+* ID de la aplicación (cliente): en la sección Esenciales de la página de resumen del registro de la aplicación
+* Secreto de la aplicación (cliente): creado en el paso 1 de la sección anterior y guardado en algún lugar
+* ID del directorio (inquilino): en la sección Esenciales de la página de resumen del registro de la aplicación
+* Los ID de grupo para los diferentes roles: en Entra ID admin navega a menu:Identidad[Todos los Grupos]. Los ID de grupo se encuentran en la segunda columna etiquetada como `Object Id`. Decide qué grupos de Entra ID deberían tener qué nivel de permisos y asígnalos a sus respectivos roles en el ejemplo de yaml anterior (eliminando los 2 ID de grupo de ejemplo).
+
+Ahora vuelve a desplegar SUSE Observability con el comando helm utilizado para instalar, pero ahora incluye el nuevo archivo `authentication.yaml`, `helm upgrade ... --values authentication.yaml`. Asegúrate de incluir siempre este archivo ahora al actualizar.
+
+=== Ámbitos utilizados
+
+SUSE Observability está configurado para solicitar 4 ámbitos:
+
+* openid, para realizar la autenticación
+* email, para identificar a los usuarios
+* profile, para poder solicitar el perfil del usuario que contiene los grupos de los usuarios
+* offline_access, para poder mantener a un usuario conectado durante más tiempo sin necesidad de reautenticación y permitir al usuario utilizar los tokens de API de SUSE Observability.
+
+Para más detalles, consulta https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-permissions-and-consent[Permisos y consentimiento en la plataforma de identidad de Microsoft (learn.microsoft.com)].

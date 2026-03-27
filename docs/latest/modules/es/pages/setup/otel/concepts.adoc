@@ -1,0 +1,53 @@
+= Conceptos de Open Telemetry
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Este es un resumen de los conceptos más importantes en Open Telemetry y debería ser suficiente para empezar. Para una introducción más detallada, utiliza la https://opentelemetry.io/docs/concepts/[documentación de Open Telemetry]
+
+== Señales
+
+Open Telemetry reconoce 3 señales de telemetría:
+
+* Trazas
+* Métricas
+* Registros
+
+En este momento, SUSE Observability soporta trazas y métricas; los registros serán soportados en una versión futura. Para los registros de Kubernetes, es posible utilizar el xref:/k8s-quick-start-guide.adoc[agente de SUSE Observability] en su lugar.
+
+=== Trazas
+
+Las trazas nos permiten visualizar la vía de una solicitud a través de su aplicación. Una traza consiste en uno o más intervalos que, en conjunto, forman un árbol; una única traza puede estar completamente contenida en un único servicio, pero también puede abarcar varios servicios. Cada intervalo representa una operación en el procesamiento de la solicitud y tiene:
+
+* un nombre
+* hora de inicio y de finalización, a partir de la cual se puede calcular una duración
+* status
+* atributos
+* atributos de recurso (ver <<_resources,recursos>>)
+* eventos
+
+Los atributos del intervalo se utilizan para proporcionar metadatos para el intervalo; por ejemplo, un intervalo para una operación que realiza un pedido puede tener el `orderId` como atributo, o un intervalo para una operación HTTP puede tener el método HTTP y la URL como atributos.
+
+Los eventos del intervalo pueden utilizarse para representar un punto en el tiempo donde ocurrió algo importante dentro de la operación del intervalo. Por ejemplo, si el intervalo falla, puede haber un `exception` o un `error` evento que capture el mensaje de error, un stacktrace y el punto exacto en el tiempo en que ocurrió el error.
+
+=== Métricas
+
+Las métricas son mediciones capturadas en tiempo de ejecución y resultan en un evento métrico. Las métricas son indicadores importantes para el rendimiento y la disponibilidad de la aplicación y a menudo se utilizan para alertar sobre una interrupción o un problema de rendimiento. Las métricas tienen:
+
+* un nombre
+* una marca de tiempo
+* un tipo (contador, medidor, histograma, etc.)
+* atributos
+* atributos de recurso (ver <<_resources,recursos>>)
+
+Los atributos proporcionan los metadatos para una métrica.
+
+== Recursos
+
+Un recurso es la entidad que produce los datos de telemetría. Los atributos del recurso proporcionan los metadatos para el recurso. Por ejemplo, un proceso que se ejecuta en un contenedor, en un pod, en un espacio de nombres en un clúster de Kubernetes puede tener atributos de recurso para todas estas entidades.
+
+Los atributos de recurso suelen ser asignados automáticamente por los SDKs. Sin embargo, se recomienda siempre establecer los atributos `service.name` y `service.namespace` de forma explícita. El primero es el nombre lógico del servicio; si no se establece, el SDK asignará un valor `unknown_service`, lo que dificultará mucho el uso de los datos más tarde en SUSE Observability. El espacio de nombres es una forma conveniente de organizar sus servicios, especialmente útil si tiene los mismos servicios ejecutándose en múltiples ubicaciones.
+
+== Convenciones semánticas
+
+Open Telemetry define nombres comunes para operaciones y datos; a esto lo llaman las convenciones semánticas. Las convenciones semánticas siguen un esquema de nomenclatura que permite estandarizar el procesamiento de datos a través de lenguajes, bibliotecas y bases de código. Existen convenciones semánticas para todas las señales y para los atributos de recurso. Están definidas para muchas plataformas y operaciones diferentes en el https://opentelemetry.io/docs/specs/semconv/attributes-registry/[sitio web de Open Telemetry]. Los SDKs utilizan las convenciones semánticas para asignar estos atributos y SUSE Observability también respeta las convenciones y se basa en ellas, por ejemplo, para reconocer recursos de Kubernetes.

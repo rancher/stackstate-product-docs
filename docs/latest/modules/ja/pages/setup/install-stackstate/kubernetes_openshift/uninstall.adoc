@@ -1,0 +1,81 @@
+= SUSE Observability をアンインストールする
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_un_install_the_helm_chart[Helm チャートをアンインストールする]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[残りのリソースを削除する]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_manually_created_resources[手動で作成したリソースを削除する]
+
+== Helm チャートをアンインストールする
+
+[NOTE]
+====
+Helm チャートをアンインストールしても、Persistent Volume Claims やネームスペースは削除されないため、すべてのデータは保持されます。それらも削除するには、xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[残りのリソースを削除する]必要があります。
+====
+
+
+SUSE Observability をアンインストールするための最初のアクションは、`helm uninstall` コマンドを実行することです。このコマンドは、`helm upgrade --install` コマンドによって作成されたすべてのリソースを削除します。
+
+このようにして、`suse-observability` リリースを `suse-observability` ネームスペースからアンインストールします。インストール時に使用したカスタム名に置き換えてください。
+
+----
+helm uninstall --namespace suse-observability suse-observability
+----
+
+コマンドはほぼすぐに戻りますが、すべてのポッドをシャットダウンし、他のすべてのリソースを削除するには時間がかかる場合があります。すべてのポッドが消えたかどうかを確認するには、次のコマンドを使用します：
+
+----
+kubectl get pods --namespace suse-observability
+----
+
+後で SUSE Observability を再インストールし、古いデータをまだ利用可能にしたい場合は、これがすべてです。完全にアンインストールするには、次の 2 つのセクションを続けてください。
+
+== 残りのリソースを削除する
+
+[CAUTION]
+====
+Persistent Volume Claims および/またはネームスペースを削除すると、SUSE Observability に保存されていたすべてのデータが失われます。
+====
+
+
+ネームスペースを削除し、それに伴い Persistent Volume Claims とそれにリンクされた Persistent Volumes を削除するには、ネームスペース全体を削除します：
+
+----
+kubectl delete namespace suse-observability
+----
+
+コマンドが戻ると、ネームスペースとすべてのボリュームが削除されます。
+
+Persistent Volume Claims (PVCs) のみを削除し、ネームスペースを保持するには、次のコマンドを実行します：
+
+----
+kubectl delete pvc --all -n suse-observability
+----
+
+OpenShift では、Helm チャートがセキュリティコンテキスト制約 (SCC) も作成しました。Helm によって自動的にクリーンアップされることはなく、手動で削除する必要があります：
+
+----
+# The scc is always named suse-observability-<namespace>
+oc delete scc suse-observability-suse-observability
+----
+
+== 手動で作成されたリソースを削除する
+
+[NOTE]
+====
+同じクラスターに異なるネームスペースでSUSE Observabilityを再インストールする意図があっても、これらは削除できます。リソースにはSUSE Observabilityネームスペースへの参照が含まれています。
+====
+
+
+xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_manually_create_cluster_wide_resources[必要な権限]に記載されているように、クラスター管理者が手動でいくつかのリソースを作成する必要があったかもしれません。これらのリソースは再度削除することができますが、それも管理者の権限を必要とする手動の作業です。
+
+このように作成されたクラスター役割とクラスター役割バインディングを削除する:
+
+----
+kubectl delete cluster-role suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authentication
+----

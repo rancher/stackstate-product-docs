@@ -1,0 +1,269 @@
+= OpenTelemetryコレクター
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+OpenTelemetryコレクターは、テレメトリデータを受信、処理、エクスポートするためのベンダーに依存しない実装を提供します。OpenTelemetry SDKで計測されたアプリケーションは、コレクターを使用してSUSE Observabilityにテレメトリデータ（トレースとメトリクス）を送信できます。
+
+OpenTelemetry SDKを設定したアプリケーションは、コレクターを使用してテレメトリデータ（トレースやメトリクスなど）をSUSE Observabilityまたは別のコレクターに送信できます（さらなる処理のために）。コレクターは、デフォルトでOTLP（ネイティブテレメトリプロトコル）を介してこのデータを受信するように設定されています。また、JaegerやZipkin（トレース用）、InfluxやPrometheus（メトリクス用）など、他の計測SDKが提供する他の形式のデータも受信できます。
+
+コレクターは、アプリケーションの近く、同じKubernetesクラスター内、同じ仮想マシン上などで実行されています。これにより、SDKはデータをコレクターに迅速にオフロードでき、コレクターは変換、バッチ処理、フィルタリングを行うことができます。複数のアプリケーションで使用でき、データ処理パイプラインへの変更が容易になります。
+
+インストールガイドについては、さまざまなxref:/setup/otel/getting-started/README.adoc[入門ガイド]を参照してください。入門ガイドは、開始するための基本的なコレクター設定を提供しますが、時間が経つにつれて、ニーズに合わせてカスタマイズし、受信者、プロセッサ、エクスポータを追加して、データ取り込みパイプラインをニーズに合わせてカスタマイズしたくなるでしょう。
+
+== 設定
+
+コレクターの設定は、さまざまなテレメトリ信号を処理するためのパイプラインを定義します。処理パイプライン内のコンポーネントは、いくつかのカテゴリに分けることができ、各コンポーネントには独自の設定があります。ここでは、さまざまな設定セクションの概要とその使用方法を説明します。
+
+=== 受信者
+
+受信者は、計測されたアプリケーションからテレメトリデータを受け入れます。ここではOTLPを介して受信します：
+
+[,yaml]
+----
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+----
+
+他のプロトコルを介してデータを受け入れる受信者がさらに多く存在し、たとえばZipkinトレースや、さまざまなソースからデータを積極的に収集するものがあります。
+
+* ホストメトリクス
+* Kubernetesメトリクス
+* Prometheusメトリクス（OpenMetrics）
+* データベース
+
+一部のレシーバーはすべての3つの信号（トレース、メトリクス、ログ）をサポートしていますが、他のレシーバーは1つまたは2つのみをサポートしています。たとえば、Prometheusレシーバーはメトリクスのみを収集できます。opentelemetry-collector-contribリポジトリには、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver[すべてのレシーバー]に関する設定のドキュメントがあります。
+
+=== プロセッサ
+
+レシーバーからのデータは、プロセッサーによって変換またはフィルタリングできます。
+
+[,yaml]
+----
+processors:
+  batch: {}
+----
+
+バッチプロセッサーはすべての3つの信号をバッチ処理し、圧縮を改善し、出力接続の数を減少させます。opentelemetry-collector-contribリポジトリには、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[すべてのプロセッサー]に関する設定のドキュメントがあります。
+
+=== エクスポーター
+
+データをSUSE Observabilityバックエンドに送信するために、コレクターにはエクスポーターがあります。異なるプロトコル、プッシュまたはプルベース、異なるバックエンド用のエクスポーターがあります。OTLPプロトコルを使用することで、追加の処理のために別のコレクターを宛先として使用することも可能です。
+
+[,yaml]
+----
+exporters:
+  # The gRPC otlp exporter
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint
+    endpoint: <otlp-suse-observability-endpoint>
+    # Use snappy compression, if no compression specified the data will be uncompressed
+    compression: snappy
+----
+
+SUSE Observabilityエクスポーターは、APIキーを使用して認証を必要とします。その設定には、<<_extensions,認証拡張機能>>が使用されます。opentelemetry-collector-contribリポジトリには、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[すべてのエクスポーター]に関する設定のドキュメントがあります。
+
+gRPCエクスポーターが機能しない場合（xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[トラブルシューティング]も参照）、`otlphttp`エクスポーターを使用して、やや効率が低いOTLP over HTTPプロトコルに切り替えることができます。`pipelines`および`exporter`セクション内の`otlp/suse-observability`へのすべての参照を`otlphttp/suse-observability`に置き換え、エクスポーターの設定を次のように更新してください。
+
+[,yaml]
+----
+exporters:
+  # The gRPC otlp exporter
+  otlphttp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp HTTP endpoint
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Use snappy compression, if no compression specified the data will be uncompressed
+    compression: snappy
+----
+
+[CAUTION]
+====
+SUSE ObservabilityのOTLP HTTPエンドポイントは、OTLPエンドポイントとは異なります。正しいURLを見つけるには、xref:/setup/otel/otlp-apis.adoc[OTLP APIs]を使用してください。
+====
+
+
+=== サービスパイプライン
+
+各テレメトリ信号には、別々のパイプラインが設定されています。パイプラインは`service.pipeline`セクションで設定され、どのレシーバー、プロセッサー、エクスポーターをどの順序で使用するかを定義します。パイプラインでコンポーネントを使用する前に、その設定セクションで最初に定義する必要があります。たとえば、`batch`プロセッサーには設定がありませんが、`processors`セクションで宣言する必要があります。パイプラインに含まれていないが設定されているコンポーネントは、まったくアクティブになりません。
+
+[,yaml]
+----
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, spanmetrics, otlp/suse-observability]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/suse-observability]
+----
+
+=== 拡張機能
+
+拡張機能はデータ処理のためにパイプラインで直接使用されることはなく、コレクターの機能を他の方法で拡張します。SUSE Observabilityでは、APIキーを使用して認証の設定に使用されます。拡張機能は使用する前に設定セクションで定義する必要があります。パイプラインコンポーネントと同様に、拡張機能は `service.extensions` セクションで有効にされているときのみアクティブになります。
+
+[,yaml]
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+service:
+  extensions: [ bearertokenauth ]
+----
+
+opentelemetry-collector-contribリポジトリには、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension[すべての拡張機能]に関する設定のドキュメントがあります。
+
+== テレメトリの変換
+
+https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[opentelemetry-collector-contrib リポジトリ] には、多くのプロセッサがあります。ここでは、一般的に使用されるプロセッサとその機能の概要を示します。詳細やさらに多くのプロセッサについては、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[opentelemetry-collector-contrib リポジトリ] を使用してください。
+
+=== フィルタ
+
+一部の計測やアプリケーションは、ノイズが多く、あなたのユースケースには不要なテレメトリデータを生成することがあります。https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor[フィルタープロセッサ] を使用して、コレクターで不要なデータを削除し、SUSE Observability にデータが送信されないようにできます。たとえば、特定のサービスのすべてのデータを削除するには：
+
+[,yaml]
+----
+processors:
+  filter/ignore-service1:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["service.name"] == "service1"
+----
+
+フィルタープロセッサは、フィルターを定義するために https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Open Telemetry Transformation Language (OTTL)] を使用します。
+
+=== 属性の追加、変更、または削除
+
+https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor[属性プロセッサ] は、スパン、ログ、またはメトリクスの属性を変更できます。
+
+[,yaml]
+----
+processors:
+  attributes/accountid:
+    actions:
+      - key: account_id
+        value: 2245
+        action: insert
+----
+
+https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/resourceprocessor[リソースプロセッサ] は、xref:/setup/otel/concepts.adoc#_resources[リソース] の属性を変更できます。たとえば、すべてのリソースに Kubernetes クラスター名を追加するには：
+
+[,yaml]
+----
+  processors:
+    resource/add-k8s-cluster:
+      attributes:
+      - key: k8s.cluster.name
+        action: upsert
+        value: my-k8s-cluster
+----
+
+メトリクス名やその他のメトリクス固有の情報を変更するために、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/metricstransformprocessor[メトリクストランスフォーマー] もあります。
+
+=== 変換
+
+https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[変換プロセッサ]は、例えばスパンステータスを設定するために使用できます。
+
+[,yaml]
+----
+processors:
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - set(span.status.code, STATUS_CODE_OK) where span.attributes["http.request.status_code"] == 400
+----
+
+スパン名の変更、メトリックタイプの変換、またはログイベントの修正など、さらに多くの変換をサポートしています。すべての可能性については、https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[README] をご覧ください。フィルターを定義するために、https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Open Telemetry Transformation Language (OTTL)]を使用します。
+
+== 機密データをマスキングする
+
+コレクターは、アプリケーションと SUSE Observability の間に位置し、<<_transforming_telemetry,データをフィルターおよび変換する>>プロセッサを持っているため、機密データを削除または隠すのに理想的な場所です。すでに説明したフィルタリングおよび変換機能に加えて、ブロックリストに一致する属性値をマスクできるhttps://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/redactionprocessor[マスキングプロセッサ]も利用可能です。指定された許可された属性のリストに一致しない属性を削除することもできますが、これを使用するとほとんどの属性が削除され、非常に限られた監視機能になる可能性があります。リソース属性は処理されないことに注意してください。
+
+特定の属性および/または値のみをマスクする例：
+
+[,yaml]
+----
+processors:
+  redaction:
+    allow_all_keys: true
+    # attributes matching the regexes on the list are masked.
+    blocked_key_patterns:
+      - ".*token.*"
+      - ".*api_key.*"
+    blocked_values: # Regular expressions for blocking values of allowed span attributes
+      - '4[0-9]{12}(?:[0-9]{3})?' # Visa credit card number
+      - '(5[1-5][0-9]{14})' # MasterCard number
+    summary: debug
+----
+
+== コレクターを試す
+
+入門ガイドでは、コレクターをKubernetesにデプロイする方法や、Linuxパッケージを使用して運用準備完了のセットアップを行う方法を示しています。テストのために、例えば直接Dockerコンテナとして実行することも可能です：
+
+[,bash]
+----
+docker run \
+  -p 127.0.0.1:4317:4317 \
+  -p 127.0.0.1:4318:4318 \
+  -v $(pwd)/config.yaml:/etc/otelcol-contrib/config.yaml \
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
+----
+
+これは、すべての貢献コンポーネント（レシーバー、プロセッサなど）を含むコレクターの貢献イメージを使用します。より小さく、制限されたバージョンのイメージも利用可能ですが、非常に限られたコンポーネントセットしかありません：
+
+[,bash]
+----
+docker run \
+  -p 127.0.0.1:4317:4317 \
+  -p 127.0.0.1:4318:4318 \
+  -v $(pwd)/config.yaml:/etc/otelcol/config.yaml \
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:latest
+----
+
+Kubernetesインストールでは、基本イメージより多くのコンポーネントを持ちながらも、貢献イメージほどではないコンポーネントを備えた、コレクターイメージのKubernetesディストリビューション`ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s`がデフォルトになっていることに注意してください。そのイメージで欠落しているコンポーネントがある場合は、単に貢献イメージ`ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib`を使用するように切り替えることができます。
+
+== トラブルシューティング
+
+=== エクスポーターからのHTTPリクエストが大きすぎる
+
+いくつかのケースでは、テレメトリデータのHTTPリクエストが非常に大きくなり、SUSE Observabilityによって拒否される可能性があります。SUSE Observabilityは、gRPCプロトコルに対して4MBの制限があります。HTTPリクエストの制限に直面した場合、圧縮アルゴリズムを変更し、最大バッチサイズを制限することでリクエストサイズを小さくすることができます。
+
+==== HTTPリクエスト圧縮
+
+入門ガイドでは、コレクターで`snappy`圧縮を有効にします。これは最適な圧縮ではありませんが、`gzip`よりもCPUリソースを少なく使用します。圧縮を削除した場合は再度有効にすることができます。または、より良いhttps://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configgrpc/README.md#_compression_comparison[圧縮率]を提供する圧縮アルゴリズムに切り替えることができます。同じ圧縮タイプはgRPCおよびHTTPプロトコルで利用可能です。
+
+==== 最大バッチサイズ
+
+HTTPリクエストサイズを削減するには、`batch`プロセッサに設定を追加してバッチサイズを制限することができます：
+
+[,yaml]
+----
+processor:
+  batch: {}
+    send_batch_size: 8192 # This is the default value
+    send_batch_max_size: 10000 # The default is 0, meaning no max size at all
+----
+
+バッチサイズはスパンの数、メトリックデータポイント、またはログレコード（バイトではなく）で定義されるため、状況に応じた正しい設定を見つけるためにいくつかの実験が必要になる場合があります。詳細については、https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md[バッチプロセッサのドキュメント]を参照してください。
+
+== 関連リソース
+
+Openテレメトリのドキュメントでは、設定や代替インストールオプションに関する詳細が提供されています：
+
+* Openテレメトリコレクターの設定：https://opentelemetry.io/docs/collector/configuration/
+* コレクターのKubernetesインストール：https://opentelemetry.io/docs/kubernetes/helm/collector/
+* コレクターのHelmチャートの代わりにKubernetesオペレーターを使用する：https://opentelemetry.io/docs/kubernetes/operator/
+* Openテレメトリサンプリング：https://opentelemetry.io/blog/2022/tail-sampling/

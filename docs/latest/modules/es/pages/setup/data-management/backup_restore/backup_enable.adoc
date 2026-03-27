@@ -1,0 +1,477 @@
+= Habilitar copias de seguridad
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+[NOTE]
+====
+Esta página se aplica a {stackstate-product-name} v2.7.0 o superior.
+====
+
+== Descripción general
+
+{stackstate-product-name} tiene un mecanismo de copia de seguridad integrado que se puede configurar para almacenar copias de seguridad en AWS S3, Azure Blob Storage o un Volumen Persistente de Kubernetes.
+
+La mayoría de las copias de seguridad se habilitan con un único valor de Helm `global.backup.enabled`. Las copias de seguridad de la configuración siempre están habilitadas, pero se comportan de manera diferente según los siguientes valores:
+
+=== Ámbito de la copia de seguridad
+
+Los siguientes datos se pueden respaldar automáticamente:
+
+* *Configuración* (StackPacks, monitores, vistas, tokens) - siempre habilitado:
+** Cuando `global.backup.enabled` está `true`: las copias de seguridad se almacenan a través de MinIO en su backend de almacenamiento configurado
+** Cuando `global.backup.enabled` está `false`: las copias de seguridad se almacenan en un Volumen Persistente de Kubernetes dedicado, eludiendo MinIO
+* *Datos de topología y Configuración* almacenados en StackGraph - habilitado cuando `global.backup.enabled` está `true`
+* *Métricas* almacenadas en la(s) instancia(s) de Victoria Metrics de {stackstate-product-name} - habilitado cuando `global.backup.enabled` está `true`
+* *Datos de telemetría* almacenados en la instancia de Elasticsearch de {stackstate-product-name} - habilitado cuando `global.backup.enabled` está `true`
+* *Datos de OpenTelemetry* almacenados en la instancia de ClickHouse de {stackstate-product-name} - habilitado cuando `global.backup.enabled` está `true`
+
+=== Opciones de almacenamiento
+
+Las copias de seguridad utilizan https://min.io/[MinIO (min.io)] como un gateway compatible con S3 para su backend de almacenamiento. MinIO se despliega automáticamente mediante el chart de Helm cuando se habilitan las copias de seguridad.
+
+La instancia de MinIO integrada se puede configurar para almacenar las copias de seguridad en tres ubicaciones:
+
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[AWS S3]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Azure Blob Storage]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Kubernetes storage]
+
+== Habilitar copias de seguridad
+
+=== AWS S3
+
+[CAUTION]
+====
+
+*Cifrado*
+
+Las claves gestionadas por Amazon S3 (SSE-S3) deben utilizarse al cifrar los buckets de S3 que almacenan las copias de seguridad.
+
+⚠️ El cifrado con claves de AWS KMS almacenadas en el Servicio de Gestión de Claves de AWS (SSE-KMS) no es compatible. Esto resultará en errores como este en los registros de Elasticsearch:
+
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)\",`
+====
+
+
+==== Usando buckets de S3 separados
+
+Para habilitar copias de seguridad programadas en buckets de AWS S3 separados (uno por almacén de datos), añade el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar {stackstate-product-name}:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  stackGraph:
+    bucketName: AWS_STACKGRAPH_BUCKET
+  elasticsearch:
+    bucketName: AWS_ELASTICSEARCH_BUCKET
+  configuration:
+    bucketName: AWS_CONFIGURATION_BUCKET
+victoria-metrics-0:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+victoria-metrics-1:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+clickhouse:
+  backup:
+    bucketName: AWS_CLICKHOUSE_BUCKET
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+Reemplaza los siguientes valores:
+
+* `YOUR_ACCESS_KEY` y `YOUR_SECRET_KEY` son las credenciales que se utilizarán para asegurar el sistema MinIO. Estas credenciales se establecen en el sistema MinIO y son utilizadas por los trabajos de copia de seguridad automáticos y los trabajos de restauración. También son necesarias si deseas acceder manualmente al sistema MinIO.
+ ** TU_CLAVE_DE_ACCESO debe contener de 5 a 20 caracteres alfanuméricos.
+ ** TU_CLAVE_SECRETA debe contener de 8 a 40 caracteres alfanuméricos.
+* `AWS_ACCESS_KEY` y `AWS_SECRET_KEY` son las credenciales de AWS para el usuario IAM que tiene acceso a los buckets de S3 donde se almacenarán las copias de seguridad. Consulta a continuación la directiva de permisos que debe adjuntarse a ese usuario.
+* `AWS_*_BUCKET` son los nombres de los buckets de S3 donde se deben almacenar las copias de seguridad.
++
+[Note]
+====
+Los nombres de los buckets de AWS S3 son globales en toda AWS. Por lo tanto, los buckets de S3, con el nombre predeterminado (`sts-elasticsearch-backup`, `sts-configuration-backup`, `sts-stackgraph-backup`, `sts-victoria-metrics-backup` y `sts-clickhouse-backup`), probablemente no estarán disponibles.
+====
+
+==== Usando un único bucket S3 con prefijos
+
+En lugar de usar buckets separados para cada almacén de datos, puedes usar un único bucket S3 con diferentes prefijos:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: BUCKET
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: BUCKET
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: BUCKET
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: clickhouse
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+Reemplaza `BUCKET` con el nombre de tu bucket S3. Las copias de seguridad para diferentes almacenes de datos están organizadas utilizando los valores configurados de `s3Prefix`. Los mismos valores de `YOUR_ACCESS_KEY`, `YOUR_SECRET_KEY`, `AWS_ACCESS_KEY` y `AWS_SECRET_KEY` de la sección anterior se aplican aquí.
+
+=== Permisos de AWS S3
+
+El usuario IAM identificado por `AWS_ACCESS_KEY` y `AWS_SECRET_KEY` debe ser configurado con la siguiente directiva de permisos para acceder a los buckets S3:
+
+[,javascript]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowListMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        },
+        {
+            "Sid": "AllowWriteMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET/*",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET/*",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET/*",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET/*",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        }
+    ]
+}
+----
+
+=== Azure Blob Storage
+
+==== Usando contenedores separados
+
+Para habilitar copias de seguridad en contenedores separados de Azure Blob Storage (uno por almacén de datos), añade el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar {stackstate-product-name}:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+Reemplaza los siguientes valores:
+
+* `AZURE_STORAGE_ACCOUNT_NAME` - el https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[nombre de la cuenta de almacenamiento de Azure (learn.microsoft.com)]
+* `AZURE_STORAGE_ACCOUNT_KEY` - el https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[clave de la cuenta de almacenamiento de Azure (learn.microsoft.com)] donde se deben almacenar las copias de seguridad.
+
+Las copias de seguridad de StackGraph, Elasticsearch, Victoria Metrics y ClickHouse se almacenan en contenedores BLOB llamados `sts-stackgraph-backup`, `sts-configuration-backup`, `sts-elasticsearch-backup`, `sts-victoria-metrics-backup`, `sts-clickhouse-backup` respectivamente. Estos nombres se pueden cambiar configurando los valores de Helm `backup.stackGraph.bucketName`, `backup.elasticsearch.bucketName`, `victoria-metrics-0.backup.bucketName`, `victoria-metrics-1.backup.bucketName` y `clickhouse.backup.bucketName` respectivamente.
+
+==== Usando un único contenedor con prefijos
+
+En lugar de usar contenedores separados para cada almacén de datos, puedes usar un único contenedor de Azure Blob Storage con diferentes prefijos:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: CONTAINER
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: CONTAINER
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: CONTAINER
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: clickhouse
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+Reemplaza `CONTAINER` con el nombre de tu contenedor de Azure Blob Storage. Las copias de seguridad para diferentes almacenes de datos se organizarán utilizando los valores configurados de `s3Prefix`. Los mismos valores de `AZURE_STORAGE_ACCOUNT_NAME` y `AZURE_STORAGE_ACCOUNT_KEY` de la sección anterior se aplican aquí.
+
+=== Volumen Persistente de Kubernetes
+
+[CAUTION]
+====
+El uso de volúmenes persistentes de Kubernetes para copias de seguridad tiene limitaciones significativas:
+
+* Costoso - Los proveedores de la nube suelen utilizar almacenamiento en bloques (EBS/Azure Block), que es caro para copias de seguridad grandes.
+* Sin recuperación ante desastres - Los PV se destruyen si se elimina el clúster.
+* No portátil - No se pueden restaurar copias de seguridad en un clúster diferente.
+
+**Recomendación:** Utiliza AWS S3 o Azure Blob Storage en su lugar para entornos de producción.
+====
+
+==== Configuración básica
+
+Para habilitar copias de seguridad en el almacenamiento local del clúster, habilita MinIO añadiendo el siguiente fragmento YAML al archivo Helm `values.yaml` utilizado para instalar {stackstate-product-name}:
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+Reemplaza los siguientes valores:
+
+* `YOUR_ACCESS_KEY` y `YOUR_SECRET_KEY` - las credenciales que se utilizarán para asegurar el sistema MinIO. Los trabajos de copia de seguridad automáticos y los trabajos de restauración los utilizarán. También son necesarios para acceder manualmente al almacenamiento de MinIO. `YOUR_ACCESS_KEY` debe contener de 5 a 20 caracteres alfanuméricos y `YOUR_SECRET_KEY` debe contener de 8 a 40 caracteres alfanuméricos.
+
+== Datos de configuración y topología (StackGraph)
+
+Las copias de seguridad de datos de configuración y topología (StackGraph) son copias de seguridad completas, almacenadas en un solo archivo con la extensión `.graph`. Cada archivo contiene una copia de seguridad completa y puede ser movido, copiado o eliminado según sea necesario.
+
+=== Programa de copias de seguridad
+
+Por defecto, las copias de seguridad de StackGraph se crean diariamente a las 03:00 AM hora del servidor.
+
+El programa de copias de seguridad se puede configurar utilizando el valor de Helm `backup.stackGraph.scheduled.schedule`, especificado en https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[la sintaxis de programación cron de Kubernetes (kubernetes.io)].
+
+=== Retención de copias de seguridad
+
+Por defecto, las copias de seguridad de StackGraph se mantienen durante 30 días. Como las copias de seguridad de StackGraph son copias de seguridad completas, esto puede requerir mucho almacenamiento.
+
+El delta de retención de copias de seguridad se puede configurar utilizando el valor de Helm `backup.stackGraph.scheduled.backupRetentionTimeDelta`, especificado en el formato del argumento de fecha de GNU `--date`. El valor por defecto es `30 days ago`. Consulta https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[Elementos relativos en cadenas de fecha] para más ejemplos.
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de StackGraph, establece el horario de copias de seguridad a una fecha lejana en el pasado utilizando el valor de Helm `backup.stackGraph.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Settings (Configuración posterior al failback)
+
+La configuración (anteriormente Configuración) incluye instancias instaladas de StackPacks con su configuración y otras personalizaciones creadas por el usuario, como monitores, vistas personalizadas y tokens de servicio.
+
+Las copias de seguridad de la configuración son ligeras (típicamente solo varios megabytes) y rápidas de restaurar con un tiempo de inactividad mínimo. Después de que se restaure una copia de seguridad de la configuración, se procesarán nuevos datos, como antes, recreando la topología, los estados de salud y las alertas. Sin embargo, el historial de topología (incluida la salud) no se conserva en las copias de seguridad de la configuración; para ese propósito, utiliza la copia de seguridad de StackGraph descrita anteriormente.
+
+[NOTE]
+====
+*Las copias de seguridad de la configuración están siempre habilitadas*, independientemente del valor de `global.backup.enabled`:
+
+* Cuando `global.backup.enabled` es `true`: Las copias de seguridad de la configuración se almacenan a través de MinIO en tu backend de almacenamiento configurado (AWS S3, Azure Blob Storage o Volumen Persistente de Kubernetes)
+* Cuando `global.backup.enabled` es `false`: Las copias de seguridad de la configuración se almacenan en un Volumen Persistente de Kubernetes dedicado, eludiendo MinIO
+====
+
+=== Programa de copias de seguridad
+
+Por defecto, las copias de seguridad de la configuración se crean diariamente a las 04:00 AM hora del servidor.
+
+El programa de copias de seguridad se puede configurar utilizando el valor de Helm `backup.configuration.scheduled.schedule`, especificado en https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[la sintaxis de programación cron de Kubernetes (kubernetes.io)].
+
+=== Retención de copias de seguridad
+
+La retención de copias de seguridad depende de la configuración `global.backup.enabled`:
+
+**Cuando `global.backup.enabled` es `true`** (copias de seguridad almacenadas a través de MinIO):
+
+* Por defecto, las copias de seguridad de la configuración se mantienen durante 365 días
+* Configura la retención utilizando `backup.configuration.scheduled.backupRetentionTimeDelta` - especificado en el formato del argumento de fecha de GNU `--date`. El valor por defecto es `365 days ago`
+
+**Cuando `global.backup.enabled` es `false`** (copias de seguridad almacenadas en un PV dedicado):
+
+* Por defecto, se mantienen los últimos 10 archivos de copia de seguridad en el Volumen Persistente
+* Configura el número máximo de archivos utilizando `backup.configuration.maxLocalFiles` (predeterminado: `10`)
+* Configura el tamaño del PV utilizando `backup.configuration.scheduled.pvc.size` (predeterminado: `1Gi`)
+
+Ejemplo de configuración para almacenamiento de Volumen Persistente dedicado:
+
+[,yaml]
+----
+backup:
+  configuration:
+    maxLocalFiles: 10
+    scheduled:
+      pvc:
+        size: '1Gi'
+----
+
+=== Desactivar copias de seguridad programadas
+
+Para deshabilitar las copias de seguridad programadas de la configuración, establece el programa de copias de seguridad a una fecha muy anterior utilizando el valor de Helm `backup.configuration.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  configuration:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Métricas (Victoria Metrics)
+
+Victoria Metrics crea copias de seguridad tomando una instantánea de los datos de métricas actuales y almacenando solo los cambios desde la última copia de seguridad (enfoque incremental).
+
+[WARNING]
+====
+*Limitación de versionado de copias de seguridad*
+
+Las copias de seguridad de Victoria Metrics reemplazan la copia de seguridad anterior cada vez que se ejecuta una nueva copia de seguridad. Esto significa que solo tienes acceso a *la copia de seguridad más reciente*, no a un historial de múltiples versiones de copias de seguridad.
+
+**Importante**: Si una copia de seguridad falla o los datos se corrompen, tus datos de copia de seguridad anteriores pueden perderse. Solo la última copia de seguridad exitosa está disponible para restaurar.
+
+**Excepción**: Si el volumen de almacenamiento de Victoria Metrics se vacía o se restablece (por ejemplo, si el directorio `/storage` se monta vacío o se elimina), el sistema detectará esto y creará automáticamente una nueva serie de copias de seguridad. En este caso, tanto la copia de seguridad antigua (antes del restablecimiento) como la nueva copia de seguridad se preservarán y estarán disponibles para restaurar.
+====
+
+[NOTE]
+====
+*Despliegues de alta disponibilidad*
+
+Los despliegues de alta disponibilidad utilizan dos instancias de Victoria Metrics (`victoria-metrics-0` y `victoria-metrics-1`). Las copias de seguridad se configuran de forma independiente para cada instancia.
+====
+
+=== Programa de copias de seguridad
+
+Las copias de seguridad de Victoria Metrics se crean cada 1h:
+
+* `victoria-metrics-0` - 25 minutos después de la hora
+* `victoria-metrics-1` - 35 minutos después de la hora
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de Victoria Metrics, establece el horario de copia de seguridad para ambas instancias a una fecha muy anterior:
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== OpenTelemetry (ClickHouse)
+
+ClickHouse utiliza copias de seguridad tanto incrementales como completas. Las copias de seguridad antiguas se eliminan según la directiva de retención configurada.
+
+=== Programa de copias de seguridad
+
+Las copias de seguridad de ClickHouse se crean:
+
+* Copia de seguridad completa - a las 00:45 todos los días
+* Copia de seguridad incremental - 45 minutos después de la hora (de 3 a.m. a 12 a.m.)
+
+=== Retención de copias de seguridad
+
+Por defecto, la herramienta mantiene las últimas 308 copias de seguridad (completas e incrementales), lo que equivale a aproximadamente 14 días.
+
+La retención de copias de seguridad se puede configurar utilizando el valor de Helm `clickhouse.backup.config.keep_remote`.
+
+=== Desactivar copias de seguridad programadas
+
+Para desactivar las copias de seguridad programadas de ClickHouse, establece los horarios de copia de seguridad completa e incremental a una fecha muy anterior:
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Datos de telemetría (Elasticsearch)
+
+Las instantáneas de Elasticsearch son incrementales.
+
+=== Horario de instantáneas
+
+Las instantáneas de Elasticsearch se crean diariamente a las 03:00 AM, hora del servidor.
+
+=== Retención de instantáneas
+
+Por defecto, las instantáneas de Elasticsearch se mantienen durante 30 días, con un mínimo de 5 instantáneas y un máximo de 30 instantáneas.
+
+El tiempo de retención y el número de instantáneas mantenidas se pueden configurar utilizando los siguientes valores de Helm:
+
+* `backup.elasticsearch.scheduled.snapshotRetentionExpireAfter`, especificado en https://www.elastic.co/guide/en/elasticsearch/reference/7.6/common-options.html#_time_units[unidades de tiempo de Elasticsearch (elastic.co)].
+* `backup.elasticsearch.scheduled.snapshotRetentionMinCount`
+* `backup.elasticsearch.scheduled.snapshotRetentionMaxCount`
+
+=== Desactivar instantáneas programadas
+
+Para desactivar las instantáneas programadas de Elasticsearch, establece la programación de instantáneas a una fecha lejana en el pasado utilizando el valor de Helm `backup.elasticsearch.scheduled.schedule`:
+
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----

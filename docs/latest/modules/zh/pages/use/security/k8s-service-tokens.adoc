@@ -1,0 +1,223 @@
+= 服务词元
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+使用服务词元可以在没有关联用户帐户的情况下对 SUSE Observability 进行身份验证。这在您希望从无头服务（如 CI 服务器）使用 SUSE Observability 时非常有用。在这种情况下，您通常不希望在身份提供者中配置用户帐户。
+
+== 管理服务词元
+
+可以通过 xref:/setup/cli/cli-sts.adoc[`sts` CLI] 管理服务词元。有以下命令可用：
+
+[,sh]
+----
+> sts service-token --help
+Manage service tokens.
+
+Usage:
+  sts service-token [command]
+
+Available Commands:
+  create      Create a service token
+  delete      Delete a service token
+  list        List service tokens
+
+Use "sts service-token [command] --help" for more information about a command.
+----
+
+在安装 {stackstate-product-name} 时，也可以 <<_set_up_a_bootstrap_service_token,设置启动服务词元>>。
+
+=== 创建服务词元
+
+[NOTE]
+====
+Open Telemetry 和 Kubernetes StackPacks 允许您创建一个主题和服务词元，并设置所有所需的权限。
+====
+
+要为 {stackstate-product-name} 创建服务词元，您可以使用 `sts` CLI。
+
+[,sh]
+----
+sts service-token create
+----
+
+[NOTE]
+====
+请注意，服务词元只会显示一次。无法再次查看该词元。
+====
+
+
+此命令接受以下命令行参数：
+
+|===
+| 标志 | 说明
+
+| `--name`
+| 服务词元的名称
+
+| `--expiration`
+| 服务词元的到期日期，格式为 yyyy-MM-dd。到期是可选的。
+
+| `--roles`
+| 要分配给服务词元的角色的逗号分隔列表
+|===
+
+例如，下面的命令将创建一个名称为 `my-service-token` 且角色为 `stackstate-k8s-troubleshooter` 的服务词元：
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+=== 设置启动服务词元
+
+在安装 {stackstate-product-name} 时，可以使用（临时）服务词元启动它。这允许在不先与{stackstate-product-name}交互并从UI获取API词元的情况下使用CLI。为了设置此项，请将以下代码片段添加到{stackstate-product-name}配置文件中：
+
+要配置{stackstate-product-name}以在Kubernetes上创建引导服务词元，需要将以下值添加到文件`authentication.yaml`中。例如：
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    serviceToken:
+      bootstrap:
+        token: <token>
+        roles:
+          - stackstate-admin
+        ttl: 24h
+----
+
+按照以下步骤配置{stackstate-product-name}以创建引导服务词元：
+
+. 在 `authentication.yaml` 中 - 添加启动词元：
+ ** *token* - 在{stackstate-product-name}的（初始）启动时创建的词元。
+ ** *roles* - 分配给启动词元的角色数组。
+ ** *ttl* - 可选。服务词元的生存时间，以持续时间字符串表示。
+. 将文件`authentication.yaml`与`values.yaml`一起存储，来自{stackstate-product-name}的安装说明。
+. 运行Helm升级以应用更改。
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* 第一次运行 Helm 升级命令将导致 Pod 重启，这可能会导致短暂的可用性中断。
+* 在每次`helm upgrade`运行中包含`authentication.yaml`。
+* 身份验证配置存储为 Kubernetes 密钥。
+====
+
+
+==== 从外部密钥设置引导服务词元。
+
+除了通过 Helm 值指定启动词元外，您还可以从在 Helm 图表外部创建和管理的密文中读取启动词元（外部密文）。要使用来自外部的启动词元，请遵循xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[这些步骤]并添加以下数据：
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  bootstrap_token: <base64 of token>
+----
+
+此词元可以添加到密文中，与已存在的数据一起。
+
+=== 列出服务词元
+
+可以使用 `sts` CLI 查看所有创建的服务词元的 ID、名称、过期日期和角色。例如：
+
+[,sh]
+----
+> sts service-token list
+ID              | NAME             | EXPIRATION | ROLES
+107484341630693 | my-service-token |            | [stackstate-admin]
+----
+
+=== 删除服务词元
+
+可以使用 `sts` CLI 删除服务词元。将服务词元的 ID 作为参数传递。例如：
+
+[,sh]
+----
+> sts service-token delete 107484341630693
+✅ Service token deleted: 107484341630693
+----
+
+== 使用服务词元
+
+您使用服务词元在使用 SUSE Observability API 时进行身份验证：
+* 使用 CLI 时
+* 直接使用 HTTP API 时
+* 在摄取遥测数据时
+
+=== SUSE Observability `sts` CLI
+
+服务词元用于与 `sts` CLI 进行身份验证。有关更多信息，请参见 xref:/setup/cli/cli-sts.adoc#_authentication[CLI 文档]。
+
+=== SUSE Observability API
+
+要使用服务词元直接与 SUSE Observability API 通信，请以以下方式之一将其添加到请求的头部：
+
+* 在 `Authorization` 头部：
++
+[,sh]
+----
+  > curl -X GET -H "Authorization: ApiKey <TOKEN>" http://localhost:8080/api/server/status
+----
+
+* 在 `X-API-Key` 头部：
++
+[,sh]
+----
+  > curl -X GET -H "X-API-Key: <TOKEN>" http://localhost:8080/api/server/status
+----
+
+=== 遥测数据摄取
+
+要为遥测数据摄取创建服务词元，您需要首先创建一个角色：
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+如果您想使用服务词元摄取 Kubernetes RBAC 数据，您还需要授予 `update-scoped-permissions`：
+[,sh]
+----
+> sts rbac grant --subject my-agent --permission update-scoped-permissions --resource my-cluster
+✅ Granted permission 'update-scoped-permissions' on 'my-cluster' to subject 'my-agent'
+PERMISSION                | RESOURCE
+update-metrics            | system
+update-scoped-permissions | my-cluster
+----
+
+这将创建一个名为 `my-agent` 的新角色，并授予其 `update-metrics` 权限。然后，您可以为此角色创建一个服务词元：
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+新创建的服务词元可以作为身份验证遥测数据请求时的 API 密钥使用：
+
+* {stackstate-product-name} xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[代理（包括 RBAC 代理）]
+* xref:setup/otel/getting-started/getting-started-k8s.adoc[OTel Collector]
+
+

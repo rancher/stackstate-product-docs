@@ -1,0 +1,53 @@
+= Concepts d'Open Telemetry
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Ceci est un résumé des concepts les plus importants d'Open Telemetry et devrait suffire pour commencer. Pour une introduction plus détaillée, utilisez la https://opentelemetry.io/docs/concepts/[documentation d’Open Telemetry]
+
+== Signaux
+
+Open Telemetry reconnaît 3 signaux de télémétrie :
+
+* Traces
+* Métriques
+* Journaux
+
+Pour le moment, SUSE Observability prend en charge les traces et les métriques, les journaux seront pris en charge dans une version future. Pour les journaux Kubernetes, il est possible d'utiliser xref:/k8s-quick-start-guide.adoc[l'agent SUSE Observability] à la place.
+
+=== Traces
+
+Les traces nous permettent de visualiser le chemin d'une requête à travers votre application. Une trace se compose d'un ou plusieurs spans qui forment ensemble un arbre, une seule trace peut être entièrement dans un seul service, mais elle peut également traverser plusieurs services. Chaque span représente une opération dans le traitement de la requête et a :
+
+* un nom
+* un temps de début et de fin, à partir de cela, une durée peut être calculée
+* status
+* attributs
+* des attributs de ressource (voir <<_resources,ressources>>)
+* événements
+
+Les attributs de span sont utilisés pour fournir des métadonnées pour le span, par exemple, un span pour une opération qui passe une commande peut avoir le `orderId` comme attribut, ou un span pour une opération HTTP peut avoir la méthode HTTP et l'URL comme attributs.
+
+Les événements de span peuvent être utilisés pour représenter un point dans le temps où quelque chose d'important s'est produit dans l'opération du span. Par exemple, si le span échoue, il peut y avoir un `exception` ou un `error` événement qui capture le message d'erreur, une trace de pile et le point exact dans le temps où l'erreur s'est produite.
+
+=== Métriques
+
+Les métriques sont des mesures capturées à l'exécution et elles donnent lieu à un événement de métrique. Les métriques sont des indicateurs importants pour la performance et la disponibilité des applications et sont souvent utilisées pour alerter en cas de panne ou de problème de performance. Les métriques ont :
+
+* un nom
+* un horodatage
+* un type (compteur, jauge, histogramme, etc.)
+* attributs
+* des attributs de ressource (voir <<_resources,ressources>>)
+
+Les attributs fournissent les métadonnées pour une métrique.
+
+== Ressources
+
+Une ressource est l'entité qui produit les données de télémétrie. Les attributs de la ressource fournissent les métadonnées pour la ressource. Par exemple, un processus s'exécutant dans un conteneur, dans un pod, dans un espace de noms dans un cluster Kubernetes peut avoir des attributs de ressource pour toutes ces entités.
+
+Les attributs de ressource sont souvent attribués automatiquement par les SDK. Cependant, il est recommandé de toujours définir explicitement les attributs `service.name` et `service.namespace`. Le premier est le nom logique du service ; si ce n'est pas défini, le SDK attribuera une valeur `unknown_service`, rendant très difficile l'utilisation des données ultérieurement dans SUSE Observability. L'espace de noms est un moyen pratique d'organiser vos services, particulièrement utile si vous avez les mêmes services exécutés à plusieurs endroits.
+
+== Conventions sémantiques
+
+Open Telemetry définit des noms communs pour les opérations et les données, ils appellent cela les conventions sémantiques. Les conventions sémantiques suivent un schéma de nommage qui permet de standardiser le traitement des données dans les langages, bibliothèques et bases de code. Il existe des conventions sémantiques pour tous les signaux et pour les attributs de ressource. Elles sont définies pour de nombreuses plateformes et opérations sur le https://opentelemetry.io/docs/specs/semconv/attributes-registry/[site web d’Open Telemetry]. Les SDK utilisent les conventions sémantiques pour attribuer ces attributs et SUSE Observability respecte également les conventions et s'y fie, par exemple pour reconnaître les ressources Kubernetes.

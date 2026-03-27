@@ -1,0 +1,33 @@
+= 拡張機能のトラブルシューティング
+:revdate: 2025-11-03
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+このセクションでは、{stackstate-product-name}とRancher UI拡張機能の間の相互運用性の問題に対するトラブルシューティング手順を提供します。
+
+== HAR（Http ARchive）を収集する
+
+Http ARchiveは、ブラウザからRancherおよび{stackstate-product-name}に送信されるリクエストの詳細を収集します。 また、受信したレスポンスも記録します。
+このアーカイブは、エラーが発生しているページ/ブラウザタブに特有のものです。 バックエンドのRancherまたは{stackstate-product-name}インスタンスへのアクセスは必要ありません（ただし、後の段階でそのログが役立つ場合があります）。
+
+* 「開発者ツール」パネルの*ネットワーク*タブを開きます。 `F12`を使用してアクセスできます。 ネットワークタブには、行われたすべてのリクエストのログが表示されます。
+* ログをクリアし、問題のある動作を表示しているページを（ハード）リフレッシュします。
+* これで、RancherとSUSE Observabilityの両方への多数のリクエストが表示されるはずです。
+* HARをエクスポート/ダウンロード/保存します - 異なるブラウザでは異なる名前が使用されます。
+
+== クラスターは監視されていません
+
+Rancherでクラスターの健康状態を表示するには、これらの設定間での整合性が必要です：
+
+* Rancher UIにおけるクラスターの（表示）名。
+* クラスターにデプロイされたエージェントに設定された`stackstate.cluster.name`
+* SUSE ObservabilityのKubernetesスタックパックの設定におけるクラスター名
+
+不一致は、Rancherのクラスター概要で「データが受信されていません」と表示される傾向があります。
+
+== 接続に失敗しました
+
+SUSE Observabilityの設定は、以下の理由によりRancher UIで有効な接続を得られない場合があります：
+
+* RancherホストがSUSE Observabilityの許可されたオリジンとして設定されていません。 これを修正するには、helmの値の`stackstate.allowedOrigins`リストに追加するか、デプロイコマンドに`--set stackstate.allowedOrigins={"https://<rancher-url>"}`を渡してください。
+* SUSE Observabilityはブラウザからアクセスできません。例えば、ルート証明書がインストールされていません。

@@ -1,0 +1,117 @@
+= アップグレード手順
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+[CAUTION]
+====
+StackState 6.0 から SUSE Observability へのアップグレードは、xref:/setup/upgrade-stackstate/migrate-from-6.adoc[移行ガイド]に従ってください。
+====
+
+
+== 概要
+
+この文書は、SUSE Observability のアップグレード手順について説明しています。
+
+== アップグレードする前に
+
+SUSE Observability のアップグレードを実行する際は、以下の点に注意してください：
+
+[CAUTION]
+====
+*必ず* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[*バージョン固有のアップグレードノート*] *をアップグレード前にお読みください。*
+====
+
+
+[CAUTION]
+====
+StackPack をアップグレードする際は、*その StackPack の設定項目に対して行った変更が上書きされることに注意してください*。詳細については、xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[設定ロック]を参照してください。
+====
+
+
+[WARNING]
+====
+SUSE Observability のインストールに *ホットフィックス* がインストールされている場合は、アップグレード前に SUSE Observability のテクニカルサポートに連絡してください。
+====
+
+
+== アップグレード手順
+
+=== マイナーまたはメンテナンスの SUSE Observability リリース
+
+SUSE Observability のマイナーリリースは、バージョン番号の第二桁の変更によって示されます。例えば、4.1.0 です。メンテナンスリリースは、バージョン番号の第三桁の変更によって識別されます。例えば、4.1.1 です。
+
+新しい *マイナー* SUSE Observability リリースまたは *メンテナンス* リリースにアップグレードする場合、SUSE Observability 自体と StackPacks は現在のインストールと互換性があります。
+
+マイナーアップグレードは、以下のステップで構成されます：
+
+. <<_create_a_backup,バックアップを作成する>>
+. <<_upgrade_suse_observability,SUSE Observabilityをアップグレードする>>
+. <<_verify_the_new_installation,新しいインストールを確認する>>
+. インストールされている StackPacks にアップグレードが必要かどうかを確認してください。
+
+=== メジャー SUSE Observability リリース
+
+SUSE Observability のメジャーリリースは、バージョン番号の第一桁の変更によって示されます。例えば、4.0.0 です。
+
+新しい *メジャー* SUSE Observability リリースにアップグレードする場合、SUSE Observability とインストールされている StackPacks は現在のインストールと互換性がない可能性があります。詳細については、xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[バージョン固有のアップグレードノート]を確認してください。
+
+メジャーアップグレードは、以下のステップで構成されています：
+
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_create_a_backup[バックアップを作成する]
+. オプション:xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_uninstall_stackpacks_optional[StackPacksをアンインストールする]
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_upgrade_stackstate[SUSE Observabilityをアップグレードする]
+. オプション:xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_install_stackpacks_optional[StackPacksをインストールする]
+. xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc#_verify_the_new_installation[新しいインストールを確認する]
+
+== アップグレードの手順
+
+=== バックアップを作成する
+
+SUSE Observabilityをアップグレードする前に、設定とトポロジーデータのバックアップを取ることをお勧めします：
+
+* xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[Kubernetesバックアップ]
+* xref:/setup/data-management/backup_restore/configuration_backup.adoc[設定のバックアップ]
+
+[NOTE]
+====
+アップグレードされたバージョンのSUSE Observabilityでは、バックアップを復元することはできませんのでご注意ください。SUSE Observabilityのバックアップは、アップグレード前のSUSE Observabilityのバージョンでのみ復元可能です。
+====
+
+
+=== SUSE Observabilityをアップグレードする
+
+アップグレードを実行する前に、リリースノートと任意のアップグレードノートを必ず確認してください。
+
+[tabs]
+====
+
+Kubernetes::
++
+--
+
+. `helm repo update`を実行して最新のhelmチャートを取得してください。
+. 現在のバージョンとアップグレードするバージョンの間のすべての変更については、xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[バージョン固有のアップグレードノート]を確認してください。`values.yaml`ファイルに指定された設定項目に変更があった場合、そのファイルは更新する必要があります。
+. アップグレードするには、xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[初回のKubernetesインストール]と同じhelmコマンドを使用してください。新しいhelmチャートは、Dockerイメージの新しいバージョンを取得し、アップグレードを処理します。
+--
+
+OpenShift::
++
+--
+
+. `helm repo update`を実行して最新のhelmチャートを取得してください。
+. 現在のバージョンとアップグレードするバージョンの間のすべての変更については、xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[バージョン固有のアップグレードノート]を確認してください。`values.yaml`ファイルに指定された設定項目に変更があった場合、そのファイルは更新する必要があります。
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_additional_openshift_values_file[`openshift-values.yaml`]ファイルを更新する
+. アップグレードするには、xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[初回のOpenShiftインストール]と同じhelmコマンドを使用してください。新しいhelmチャートは、Dockerイメージの新しいバージョンを取得し、アップグレードを処理します。
+--
+
+====
+
+=== 新しいインストールを確認する
+
+SUSE Observabilityがアップグレードされて起動したら、新しいSUSE Observabilityのインストールが到達可能であり、アプリケーションが実行されていることを確認してください。
+
+== 関連項目
+
+* xref:/stackpacks/about-stackpacks.adoc#_upgrade_a_stackpack[StackPackを手動でアップグレードする]
+* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[バージョン固有のアップグレードノート]

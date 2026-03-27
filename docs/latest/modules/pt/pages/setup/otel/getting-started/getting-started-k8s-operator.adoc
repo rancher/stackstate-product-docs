@@ -1,0 +1,348 @@
+= Introdução ao operador OpenTelemetry no Kubernetes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Aqui está a configuração que estaremos criando, para um aplicativo que precisa ser monitorado:
+
+* A aplicação / carga de trabalho monitorada no cluster A, auto-instrumentada pelo operador
+* O operador OpenTelemetry no cluster A
+* Um coletor criado pelo operador
+* SUSE Observability rodando no cluster B, ou SUSE Cloud Observability
+
+image::otel/open-telemetry-kubernetes-operator.png[Instrumentação de contêiner com a auto-instrumentação do operador OpenTelemetry]
+
+== Instale o operador
+
+O operador OpenTelemetry oferece alguns recursos extras em relação à configuração normal do Kubernetes:
+
+* Ele pode auto-instrumentar seus pods de aplicação para linguagens suportadas (Java, .NET, Python, Golang, Node.js), sem precisar modificar as aplicações ou imagens Docker.
+* Ele pode ser utilizado como um substituto para o operador Prometheus e começar a coletar dados de endpoints de exportadores Prometheus com base em monitores de serviço e pod.
+
+=== Criar um Token de Serviço
+
+Há duas maneiras de criar um token de serviço:
+
+* **SUSE Observability UI** - abra o menu principal clicando no canto superior esquerdo da tela e vá para `StackPacks` > `Open Telemetry`.  Se você ainda não fez isso, clique no botão `INSTALL`.  Clique no botão `CREATE NEW SERVICE TOKEN` e copie o valor para a sua área de transferência.
+* **SUSE Observability CLI** - veja xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[Gerenciar tokens de serviço]
+
+O valor do token de serviço deve ser usado onde as instruções abaixo mencionam `<SERVICE_TOKEN>`.
+
+=== Crie o namespace e um segredo para o token de serviço
+
+Instalaremos no namespace `open-telemetry` e usaremos o token de serviço:
+
+[,bash]
+----
+kubectl create namespace open-telemetry
+kubectl create secret generic open-telemetry-collector \
+    --namespace open-telemetry \
+    --from-literal=API_KEY='<SERVICE_TOKEN>'
+----
+
+=== Configure e instale o operador
+
+O operador é instalado com um chart Helm, então primeiro configure o repositório do chart.
+
+[,bash]
+----
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+----
+
+Vamos criar um arquivo `otel-operator.yaml` para configurar o operador:
+
+.otel-operator.yaml
+[,yaml]
+----
+# Add image pull secret for private registries
+imagePullSecrets: []
+manager:
+  image:
+    # Uses chart.appVersion for the tag
+    repository: ghcr.io/open-telemetry/opentelemetry-operator/opentelemetry-operator
+  collectorImage:
+    # find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
+    repository: otel/opentelemetry-collector-k8s
+    tag: 0.123.0
+  targetAllocatorImage:
+    repository: ""
+    tag: ""
+  # Only needed when overriding the image repository, make sure to always specify both the image and tag:
+  autoInstrumentationImage:
+    java:
+      repository: ""
+      tag: ""
+    nodejs:
+      repository: ""
+      tag: ""
+    python:
+      repository: ""
+      tag: ""
+    dotnet:
+      repository: ""
+      tag: ""
+    # The Go instrumentation support in the operator is disabled by default.
+    # To enable it, use the operator.autoinstrumentation.go feature gate.
+    go:
+      repository: ""
+      tag: ""
+
+admissionWebhooks:
+  # A production setup should use certManager to generate the certificate, without certmanager the certificate will be generated during the Helm install
+  certManager:
+    enabled: false
+  # The operator has validation and mutation hooks that need a certificate, with this we generate that automatically
+  autoGenerateCert:
+    enabled: true
+----
+
+
+Agora instale o coletor, usando o arquivo de configuração:
+
+[,bash]
+----
+helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+  --namespace open-telemetry \
+  --values otel-operator.yaml
+----
+
+Isso apenas instala o operador. Continue a instalar o coletor e habilite a auto-instrumentação.
+
+== O coletor OpenTelemetry
+
+O operador gerencia uma ou mais implantações de coletor por meio de um recurso personalizado do Kubernetes do tipo `OpenTelemetryCollector`. Vamos criar um usando a mesma configuração utilizada no xref:/setup/otel/getting-started/getting-started-k8s.adoc[guia de introdução ao Kubernetes].
+
+Ele utiliza o segredo criado anteriormente no guia. Certifique-se de substituir `<otlp-suse-observability-endpoint:port>` pelo seu endpoint OTLP (veja xref:/setup/otel/otlp-apis.adoc[API OTLP] para seu endpoint) e insira o nome do seu cluster Kubernetes em vez de `<your-cluster-name>`:
+
+.collector.yaml
+[,yaml]
+----
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+spec:
+  mode: deployment
+  envFrom:
+  - secretRef:
+      name: open-telemetry-collector
+  # optional service-account for pulling the collector image from a private registries
+  # serviceAccount: otel-collector
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      # Scrape the collectors own metrics
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: opentelemetry-collector
+            scrape_interval: 10s
+            static_configs:
+            - targets:
+              - ${env:MY_POD_IP}:8888
+    extensions:
+      health_check:
+        endpoint: ${env:MY_POD_IP}:13133
+      # Use the API key from the env for authentication
+      bearertokenauth:
+        scheme: SUSEObservability
+        token: "${env:API_KEY}"
+    exporters:
+      debug: {}
+      nop: {}
+      otlp/suse-observability:
+        auth:
+          authenticator: bearertokenauth
+        # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+        endpoint: <otlp-suse-observability-endpoint:port>
+        compression: snappy
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch: {}
+      resource:
+        attributes:
+        - key: k8s.cluster.name
+          action: upsert
+          # Insert your own cluster name
+          value: <your-cluster-name>
+        - key: service.instance.id
+          from_attribute: k8s.pod.uid
+          action: insert
+          # Use the k8s namespace also as the open telemetry namespace
+        - key: service.namespace
+          from_attribute: k8s.namespace.name
+          action: insert
+    connectors:
+      # Generate metrics for spans
+      spanmetrics:
+        metrics_expiration: 5m
+        namespace: otel_span
+    service:
+      extensions: [ health_check,  bearertokenauth ]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [debug, spanmetrics, otlp/suse-observability]
+        metrics:
+          receivers: [otlp, spanmetrics, prometheus]
+          processors: [memory_limiter, resource, batch]
+          exporters: [debug, otlp/suse-observability]
+        logs:
+          receivers: [otlp]
+          processors: []
+          exporters: [nop]
+      telemetry:
+        metrics:
+          address: ${env:MY_POD_IP}:8888
+----
+
+
+[CAUTION]
+====
+*Use o mesmo nome de cluster utilizado para instalar o agente SUSE Observability* se você também usar o agente SUSE Observability com o stackpack Kubernetes. Usar um nome de cluster diferente resultará em uma perspectiva de rastros vazia para os componentes do Kubernetes e tornará a correlação de informações muito mais difícil para o SUSE Observability e seus usuários.
+====
+
+
+Agora aplique este `collector.yaml` no namespace `open-telemetry` para implantar um coletor:
+
+[,bash]
+----
+kubectl apply --namespace open-telemetry -f collector.yaml
+----
+
+O coletor oferece muitas opções de configuração para receptores, processadores e exportadores; para mais detalhes, consulte nossa xref:/setup/otel/collector.adoc[página do coletor]. Para uso em produção, frequentemente grandes quantidades de spans são geradas e você vai querer começar a configurar xref:/setup/otel/sampling.adoc[amostragem].
+
+== Auto-instrumentação
+
+=== Configurar auto-instrumentação
+
+Agora precisamos informar ao operador como configurar a auto-instrumentação para as diferentes linguagens usando outro recurso personalizado, do tipo `Instrumentation`. Ele é usado principalmente para configurar o coletor que foi recém-implantado como o endpoint de telemetria para os aplicativos instrumentados.
+
+Pode ser definido em um único lugar e usado por todos os pods no cluster, mas também é possível ter um `Instrumentation` diferente em cada namespace. Faremos o primeiro aqui. Observe que se você usou um namespace diferente ou um nome diferente para o coletor otel, o endpoint neste arquivo precisa ser atualizado de acordo.
+
+Crie um `instrumentation.yaml`:
+
+.instrumentation.yaml
+[,yaml]
+----
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: otel-instrumentation
+spec:
+  exporter:
+    # default endpoint for the instrumentation
+    endpoint: http://otel-collector-collector.open-telemetry.svc.cluster.local:4317
+  propagators:
+    - tracecontext
+    - baggage
+  defaults:
+    # To use the standard app.kubernetes.io/ labels for the service name, version and namespace:
+    useLabelsForResourceAttributes: true
+  python:
+    env:
+      # Python autoinstrumentation uses http/proto by default, so data must be sent to 4318 instead of 4317.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector-collector.open-telemetry.svc.cluster.local:4318
+  dotnet:
+    env:
+      # Dotnet autoinstrumentation uses http/proto by default, so data must be sent to 4318 instead of 4317.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector-collector.open-telemetry.svc.cluster.local:4318
+  go:
+    env:
+      # Go autoinstrumentation uses http/proto by default, so data must be sent to 4318 instead of 4317.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector-collector.open-telemetry.svc.cluster.local:4318
+----
+
+
+Agora aplique o `instrumentation.yaml` também no namespace `open-telemetry`:
+
+[,bash]
+----
+kubectl apply --namespace open-telemetry -f instrumentation.yaml
+----
+
+=== Ative a auto-instrumentação para um pod
+
+Para instruir o operador a auto-instrumentar seus pods de aplicativo, precisamos adicionar uma anotação ao pod:
+
+* Java: `instrumentation.opentelemetry.io/inject-java: open-telemetry/otel-instrumentation`
+* NodeJS: `instrumentation.opentelemetry.io/inject-nodejs: open-telemetry/otel-instrumentation`
+* Python: `instrumentation.opentelemetry.io/inject-python: open-telemetry/otel-instrumentation`
+* Go: `instrumentation.opentelemetry.io/inject-go: open-telemetry/otel-instrumentation`
+
+Observe que o valor da anotação refere-se ao namespace e ao nome do recurso `Instrumentation` que criamos. Outras opções são:
+
+* "true" - injetar o recurso personalizado `Instrumentation` do namespace.
+* "my-instrumentation" - o nome do recurso personalizado `Instrumentation` no namespace atual.
+* "my-other-namespace/my-instrumentation" - o namespace e o nome do recurso personalizado `Instrumentation` em outro namespace.
+* "false" - não injetar
+
+Quando um pod com uma das anotações é criado, o operador modifica o pod por meio de um hook de mutação:
+
+* Ele adiciona um contêiner de inicialização que fornece a biblioteca de auto-instrumentação
+* Ele modifica o primeiro contêiner do pod para carregar a instrumentação durante a inicialização e adiciona variáveis de ambiente para configurar a instrumentação
+
+Se você precisar personalizar quais contêineres devem ser instrumentados, use a https://github.com/open-telemetry/opentelemetry-operator?tab=readme-ov-file#_multi_container_pods_with_multiple_instrumentations[documentação do operador].
+
+[CAUTION]
+====
+A auto-instrumentação do Go requer permissões elevadas. Essas permissões são definidas automaticamente pelo operador:
+
+[,yaml]
+----
+securityContext:
+  privileged: true
+  runAsUser: 0
+----
+
+====
+
+
+== Veja os resultados
+
+Vá para o SUSE Observability e certifique-se de que o Stackpack Open Telemetry está instalado (via o menu principal \-> Stackpacks).
+
+Após um curto período e se seus pods estiverem recebendo algum tráfego, você deve conseguir encontrá-los sob seu nome de serviço nas visões do OpenTelemetry \-> serviços e instâncias de serviço. Os rastreamentos aparecerão no xref:/use/traces/k8sTs-explore-traces.adoc[explorador de rastreamentos] e na xref:/use/views/k8s-traces-perspective.adoc[perspectiva de rastreamentos] para os componentes de serviço e instância de serviço. Métricas de span e métricas específicas de linguagem (se disponíveis) estarão disponíveis na xref:/use/views/k8s-metrics-perspective.adoc[perspectiva de métricas] para os componentes.
+
+Se você também tiver o stackpack do Kubernetes instalado, os pods instrumentados também terão as traces disponíveis na xref:/use/views/k8s-traces-perspective.adoc[perspectiva de trace].
+
+== Rancher RBAC
+
+Para xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] funcionar, os dados de telemetria precisam ter os seguintes atributos de recurso presentes:
+
+* `k8s.cluster.name` - o nome do *Cluster* conforme utilizado pelo stackpack do Kubernetes
+* `k8s.namespace.name` - um *Namespace* gerenciado por um *Projeto* do Rancher
+
+O Operador do Kubernetes injetará esses atributos por padrão em qualquer dado de telemetria que for enviado.
+
+== Próximas etapas
+
+ifdef::ss-ff-stackpacks2_enabled[]
+Você pode adicionar novos gráficos aos componentes, por exemplo, o serviço ou a instância de serviço, para seu aplicativo, seguindo xref:/setup/custom-integrations/metric-bindings/index.adoc[nosso guia]. Também é possível criar xref:/use/alerting/k8s-monitors.adoc[novos monitores] usando as métricas e configurar xref:/use/alerting/notifications/configure.adoc[notificações] para ser notificado quando seu aplicativo não estiver disponível ou tiver problemas de desempenho.
+endif::[]
+
+ifndef::ss-ff-stackpacks2_enabled[]
+Você pode adicionar novos gráficos aos componentes, por exemplo, o serviço ou a instância de serviço, para seu aplicativo, seguindo xref:/use/metrics/k8s-add-charts.adoc[nosso guia]. Também é possível criar xref:/use/alerting/k8s-monitors.adoc[novos monitores] usando as métricas e configurar xref:/use/alerting/notifications/configure.adoc[notificações] para ser notificado quando seu aplicativo não estiver disponível ou tiver problemas de desempenho.
+endif::[]
+
+O operador, o `OpenTelemetryCollector` e o recurso personalizado `Instrumentation` têm mais opções que estão documentadas no https://github.com/open-telemetry/opentelemetry-operator[readme do repositório do operador]. Por exemplo, é possível instalar um https://github.com/open-telemetry/opentelemetry-operator?tab=readme-ov-file#_target_allocator[alocador de destino opcional] via o recurso `OpenTelemetryCollector`, que pode ser usado para configurar o receptor Prometheus do coletor. Isso é especialmente útil quando você deseja substituir o operador Prometheus e está usando seus recursos personalizados `ServiceMonitor` e `PodMonitor`.
+
+== Mais informações
+
+* xref:/use/security/k8s-service-tokens.adoc[Tokens de serviço]
+* xref:/setup/otel/otlp-apis.adoc[Open Telemetry API]
+* xref:/setup/otel/collector.adoc[Personalizando a configuração do Open Telemetry Collector]
+* xref:/setup/otel/instrumentation/README.adoc[Open Telemetry SDKs]
+* https://github.com/open-telemetry/opentelemetry-operator[Operador OpenTelemetry]

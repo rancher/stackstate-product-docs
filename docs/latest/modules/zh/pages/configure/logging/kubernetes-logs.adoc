@@ -1,0 +1,106 @@
+= Kubernetes 日志
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管 v5.1.x。
+
+== 概述
+
+在 Kubernetes 设置中，SUSE Observability 功能分布在不同的 pod 中，每个功能的日志按 pod 和容器存储。您可以使用 `kubectl` 访问最近的日志，但对于长期存储，建议设置日志聚合。
+
+== 用于日志记录的 Kubernetes pod
+
+SUSE Observability 日志按 pod 和容器存储。下表显示了访问与特定 SUSE Observability 功能相关的日志的 pod。请注意，实际的 pod 名称将包含数字或随机字符串后缀（例如，`stackstate-receiver-5b9d79db86-h2hkz`），并且可能还包括在部署 SUSE Observability 时指定的发布名称作为前缀。
+
+[NOTE]
+====
+请注意，存储在 pod 上的日志将定期删除。为了长期访问日志，建议您为您的 Kubernetes 集群设置 <<_log_aggregation,日志聚合>>。
+====
+
+
+|===
+| SUSE Observability 功能 | pod 上的日志
+
+| API（包括拓扑、图表和设置）
+| `stackstate-api`
+
+| 数据索引到 Elasticsearch
+| `stackstate-e2es`（事件）
+
+| 数据摄取
+| `stackstate-receiver`
+
+| 事件处理程序
+| `stackstate-view-health`
+
+| 监控
+| `stackstate-checks`
+
+| 状态传播
+| `stackstate-state`
+
+| 同步
+| `stackstate-sync`
+
+| 查看健康状态
+| `stackstate-view-health`
+|===
+
+您可以使用 `kubectl logs` 命令访问特定 pod 上的日志。
+
+例如：
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== 访问最近的日志
+
+=== Pod 或容器日志
+
+可以使用 `kubectl logs` 命令从 Kubernetes 中检索最新日志。检查 <<_kubernetes_pods_for_logging,您需要监控的 pod>> 以检索特定日志。
+
+例如：
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== 同步日志
+
+所有同步日志可以在 pod `stackstate-sync-<suffix>` 中找到。您可以使用同步名称在日志快照中定位特定日志信息。
+
+例如：
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== 日志聚合
+
+为了长期存储 SUSE Observability 日志数据，建议您在 Kubernetes 集群上设置日志聚合。这可以使用第三方存储系统，如 Elasticsearch、Splunk 或 Logz.io，以及日志传输工具，如 Logstash 或 Fluentd 来完成。
+
+有关如何完成此操作的更多详细信息，请查看：
+
+* 使用 https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)] 传输日志
+* 设置 https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[日志聚合到 Elasticsearch (bitnami.com)] 的完整概述
+
+== 另请参见
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[kubectl 命令参考 (kubernetes.io/docs)]

@@ -1,0 +1,53 @@
+= OpenTelemetry-Konzepte
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Dies ist eine Zusammenfassung der wichtigsten Konzepte in OpenTelemetry und sollte ausreichen, um zu beginnen. Für eine detailliertere Einführung verwenden Sie die https://opentelemetry.io/docs/concepts/[OpenTelemetry-Dokumentation]
+
+== Signale
+
+OpenTelemetry erkennt 3 Telemetriesignale:
+
+* Spuren
+* Metriken
+* Protokolle
+
+Momentan unterstützt SUSE Observability Spuren und Metriken, Protokolle werden in einer zukünftigen Version unterstützt. Für Kubernetes-Protokolle ist es möglich, stattdessen den xref:/k8s-quick-start-guide.adoc[SUSE Observability Agent] zu verwenden.
+
+=== Spuren
+
+Spuren ermöglichen es uns, den Pfad einer Anfrage durch Ihre Anwendung zu visualisieren. Eine Spur besteht aus einem oder mehreren Spans, die zusammen einen Baum bilden. Ein einzelner Trace kann vollständig innerhalb eines einzelnen Dienstes liegen, kann aber auch über viele Dienste hinweg gehen. Jeder Span repräsentiert eine Operation in der Verarbeitung der Anfrage und hat:
+
+* einen Namen
+* Start- und Endzeit, aus denen eine Dauer berechnet werden kann
+* status
+* Attribute
+* Ressourcenattribute (siehe <<_resources,Ressourcen>>)
+* Ereignisse
+
+Span-Attribute werden verwendet, um Metadaten für den Span bereitzustellen. Zum Beispiel kann ein Span für eine Operation, die eine Bestellung aufgibt, das `orderId` als Attribut haben, oder ein Span für eine HTTP-Operation kann die HTTP-Methode und die URL als Attribute haben.
+
+Span-Ereignisse können verwendet werden, um einen Zeitpunkt darzustellen, an dem etwas Wichtiges innerhalb der Operation des Spans passiert ist. Wenn der Span beispielsweise fehlgeschlagen ist, kann es ein `exception` oder ein `error` Ereignis geben, das die Fehlermeldung, einen Stacktrace und den genauen Zeitpunkt, an dem der Fehler aufgetreten ist, erfasst.
+
+=== Metriken
+
+Metriken sind Messungen, die zur Laufzeit erfasst werden, und sie führen zu einem Metrikereignis. Metriken sind wichtige Indikatoren für die Anwendungsleistung und -verfügbarkeit und werden häufig verwendet, um auf einen Ausfall oder ein Leistungsproblem hinzuweisen. Metriken haben:
+
+* einen Namen
+* einen Zeitstempel
+* eine Art (Zähler, Messwert, Histogramm usw.)
+* Attribute
+* Ressourcenattribute (siehe <<_resources,Ressourcen>>)
+
+Attribute liefern die Metadaten für eine Metrik.
+
+== Ressourcen
+
+Eine Ressource ist die Entität, die die Telemetriedaten erzeugt. Die Attribute der Ressource liefern die Metadaten für die Ressource. Ein Beispiel ist ein Prozess, der in einem Container, in einem Pod, in einem Namespace in einem Kubernetes-Cluster läuft und Ressourcenattribute für all diese Entitäten haben kann.
+
+Ressourcenattribute werden oft automatisch von den SDKs zugewiesen. Es wird jedoch empfohlen, die `service.name` und `service.namespace` Attribute immer explizit festzulegen. Das erste ist der logische Name für den Dienst; wenn es nicht festgelegt ist, wird das SDK einen `unknown_service` Wert setzen, was es sehr schwierig macht, die Daten später in SUSE Observability zu verwenden. Der Namespace ist eine praktische Möglichkeit, Ihre Dienste zu organisieren, besonders nützlich, wenn Sie die gleichen Dienste an mehreren Standorten ausführen.
+
+== Semantische Konventionen
+
+OpenTelemetry definiert gängige Namen für Operationen und Daten; sie nennen dies die semantischen Konventionen. Semantische Konventionen folgen einem Benennungsschema, das die Standardisierung der Verarbeitung von Daten über Sprachen, Bibliotheken und Codebasen hinweg ermöglicht. Es gibt semantische Konventionen für alle Signale und für Ressourcenattribute. Sie sind für viele verschiedene Plattformen und Operationen auf der https://opentelemetry.io/docs/specs/semconv/attributes-registry/[OpenTelemetry-Website] definiert. SDKs nutzen die semantischen Konventionen, um diese Attribute zuzuweisen, und SUSE Observability respektiert ebenfalls die Konventionen und verlässt sich auf sie, um beispielsweise Kubernetes-Ressourcen zu erkennen.

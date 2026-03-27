@@ -1,0 +1,170 @@
+= NodeJS Lambdaの自動計測
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+この文書は、OpenTelemetryを使用してNodeJS Lambda関数の自動計測を行う手順を案内します。自動計測は、パフォーマンスメトリクスやトレース情報を自動的にキャプチャすることで、Lambda関数に監視を追加するプロセスを簡素化します。
+
+== 前提条件
+
+始める前に、以下のものを用意してください：
+
+* *AWS Lambda関数:*計測したい関数です。
+* *OpenTelemetry SDK:*Lambda関数にインストールされていること。
+* *OpenTelemetry Collector:*デプロイされ、設定されていること。
+* *SUSE Observability:*テレメトリデータを送信するためのSUSE Observabilityのアカウント。
+* *メモリ:*計測を含むLambdaを実行するのに十分なメモリ。
+
+== 環境によって提供される値。
+
+OpenTelemetryは、正しく機能するためにさまざまな設定値に依存しています。これらの値は、データ収集、エクスポート、バックエンドシステムとの通信などの側面を制御します。OpenTelemetryのデプロイメントを柔軟かつ異なる環境に適応可能にするために、これらの設定を環境変数を通じて提供できます。このアプローチにはいくつかの利点があります：
+
+* *動的設定:*コードの変更なしで設定を簡単に調整できます。
+* *環境固有の設定:*開発、テスト、及び本番環境のためにOpenTelemetryを異なる設定にします。
+* *秘密管理:*APIキーのような機密情報を安全に保存します。
+
+このドキュメントに記載されているOpenTelemetryのセットアップには、以下の環境変数を定義する必要があります：
+
+* *`VERBOSITY`:*OpenTelemetryのログの詳細レベルを制御します。
+* *`OTLP_API_KEY`:*Lambda関数がSUSE Observabilityにデータを送信するための認証を行います。
+* *`OTLP_ENDPOINT`:*SUSE Observabilityインスタンスのアドレスを指定します。
+* *`OPENTELEMETRY_COLLECTOR_CONFIG_FILE`:*OpenTelemetry Collectorの設定ファイルを指します。
+* *`AWS_LAMBDA_EXEC_WRAPPER`:*OpenTelemetryハンドラーを使用するようにLambda実行環境を設定します。
+* *`OTLP_INSTR_LAYER_ARN`:*自動計測に必要なコンポーネントを追加するOpenTelemetry計測レイヤーのARN（Amazonリソースネーム）を提供します。
+* *`OTLP_COLLECTOR_LAYER_ARN`:*テレメトリデータを受信、処理、エクスポートする責任を持つOpenTelemetryコレクターレイヤーのARNを提供します。
+
+*重要な考慮事項:*
+
+* *GRPCエンドポイント:*`OTLP_ENDPOINT`は、`http`や`https`のプレフィックスなしで、SUSE ObservabilityインスタンスのgRPCエンドポイントを指定する必要があります。セキュアな通信にはポート443を使用します。
+* *地域固有のレイヤー:*Lambdaレイヤーは地域に依存します。`OTLP_INSTR_LAYER_ARN`と`OTLP_COLLECTOR_LAYER_ARN`に使用するARNが、Lambda関数がデプロイされているAWSリージョンと一致していることを確認してください。
+* *アーキテクチャのマッチング:*OpenTelemetry Collectorレイヤーはアーキテクチャに特化しています。Lambda関数のアーキテクチャに対して正しいARNを選択してください（例：`amd64`または`arm64`）。
+
+*完全な例：ご自分の値を入力する必要がある点にご注意ください。*
+
+[,yaml]
+----
+VERBOSITY: "normal"
+OTLP_API_KEY: "<your api key for sending data to SUSE Observability here>"
+OTLP_ENDPOINT: "<your-dns-name-for-suse-observability-here>:443"
+OPENTELEMETRY_COLLECTOR_CONFIG_FILE: "/var/task/collector.yaml"
+AWS_LAMBDA_EXEC_WRAPPER: "/opt/otel-handler"
+OTLP_INSTR_LAYER_ARN: "arn:aws:lambda:<aws-region>:184161586896:layer:opentelemetry-nodejs-0_11_0:1"
+OTLP_COLLECTOR_LAYER_ARN: "arn:aws:lambda:<aws-region>:184161586896:layer:opentelemetry-collector-<amd64|arm64>-0_12_0:1"
+----
+
+== collector.yamlファイル
+
+OTELコレクション設定は、収集されたデータがどのように配布されるべきかを設定します。 これは、Lambdaファイルが見つかるsrcディレクトリに配置されたcollector.yamlファイルで行われます。 以下は例のcollector.yamlファイルです。
+
+[,yaml]
+----
+# collector.yaml in the root directory
+# Set an environemnt variable 'OPENTELEMETRY_COLLECTOR_CONFIG_FILE' to
+# '/var/task/collector.yaml'
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  debug:
+    verbosity: "${env:VERBOSITY}"
+  otlp/stackstate:
+    headers:
+      Authorization: "SUSEObservability ${env:OTLP_API_KEY}"
+    endpoint: "${env:OTLP_ENDPOINT}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []
+    metrics:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []
+----
+
+このコレクターは、データを次のコレクターに送信するために使用され、その後、テールサンプリング、メトリック集約などに使用され、最終的にSUSE Observabilityにデータを送信します。この2番目のコレクターも顧客の環境で実行する必要があります。
+
+望ましい機能や、この方法で計測されたLambdaによって生成されるデータの量などの要因に応じて、コレクターはバッチ処理、テールサンプリング、その他の前処理技術を設定して、SUSE Observabilityへの影響を軽減できます。
+
+バッチコレクターを設定する方法についてのxref:/setup/otel/proxy-collector.adoc[ガイダンスと指示]はこのページを参照してください。
+テールサンプリングを行うコレクターの設定方法についてのxref:/setup/otel/collector.adoc[指示]はこのページを参照してください。
+OpenTelemetryコレクターのプロセッサ設定に関する詳細情報は、https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/README.md[公式ドキュメント]を参照してください。
+
+image::otel/aws_nodejs_otel_auto_instrumentation.svg[AWS LambdaのOpenTelemetryによる計測]
+
+== Package.json
+
+`"@opentelemetry/auto-instrumentations-node": "^0.55.2",+`を`package.json`に追加し、`npm install`を実行してNodeJS Lambdaに自動計測クライアントライブラリを追加してください。
+
+== トラブルシューティング
+
+=== タイムアウト
+
+OTEL Lambdaレイヤーの追加により、Lambdaがタイムアウトする場合（ログを確認すると、コレクターがまだ忙しい間にシャットダウンを要求されたことが示されるかもしれません。例えば、次のログエントリが表示されます）：
+
+[,json]
+----
+{
+    "level": "info",
+    "ts": 1736867469.2312617,
+    "caller": "internal/retry_sender.go:126",
+    "msg": "Exporting failed. Will retry the request after interval.",
+    "kind": "exporter",
+    "data_type": "traces",
+    "name": "otlp/stackstate",
+    "error": "rpc error: code = Canceled desc = context canceled",
+    "interval": "5.125929689s"
+}
+----
+
+シャットダウンの指示を受けた直後：
+
+[,json]
+----
+{
+    "level": "info",
+    "ts": 1736867468.4311068,
+    "logger": "lifecycle.manager",
+    "msg": "Received SHUTDOWN event"
+}
+----
+
+上記は、Lambdaに割り当てられたリソースが、Lambdaの実行とOTEL自動計測によって追加される負荷を賄うには不十分であることを示しています。 これを解決するために、メモリ割り当てとLambdaのタイムアウト設定を必要に応じて調整し、Lambdaが作業を完了できるようにし、同時にテレメトリ収集が成功するようにします。
+
+失敗しているLambdaのMemorySizeおよびTimeOutプロパティを変更してみてください：
+
+[,yaml]
+----
+MemorySize: 256
+Timeout: 25
+----
+
+デフォルトのメモリ割り当ては128MBです。
+
+メモリの増分は128MBです。
+
+Timeoutは秒数を示す整数値です。
+
+=== 認証とソースIPフィルタリング
+
+コレクターデータをクラスターに送信する際に`error 403 Unauthorized`に遭遇した場合、または任意の前処理またはプロキシコレクタに送信する際には、VPC NATゲートウェイのソースIPアドレスがコレクターのイングレスでホワイトリストに登録されていることと一致しているかを再確認し、選択した認証メカニズムがソースと宛先に一致していること、さらに資格情報（シークレットなど）が正しく設定されていることを再確認してください。
+
+OpenTelemetryコレクターの認証設定に関する詳細情報は、https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configauth/README.md[公式ドキュメント]を参照してください。
+
+== 参考資料
+
+自動計測ドキュメント → https://opentelemetry.io/docs/faas/lambda-auto-instrument/
+
+コレクタードキュメント → https://opentelemetry.io/docs/faas/lambda-collector/
+
+最新のARNを見つけるためのGitHubリリースページ → https://github.com/open-telemetry/opentelemetry-lambda/releases
+
+OTLPエクスポータ設定 → https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/

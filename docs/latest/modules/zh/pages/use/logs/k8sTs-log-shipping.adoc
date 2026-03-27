@@ -1,0 +1,27 @@
+= 日志传输
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 代理安装
+
+=== Openshift
+
+第三方日志传输工具在 OpenShift 上并不容易得到支持，该平台提供了日志转发的选项，这些选项用于替代 SUSE Observability Helm 图表中包含的 promtail 配置。 有关如何配置此项的详细说明，请参阅您正在运行的 SUSE Observability 实例上的 Kubernetes stackpack 文档。
+
+=== Kubernetes
+
+SUSE Observability k8s 代理 Helm 图表的默认配置通过图表提供的 Helm 值将日志传输设置为启用：
+
+[,yaml]
+----
+logsAgent:
+  # logsAgent.enabled -- Enable / disable k8s pod log collection
+  enabled: true
+----
+
+上述配置将确保在每个节点上部署一个 promtail 容器，以收集日志并将其发送到 SUSE Observability。 对于不希望将日志传输到 SUSE Observability 的部署，将上述值设置为`false`。
+
+=== 运行额外的 Promtail Pods
+
+SUSE Observability 使用经过调整的日志摄取配置，这通常与辅助要求不一致。 因此，无法为日志摄取运行单独的配置以发送到其他目标端点，建议运行第二个 promtail pod，以处理这些要求，作为与代理 Helm 图表部署的 promtail 分开的关注点。

@@ -1,0 +1,178 @@
+= Debuggen der Gesundheits-Synchronisierung
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] kann verwendet werden, um eine Gesundheits-Synchronisierung zu überprüfen und Probleme zu beheben, die verhindern könnten, dass Gesundheitsdaten korrekt erfasst und in SUSE Observability angezeigt werden. Diese Seite beschreibt die allgemeinen Schritte zur Fehlersuche, die beim Debuggen einer Gesundheits-Synchronisierung zu beachten sind, sowie die verwendeten CLI-Befehle und eine Beschreibung der zurückgegebenen Fehlermeldungen.
+
+== Allgemeine Schritte zur Fehlerbehebung
+
+Bei der Fehlersuche zur Gesundheits-Synchronisierung gibt es einige allgemeine Überprüfungsschritte, die unabhängig vom spezifischen Problem durchgeführt werden können:
+
+. xref:/configure/health/debug-health-sync.adoc#_list_streams[Überprüfen Sie, ob der Stream existiert].
+. Wenn Sie Unterstreams verwenden, xref:/configure/health/debug-health-sync.adoc#_list_sub_streams[überprüfen Sie, ob der Unterstream existiert]. Die Antwort zeigt auch die Anzahl der Prüfzustände im Unterstream an. Dies zeigt Ihnen, ob die Daten erfasst und verarbeitet werden.
+. Weitere Untersuchungen:
+ ** *Stream vorhanden* - xref:/configure/health/debug-health-sync.adoc#_show_stream_status[Überprüfen Sie den Stream-Status], dies zeigt die Metriken-Latenz des Streams und alle xref:/configure/health/debug-health-sync.adoc#_error_messages[Fehler] an.
+ ** *Streams / Unterstreams vorhanden, aber es gibt keine Prüfzustände* - Bestätigen Sie, dass die an die Receiver-API gesendete Payload der xref:/configure/health/send-health-data/send-health-data.adoc[Gesundheits-Payload-Spezifikation] entspricht.
+ ** *Keine Streams / Unterstreams vorhanden* - Verwenden Sie den folgenden CLI-Befehl, um zu überprüfen, ob die an die Receiver-API gesendeten Gesundheitsdaten in SUSE Observability ankommen:
+
+[,sh]
+----
+$ sts topic describe --name sts_health_sync
+----
+
+== Allgemeine Probleme
+
+=== Prüfzustand nicht auf der Komponente sichtbar
+
+Es kann zwei Gründe geben, warum ein Prüfzustand auf einer Komponente in SUSE Observability nicht angezeigt wird :
+
+* Der Gesundheitsprüfzustand wurde nicht erstellt. Befolgen Sie die xref:/configure/health/debug-health-sync.adoc#_general_troubleshooting_steps[allgemeinen Schritte zur Fehlersuche], um zu bestätigen, dass der Stream / Unterstream erstellt wurde und dass Daten in SUSE Observability ankommen.
+* Der Gesundheitsprüfzustand wurde erstellt, aber sein `topologyElementIdentifier` stimmt mit keinem `identifiers` aus der SUSE Observability-Topologie überein. Verwenden Sie den CLI-Befehl xref:/configure/health/debug-health-sync.adoc#_show_substream_status[Unterstream-Status anzeigen], um zu überprüfen, ob es irgendwelche `Check states with identifier which has no matching topology element` gibt.
+
+=== Prüfzustand aktualisiert sich langsam in SUSE Observability
+
+Der Hauptgrund dafür ist, dass die Latenz der Gesundheits-Synchronisierung höher ist als erwartet. Verwenden Sie den CLI-Befehl xref:/configure/health/debug-health-sync.adoc#_show_stream_status[show stream status], um die Latenz des Streams sowie den Durchsatz von Nachrichten und spezifischen Prüfoperationen zu bestätigen. Es kann notwendig sein, die an die Gesundheits-Synchronisierung gesendeten Daten oder die Häufigkeit, mit der Daten gesendet werden, anzupassen.
+
+== Nützliche CLI-Befehle
+
+=== Streams auflisten
+
+Gibt eine Liste aller aktuellen synchronisierten Gesundheits-Streams und die Anzahl der enthaltenen Unterstreams zurück.
+
+[,sh]
+----
+$ sts health list
+STREAM URN                                              | STREAM CONSISTENCY MODEL | SUB STREAM COUNT
+urn:health:sourceId:streamId                            | REPEAT_SNAPSHOTS         | 1
+----
+
+=== Unterstreams auflisten
+
+Gibt eine Liste aller Unterstreams für eine gegebene Stream-URN zurück, zusammen mit der Anzahl der Prüfzustände in jedem.
+
+[,sh]
+----
+$ sts health list -u urn:health:sourceId:streamId
+SUB STREAM ID  | CHECK STATE COUNT
+subStreamId1   | 1
+subStreamId2   | 1
+----
+
+=== Stream-Status anzeigen
+
+Der Stream-Statusbefehl gibt die aggregierte Stream-Latenz und Durchsatzmetriken zurück. Dies ist hilfreich, um zu debuggen, warum eine Gesundheitsprüfung lange dauert, um die erwarteten Topologie-Elemente zu erreichen. Es wird helfen zu diagnostizieren, ob die Häufigkeit der an SUSE Observability gesendeten Daten angepasst werden sollte. Die Ausgabe enthält einen Abschnitt `Errors for non-existing sub streams:`, da einige Fehler nur relevant sind, wenn ein Unterstream nicht erstellt werden konnte, zum Beispiel `StreamMissingSubStream`. Unterstream-Fehler können eine der dokumentierten xref:/configure/health/debug-health-sync.adoc#_error_messages[Fehlermeldungen] sein.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId
+----
+
+=== Unterstream-Status anzeigen
+
+Der Unterstream-Status liefert nützliche Informationen, um zu überprüfen, ob SUSE Observability die gesendeten Prüfzustände von einem externen System an bestehende Topologie-Elemente binden konnte. Diese Informationen sind hilfreich, um zu debuggen, warum eine spezifische Prüfung auf dem erwarteten Topologie-Element nicht sichtbar ist.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId -sub-stream-urn subStreamId3
+----
+
+[NOTE]
+====
+Ein Unterstream-Status zeigt die Metadaten im Zusammenhang mit dem Konsistenzmodell an:
+
+* *Wiederholte Snapshots* - Wiederholungsintervall und Ablauf anzeigen
+* *Transaktionale Inkremente* - Checkpoint-Offset und Checkpoint-Batch-Index anzeigen
+====
+
+
+Der Unterstream-Status kann erweitert werden, um Details zu übereinstimmenden und nicht übereinstimmenden Prüfzuständen mithilfe des `-t` Befehlszeilenarguments einzuschließen. Dies ist hilfreich, um Gesundheitszustände zu identifizieren, die nicht an ein Topologieelement angehängt sind.
+Im folgenden Beispiel ist `checkStateId2` unter `Check states with identifier which has no matching topology element` aufgeführt. Das bedeutet, dass es nicht möglich war, den Prüfstatus mit dem Topologieelement mit der Kennung `server-2` abzugleichen.
+
+[,sh]
+----
+$ sts health status -u urn:health:sourceId:streamId -sub-stream-urn subStreamId3 -t
+----
+
+=== Löschen Sie einen Gesundheitsstream.
+
+Die Funktionalität des `delete` Streams ist hilfreich beim Einrichten einer Gesundheits-Synchronisierung in SUSE Observability. Sie können es verwenden, um zu experimentieren, die Daten zu löschen und von vorne zu beginnen. Sie können auch einen Stream löschen und dessen Daten entfernen, wenn Sie sicher sind, dass Sie ihn nicht weiter verwenden möchten.
+
+[,sh]
+----
+$ sts health delete -u urn:health:sourceId:streamId
+----
+
+=== Bereinigen Sie die Fehler im Gesundheitsstream.
+
+Die `clear-errors` Option entfernt alle Fehler aus einem Gesundheitsstream. Dies ist hilfreich beim Einrichten einer Gesundheits-Synchronisierung in SUSE Observability oder im Fall des `TRANSACTIONAL_INCREMENTS` Konsistenzmodells, wenn einige Fehler nicht organisch entfernt werden können. Ein Beispiel: Eine Anfrage zum Löschen eines Prüfzustands könnte einen Fehler auslösen, wenn der Prüfzustand SUSE Observability nicht bekannt ist. Der einzige Weg, einen solchen Fehler zu unterdrücken, wäre die Verwendung des `clear-errors` Befehls.
+
+[,sh]
+----
+$ sts health clear-error -u urn:health:sourceId:streamId
+----
+
+== Fehlermeldungen
+
+[NOTE]
+====
+Fehler werden geschlossen, sobald das beschriebene Problem behoben wurde.
+
+Ein Beispiel: Ein `SubStreamStopWithoutStart` wird geschlossen, sobald die Gesundheits-Synchronisierung eine Start-Snapshot-Nachricht gefolgt von einer Stopp-Snapshot-Nachricht beobachtet.
+====
+
+
+|===
+| Fehler | Beschreibung
+
+| *StreamMissingSubStream*
+| Ausgelöst, wenn die Gesundheits-Synchronisation Nachrichten ohne eine vorherige Stream-Setup-Nachricht als `start_snapshot` oder `expiry` erhält.
+
+| *StreamConsistencyModelMismatch*
+| Ausgelöst, wenn eine Nachricht empfangen wird, die zu einem anderen Konsistenzmodell gehört als das, das beim Erstellen des Streams angegeben wurde.
+
+| *StreamMissingSubStream*
+| Ausgelöst, wenn die Gesundheits-Synchronisation Nachrichten mit einem vorherigen Start-Snapshot erhält.
+
+| *SubStreamRepeatIntervalTooHigh*
+| Ausgelöst, wenn die Gesundheits-Synchronisierung eine `repeat_interval_s` erhält, die größer ist als das konfigurierte Maximum von 30 Minuten.
+
+| *SubStreamStartWithoutStop*
+| Ausgelöst, wenn die Gesundheits-Synchronisation eine zweite Nachricht zum Öffnen eines Snapshots erhält, während ein vorheriger Snapshot noch geöffnet war.
+
+| *SubStreamCheckStateOutsideSnapshot*
+| Ausgelöst, wenn die Gesundheits-Synchronisation externe Prüfstatus erhält, ohne zuvor einen Snapshot zu öffnen.
+
+| *SubStreamStopWithoutStart*
+| Ausgelöst, wenn die Gesundheits-Synchronisation eine Stopp-Snapshot-Nachricht erhält, ohne dass zuvor ein Snapshot gestartet wurde.
+
+| *SubStreamMissingStop*
+| Ausgelöst, wenn die Gesundheits-Synchronisation nach Ablauf der Zeitspanne von zweimal `repeat_interval_s`, die in der Start-Snapshot-Nachricht festgelegt wurde, keine Stopp-Snapshot-Nachricht erhält. In diesem Fall wird ein automatischer Stopp-Snapshot angewendet.
+
+| *SubStreamExpired*
+| Ausgelöst, wenn die Gesundheits-Synchronisation für länger als die konfigurierte `expiry_interval_s` keine Daten von einem bestimmten Substream erhält. In diesem Fall wird der Substream gelöscht.
+
+| *SubStreamLateData*
+| Ausgelöst, wenn die Gesundheits-Synchronisation rechtzeitig basierend auf dem festgelegten `repeat_interval_s` keinen vollständigen Snapshot erhält.
+
+| *SubStreamTransformerError*
+| Ausgelöst, wenn die Gesundheits-Synchronisation nicht in der Lage ist, die an den Empfänger gesendete Nutzlast zu interpretieren. Zum Beispiel: "Fehlendes erforderliches Feld 'name'" mit Nutzlast `{"checkStateId":"checkStateId3","health":"deviating","message":"Unable to provision the device. ","topologyElementIdentifier":"server-3"}` und Transformation `Default Transformation`.
+
+| *SubStreamMissingCheckpoint*
+| Ausgelöst, wenn ein transaktionaler Inkrement-Substream zuvor einen Checkpoint beobachtet hat, aber die empfangene Nachricht das `previous_checkpoint` nicht enthält.
+
+| *SubStreamInvalidCheckpoint*
+| Ausgelöst, wenn ein transaktionaler Inkrement-Substream zuvor einen Checkpoint beobachtet hat, aber die empfangene Nachricht ein `previous_checkpoint` enthält, das nicht dem zuletzt beobachteten entspricht.
+
+| *SubStreamOutdatedCheckpoint*
+| Ausgelöst, wenn ein transaktionaler Inkrement-Substream zuvor einen Checkpoint beobachtet hat, aber die empfangene Nachricht ein `checkpoint` enthält, das dem zuletzt beobachteten vorausgeht, was bedeutet, dass die Daten bereits von SUSE Observability empfangen wurden.
+
+| *SubStreamUnknownCheckState*
+| Ausgelöst, wenn ein transaktionaler Inkrement den Check_State löscht und das `check_state_id` im Substream nicht vorhanden ist.
+|===
+
+== Siehe auch
+
+* xref:/setup/cli/cli-sts.adoc[Installieren Sie die SUSE Observability CLI]

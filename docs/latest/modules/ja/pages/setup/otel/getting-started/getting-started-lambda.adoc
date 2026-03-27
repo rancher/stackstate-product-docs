@@ -1,0 +1,184 @@
+= AWS Lambdaの始め方
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+1つ以上のAWS Lambda関数の監視を行うには：
+
+* 監視対象のAWS Lambda関数（Open Telemetryを使用して計測済み）
+* Open Telemetryコレクター
+* SUSE ObservabilityまたはSUSE Cloud Observability
+
+image::otel/open-telemetry-collector-lambda.png[AWS LambdaのOpen Telemetryによる計測とKubernetesで実行されるOpen Telemetryコレクター]
+
+== Open Telemetryコレクター
+
+[NOTE]
+====
+本番環境のセットアップでは、コレクターをインストールすることを強く推奨します。これにより、サービスがデータを迅速にオフロードでき、コレクターが再試行、バッチ処理、暗号化、さらには機密データのフィルタリングなどの追加処理を行うことができます。
+====
+
+
+OTel（Open Telemetry）コレクターをインストールします。この例では、Kubernetesクラスターを使用してLambda関数の近くで実行します。仮想マシンにインストールされたコレクターを使用して、同様のセットアップを行うこともできます。ここで使用される構成は、Lambda関数からデータを迅速にオフロードするための安全なプロキシとして機能し、信頼されたネットワークインフラ内で実行されます。
+
+=== サービストークンを作成する
+
+サービストークンを作成するには、2つの方法があります：
+
+* **SUSE Observability UI** - 画面の左上をクリックしてメインメニューを開き、`StackPacks` > `Open Telemetry`に移動します。 まだ行っていない場合は、`INSTALL`ボタンをクリックしてください。`CREATE NEW SERVICE TOKEN`ボタンをクリックし、値をクリップボードにコピーします。
+* **SUSE Observability CLI** - xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[サービストークンの管理]を参照してください。
+
+サービストークンの値は、以下の指示で`<SERVICE_TOKEN>`と記載されている場所で使用する必要があります。
+
+=== サービストークンのためのネームスペースとシークレットを作成する
+
+`open-telemetry`ネームスペースにインストールし、サービストークンを使用します：
+
+[,bash]
+----
+kubectl create namespace open-telemetry
+kubectl create secret generic open-telemetry-collector \
+    --namespace open-telemetry \
+    --from-literal=API_KEY='<SERVICE_TOKEN>'
+----
+
+=== コレクターを設定してインストールします。
+
+Open Telemetryプロジェクトが提供するHelmチャートを使用してコレクターをインストールします。Open TelemetryのHelmチャートリポジトリが設定されていることを確認してください：
+
+[,bash]
+----
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+----
+
+Helmチャート用の`otel-collector.yaml`値ファイルを作成します。SUSE Observabilityでの使用に適した出発点はここです。`<otlp-suse-observability-endpoint:port>`をOTLPエンドポイントに置き換え（エンドポイントについてはxref:/setup/otel/otlp-apis.adoc[OTLP API]を参照）、`<your-cluster-name>`の代わりにKubernetesクラスターの名前を挿入してください。Ingress構成を使用する場合は、マークされた場所に自分のドメイン名と対応するTLS証明書のシークレットを挿入してください。
+
+.otel-collector.yaml
+[,yaml]
+----
+mode: deployment
+presets:
+  kubernetesAttributes:
+    enabled: true
+    # You can also configure the preset to add all the associated pod's labels and annotations to you telemetry.
+    # The label/annotation name will become the resource attribute's key.
+    extractAllPodLabels: true
+extraEnvsFrom:
+  - secretRef:
+      name: open-telemetry-collector
+image:
+  repository: "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  extensions:
+    # Use the API key from the env for authentication
+    bearertokenauth:
+      scheme: SUSEObservability
+      token: "${env:API_KEY}"
+  exporters:
+    otlp:
+      auth:
+        authenticator: bearertokenauth
+      # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+      endpoint: <otlp-suse-observability-endpoint:port>
+
+  service:
+    extensions: [health_check, bearertokenauth]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+      metrics:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+      logs:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp]
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: ingress-traefik-external
+    traefik.ingress.kubernetes.io/ingress.class: ingress-traefik-external
+    traefik.ingress.kubernetes.io/backend-protocol: GRPC
+    # "12.34.56.78/32" IP address of NatGateway in the VPC where the otel data is originating from
+    #  traefik.ingress.kubernetes.io/whitelist-source-range: "12.34.56.78/32"
+  hosts:
+    - host: "otlp-collector-proxy.<your-domain>"
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+          port: 4317
+  tls:
+    - secretName: <secret-for-tls-certificate>
+      hosts:
+        - "otlp-collector-proxy.<your-domain>"
+
+# Instead of ingress:
+
+# Alternative 1, load balancer service
+#service:
+#  type: LoadBalancer
+#  loadBalancerSourceRanges: 12.34.56.78/32 # The IP address of NatGateway in the VPC for the lambda functions
+
+# Alternative 2, node port service
+#service:
+#  type: NodePort
+#ports:
+#  otlp:
+#    nodePort: 30317
+----
+
+
+設定ファイルを使用してコレクターをインストールします。
+
+[,bash]
+----
+helm upgrade --install opentelemetry-collector open-telemetry/opentelemetry-collector \
+  --values otel-collector.yaml \
+  --namespace open-telemetry
+----
+
+プロキシコレクターがLambda関数からアクセス可能であることを確認してください。Ingressを公開するか、コレクターのIPがLambda関数と同じVPC内にあるようにしてください。 信頼できないおよび/または不明なソースからのデータをフィルタリングするために、ソース範囲ホワイトリストを使用することをお勧めします（yamlのコメントを参照）。Ingressの設定に加えて、コレクターをLambda関数に公開することも可能です。
+
+* ソース範囲を制限するLoadBalancerサービスを使用します。「Alternative 1」を参照してください。
+* コレクター用のNodePortサービスを使用します。「Alternative 2」を参照してください。
+
+コレクターは、さらに多くの構成レシーバー、プロセッサー、エクスポーターを提供します。詳細については、xref:/setup/otel/collector.adoc[コレクターページ]を参照してください。本番使用では、大量のスパンが生成されることが多く、xref:/setup/otel/sampling.adoc[サンプリング]の設定を開始してください。
+
+== Lambda関数を計測してください。
+
+Open Telemetryは、Lambdaレイヤーを使用して複数の言語でLambda関数を計測することをサポートしています。これらのLambdaレイヤーの設定は、データ送信先として前のステップのコレクターのアドレスを使用する必要があります。Node.js Lambdaを計測するには、xref:/setup/otel/instrumentation/node.js/auto-instrumentation-of-lambdas.adoc[こちらの詳細な手順]に従ってください。他の言語を計測する場合は、Node.jsと同じ設定を適用しますが、他のhttps://opentelemetry.io/docs/platforms/faas/lambda-auto-instrument/[Open Telemetry Lambdaレイヤー]のいずれかを利用してください。
+
+== 結果を表示してください。
+
+SUSE Observabilityに移動し、Open Telemetry Stackpackがインストールされていることを確認してください（メインメニュー → Stackpacks）。
+
+しばらくしてLambda関数にトラフィックが発生すると、Open Telemetry → サービスおよびサービスインスタンスの概要で、サービス名の下に関数を見つけることができるはずです。トレースは、xref:/use/traces/k8sTs-explore-traces.adoc[トレースエクスプローラー]およびxref:/use/views/k8s-traces-perspective.adoc[トレースの視点]でサービスおよびサービスインスタンスのコンポーネントに表示されます。スパンメトリクスおよび言語特有のメトリクス（利用可能な場合）は、コンポーネントのxref:/use/views/k8s-metrics-perspective.adoc[メトリクスの視点]で表示されます。
+
+== 次のステップ
+
+ifdef::ss-ff-stackpacks2_enabled[]
+アプリケーションのコンポーネント、例えばサービスやサービスインスタンスに新しいチャートを追加するには、xref:/setup/custom-integrations/metric-bindings/index.adoc[ガイド]に従ってください。メトリクスを使用してxref:/use/alerting/k8s-monitors.adoc[新しいモニター]を作成し、アプリケーションが利用できない場合やパフォーマンスの問題が発生した場合に通知を受け取るためにxref:/use/alerting/notifications/configure.adoc[通知]をセットアップすることも可能です。
+endif::[]
+
+ifndef::ss-ff-stackpacks2_enabled[]
+アプリケーションのコンポーネント、例えばサービスやサービスインスタンスに新しいチャートを追加するには、xref:/use/metrics/k8s-add-charts.adoc[ガイド]に従ってください。メトリクスを使用してxref:/use/alerting/k8s-monitors.adoc[新しいモニター]を作成し、アプリケーションが利用できない場合やパフォーマンスの問題が発生した場合に通知を受け取るためにxref:/use/alerting/notifications/configure.adoc[通知]をセットアップすることも可能です。
+endif::[]
+
+== その他の情報
+
+* xref:/use/security/k8s-service-tokens.adoc[サービストークン]
+* xref:/setup/otel/otlp-apis.adoc[Open Telemetry API]
+* xref:/setup/otel/collector.adoc[Open Telemetry Collectorの設定をカスタマイズする]
+* xref:/setup/otel/instrumentation/README.adoc[Open Telemetry SDKs]

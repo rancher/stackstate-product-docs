@@ -1,0 +1,55 @@
+= Clés API (dépréciées)
+:revdate: 2025-07-22
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Une clé API a été utilisée pour s'authentifier contre {stackstate-product-name} afin d'envoyer des données de télémétrie à {stackstate-product-name}. Dans une installation d'agent Helm, cela a été fait en définissant la variable `stackstate.apiKey` helm.
+
+Les clés API, ainsi que les clés API d'ingestion, sont en cessation de prise en charge et seront supprimées au quatrième trimestre de 2026. Les jetons de service sont désormais le mécanisme d'authentification préféré, également pour l'envoi de données de télémétrie. 
+
+Le processus pour ajouter de nouveaux clusters à {stackstate-product-name} dans xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[flux d'installation de StackPack] inclut la création d'un jeton spécifique au cluster qui est compatible avec l'Agent RBAC pour Rancher RBAC.
+
+== Migration de la clé API vers le jeton de service
+
+Il existe 2 options pour migrer de l'utilisation de la clé API unique vers l'utilisation de jetons de service pour les données de télémétrie. 
+
+1. Migrer vers un jeton de service par cluster. C'est un peu plus de travail à configurer mais cela prend en charge Rancher RBAC.
+2. Migrer vers un jeton de service unique que vous utilisez depuis tous les clusters Kubernetes et les collecteurs OTel. Cela ne prend pas en charge Rancher RBAC.
+
+Après avoir migré tous les agents et collecteurs Open Telemetry vers des jetons de service, vous pouvez maintenant supprimer le `global.receiverApiKey` ou le `stackstate.apiKey` des valeurs Helm pour installer {stackstate-product-name} et exécuter un `helm upgrade` pour appliquer les changements.
+
+=== Migrer vers un jeton de service par cluster
+
+1. Ouvrez le Stackpack Kubernetes dans l'interface utilisateur
+2. Développez le cluster que vous migrez
+3. Cliquez sur le bouton "Créer un nouveau jeton de service" pour obtenir le jeton de service spécifique au cluster et copiez le jeton
+4. Suivez les instructions d'installation/mise à niveau de l'agent dans le stackpack pour redéployer l'agent vers le cluster avec le jeton de service comme clé API.
+
+Au lieu d'utiliser l'interface utilisateur, vous pouvez également générer le jeton avec la CLI comme xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documenté ici]. Assurez-vous également d'assigner le `update-scoped-permissions` à la portée du cluster que vous migrez. Les autres étapes restent les mêmes que pour l'interface utilisateur.
+
+=== Migrez vers un seul jeton de service.
+
+Générez un jeton de service avec la CLI comme xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documenté ici].
+
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+Ne pas ajouter de `update-scoped-permissions` permission car cela ne fonctionnera pas pour un jeton utilisé depuis plusieurs clusters.
+
+Redéployez vos agents et collecteurs Open Telemetry en suivant les instructions disponibles dans l'interface utilisateur pour le Kubernetes StackPack et la xref:setup/otel/getting-started/getting-started-k8s.adoc[documentation du collecteur Open Telemetry]. Utilisez le jeton de service généré comme clé API en suivant.
+
+== Migrez depuis les clés API d'ingestion.
+
+Les clés API d'ingestion étaient utilisées par des outils externes pour ingérer des données (telles que des métriques, des événements et des traces) dans le cluster SUSE Observability.
+Ces outils incluent l'agent STS et/ou le collecteur OTel. Les jetons de service ont les mêmes capacités, et plus encore. Suivez les mêmes étapes que pour la clé API (dans la section précédente) pour migrer vers <<_migrate_to_a_service_token_per_cluster, un jeton de service par cluster>> ou <<_migrate_to_a_single_service_token, un seul jeton de service>>.
+
+== Pour en savoir plus.
+
+* xref:use/security/k8s-service-tokens.adoc[Jetons de service]

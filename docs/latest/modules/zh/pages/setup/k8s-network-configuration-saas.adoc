@@ -1,0 +1,42 @@
+= 网络配置
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observability 是一个托管在云中的 SaaS 产品。为了能够从您的本地/云与 SUSE Observability SaaS 进行通信，SUSE Observability Agent 需要能够连接到 SUSE Observability Receiver API。
+当您的集群在私有网络中运行时，您可能需要配置网络以允许 SUSE Observability Agent 连接到 SUSE Observability Receiver API，因为您的网络配置可能不允许出站流量访问互联网。本页面描述了如何配置您的网络，以便安装 SUSE Observability Agent，并允许 SUSE Observability Agent 与 SUSE Observability Receiver API 进行通信。
+
+[NOTE]
+====
+SUSE Observability Agent 与 SUSE Observability Receiver API 之间的流量始终由 SUSE Observability Agent 发起。SUSE Observability Receiver API 不会主动向 SUSE Observability Agent 发起任何流量。
+====
+
+
+== SUSE Observability Agent 安装
+
+SUSE Observability Agent 的安装通过 Helm 完成。默认情况下，Helm Chart 被配置为从 Quay.io Docker 注册表中拉取 SUSE Observability Agent 容器镜像。如果您的网络配置不允许出站流量访问互联网，您有多种选项来安装 SUSE Observability Agent：
+
+. 配置您的网络以允许从 Kubernetes 集群到 Quay.io 容器注册表的出站流量。
+. 通过您自己的容器注册表代理 Quay.io 容器注册表。
+. 将 Docker 镜像拉取到您自己的容器注册表中。
+
+对于选项 2 和 3，您需要配置 Helm Chart 从您自己的容器注册表中拉取 SUSE Observability Agent 容器镜像。有关如何配置 SUSE Observability Agent Helm Chart 从您自己的容器注册表中拉取镜像的指南可以在 xref:/k8s-suse-rancher-prime-agent-air-gapped.adoc[这里] 找到。
+
+== SUSE Observability Agent 通信
+
+SUSE Observability Agent 通过 HTTPS 与 SUSE Observability Receiver API 进行通信。SUSE Observability Agent 的不同部分连接到您租户中的 SUSE Observability Receiver API，见下图：
+
+image::k8s/k8s-agent-communication.png[SUSE Observability Agent 通信]
+
+所有通信均通过HTTPS进行，使用标准HTTPS端口443。SUSE Observability Agent 使用以下端点与 SUSE Observability Receiver API 进行通信：
+
+* *https://<tenant>.app.stackstate.io/receiver/stsAgent* - SUSE Observability Agent 将指标、事件和拓扑数据发送到 SUSE Observability Receiver API。
+
+为了允许 SUSE Observability Agent 与 SUSE Observability Receiver API 进行通信，您需要配置网络以允许向 SUSE Observability Receiver API 的出站流量。SUSE Observability Receiver API 托管在云中，并为您的租户提供特定的 IP。您需要允许向互联网的出站流量。为了获取允许出站流量的正确 IP 地址，您可以使用以下命令：
+
+[,bash]
+----
+$ dig +short <tenant>.app.stackstate.io
+----
+
+或者，您可以在浏览器中访问以下URL：`https://www.nslookup.io/domains/<tenant>.app.stackstate.io/dns-records/`

@@ -1,0 +1,48 @@
+= Configurando SUSE Observability para notificaciones por correo electrónico
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+[CAUTION]
+====
+Los usuarios de SaaS de SUSE Observability pueden utilizar notificaciones por correo electrónico sin configuración adicional. Esta guía solo es aplicable para instalaciones de SUSE Observability autoalojadas que planean utilizar el canal de notificación por correo electrónico.
+====
+
+
+Antes de que puedan utilizar el canal de notificación por correo electrónico en SUSE Observability, primero deben seguir los siguientes pasos:
+
+== Configurar SUSE Observability con la configuración SMTP
+
+SUSE Observability necesita ser configurado con credenciales para conectarse al servidor SMTP. Pueden hacer esto añadiendo lo siguiente al archivo `values.yaml` de su instalación de SUSE Observability:
+
+[,yaml]
+----
+stackstate:
+  email:
+    enabled: true
+    sender: "<stackstate@example.com>"
+    server:
+      host: "<smtp.example.com>"
+      auth:
+        username: "<user name>"
+        password: "<user password>"
+----
+
+Esto utilizará el puerto `587` en el servidor SMTP y usa el comando `STARTTLS` para establecer una conexión segura. Estas son todas las demás opciones que se pueden personalizar:
+
+[,yaml]
+----
+stackstate:
+  email:
+    additionalProperties:
+      # Add needed Java email properties for your mail server (use string values), defaults are:
+      "mail.smtp.auth": "true"
+      "mail.smtp.starttls.enable": "true"
+    server:
+      protocol: smtp
+      port: 587
+----
+
+=== Usando un secreto externo
+
+Cuando el nombre de usuario y la contraseña no pueden ser proporcionados en los valores pero deben provenir de un secreto externo, sigan xref:/setup/security/external-secrets.adoc#_getting_username_and_password_for_email_sending_from_an_external_secret[estos pasos]

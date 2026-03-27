@@ -1,0 +1,196 @@
+= SUSE Observability クエリ言語 (STQL)
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、ビルトインの SUSE Observability クエリ言語 (STQL) を使用して高度なトポロジーコンポーネントフィルターを書く方法について説明します。STQL クエリは、SUSE Observability で xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[高度なトポロジーフィルター] を記述するために使用されます。
+
+STQL クエリは、<<_component_filters,コンポーネントフィルター>> と <<_functions,関数>> で構成されています。クエリの出力は、完全なトポロジーからフィルタリングされたコンポーネントまたはコンポーネントのセットです。
+
+== コンポーネントフィルター
+
+コンポーネントフィルターは、STQL で二つの方法で使用されます：
+
+* クエリの出力に含めるコンポーネントのセットを定義します。
+* ビルトインの STQL 関数によって処理されるコンポーネントのセットを指定します。
+
+=== フィルタ
+
+以下に説明するフィルターは、利用可能な <<_operators,演算子>> を使用して組み合わせることで、複雑なコンポーネントの選択を実現できます。
+
+|===
+| フィルタ | デフォルト | 説明
+
+| `healthstate`
+| "すべて"
+| 指定された健康状態を持つコンポーネント。
+
+| `label`
+| "すべて"
+| 指定されたラベルを持つコンポーネント。
+
+| `name`
+| "すべて"
+| 指定された名前を持つコンポーネント。
+
+| `type`
+| "すべて"
+| 指定されたタイプのコンポーネント。
+
+| `identifier`
+| "すべて"
+| 指定された URN 識別子を持つコンポーネント。識別子フィルターは、`identifier IN (...)` を使用して指定され、他のフィルターと `OR` 演算子を使用して組み合わせる場合にのみ、基本フィルタリングと互換性があります。セットフィルターが基本フィルタリングと互換性がある場合、クエリされたコンポーネント識別子の数は xref:/use/views/k8s-filters.adoc#_other_filters[*他のフィルター* ボックス] に報告されます。
+
+| `layer`
+| "すべて"
+| 指定されたレイヤー内のコンポーネント。
+
+| `domain`
+| "すべて"
+| 指定されたドメイン内のコンポーネント。
+
+| `environment`
+| "すべて"
+| 指定された環境内のコンポーネント。
+|===
+
+=== オペレータ
+
+以下に説明する演算子は、STQL クエリで使用できます。ブール演算子は標準の順序で実行されることに注意してください：NOT、OR、AND。
+
+|===
+| 演算子 | 説明 | 例
+
+| =
+| 等価マッチング
+| `name = "cert-manager"`
+
+| !=
+| 不等価マッチング
+| `name != "coredns"`
+
+| IN
+| 値がサブセットに含まれています
+| `name in ("cert-manager", "cluster_autoscaler")`
+
+| NOT
+| 否定
+| `name NOT in ("cert-manager", "cluster_autoscaler")`
+
+| ANDおよびOR
+| 複数の条件またはサブクエリに基づいてフィルタリング
+| `name = "cert-manager" OR type = "deployment"`
+
+| ()
+| 結果をグループ化するために括弧を使用します。
+| `(name = … AND type = …) OR (…)`
+|===
+
+次に例を示します。
+
+[,yaml]
+----
+# Return all components named cert-manager or coredns regardless of type:
+  name = "cert-manager" OR name = "coredns"
+
+# Return only deployments named coredns and configmaps named kube-root-ca.crt:
+  (name = "coredns" AND type = "deployment") OR (name = "kube-root-ca.crt" AND type = "configmap")
+----
+
+=== ワイルドカード
+
+コンポーネントフィルタ内で`*`を完全なワイルドカードとして使用できます。ワイルドカード文字を使用して部分一致をフィルタリングすることはできません。
+
+=== 例
+
+[,text]
+----
+# Select all components
+name = "*"
+
+# Select all components with name "etcd-manager"
+name = "etcd-manager"
+
+# Select all components in the "Containers" layer:
+layer = "Containers"
+
+# Select all components named either "etcd-manager" or "coredns" that don't have a label "cluster-name:prod.stackstate.io"
+name IN ("etcd-manager","coredns") NOT label = "cluster-name:prod.stackstate.io"
+
+# Select all components named "coredns" that don't have a label "bck" or "test"
+name = "cert-manager" NOT label in ("image_name:cert-manager/cert-manager-controller:testA", "image_name:cert-manager/cert-manager-controller:testB")
+----
+
+== [関数]
+
+=== withNeighborsOf
+
+withNeighborsOf 関数は、指定された方向に接続されたコンポーネントを追加してSTQLクエリの出力を拡張します。含まれるトポロジーレベルの数は、最大15まで調整できます。
+
+`withNeighborsOf(components=(), levels=, direction=)`
+
+基本フィルタリングと互換性を持つために、関数は`OR`演算子を使用して他のフィルタと組み合わせることができます。高度なフィルタに基本フィルタリングと互換性のある関数`withNeighborsOf`が含まれている場合、隣接するコンポーネントの数はxref:/use/views/k8s-filters.adoc#_other_filters[*他のフィルタ*ボックス]に表示されます。
+
+==== パラメータ / フィールド
+
+|===
+| パラメータ | デフォルト | 使用できる値 | 説明
+
+| `components`
+| "すべて"
+| コンポーネントフィルター
+| 隣接するコンポーネントが返されるコンポーネントは、<<_component_filters,コンポーネントフィルター>>を参照してください。
+
+| `levels`
+| 1
+| "all", [1:14]
+| 出力に含めるレベルの数。"すべて"を使用して、利用可能なすべてのレベルを表示します（最大15）
+
+| `direction`
+| "両方"
+| "上", "下", "両方"
+| *上*: 指定されたコンポーネントに依存するコンポーネントのみが追加されます *下*: 指定されたコンポーネントの依存関係のみが追加されます *両方*: 指定されたコンポーネントに依存するコンポーネントとその依存関係が追加されます。
+|===
+
+==== 例
+
+以下の例は、健康状態が`DEVIATING`または`CRITICAL`のアプリケーション層のすべてのコンポーネントを返します。"appA"または"appB"という名前のコンポーネントとその隣接コンポーネントも含まれます。
+
+[,text]
+----
+layer = "Containers"
+  AND (healthstate = "CRITICAL" OR healthstate = "DEVIATING")
+  OR withNeighborsOf(components = (name in ("cert-manager","coredns")))
+----
+
+== 基本フィルターと高度なフィルターの互換性
+
+=== 基本から高度なフィルタリング
+
+*View Filters*パネルの*Filter Topology*の下にある*Advanced*を選択することで、基本から高度なフィルタリングに切り替えることができます。
+
+基本から高度なフィルタリングに切り替えることは常に可能です。選択された基本フィルターは、直接STQLクエリに変換されます。
+
+=== 高度から基本フィルタリング
+
+*View Filters*パネルの*Filter Topology*の下にある*Basic*を選択することで、高度なフィルタリングから基本フィルタリングに切り替えることができます。
+
+高度なフィルタリングから基本フィルタリングに切り替えることは、常に可能ではありません。ほとんどの単純なクエリは基本フィルターに変換できますが、一部の高度なクエリは基本フィルターと互換性がありません。
+
+* 基本フィルターには不等式を含めることはできません。
+* 基本フィルターは `=` を使用せず、常に `IN` 演算子を使用してフォーマットされます。例えば `name IN ("cert-manager”)` と `name = "cert-manager”` ではありません。
+* 基本フィルターは特定の方法で AND/OR を使用します：
+ ** 各基本フィルター ボックス内のすべての項目は *OR* で結合されます： `layer IN ("Containers", "Services", "Storage")`
+ ** 異なる基本フィルター ボックスは *AND* で連結されます： `layer IN ("Containers") AND domain IN ("cluster.test.stackstate.io”)`
+ ** *コンポーネントを含める* 基本フィルター ボックス (`name`) は例外です - これは他のフィルター ボックスと OR で連結されます： `layer IN ("Containers") AND domain IN ("cluster.test.stackstate.io") OR name IN ("cert-manager”)`
+ ** 基本フィルタリングと互換性を持たせるために、*withNeighborsOf* 関数と *識別子* フィルターは、他のフィルターと *OR* で結合する必要があります： `layer in ("Containers") OR identifier IN ("urn:kubernetes:/cluster.test.stackstate.io:kube-system:pod/cert-manager-7749f44bb4-vspjj:container/cert-manager")`
+
+高度なフィルターから基本フィルターに切り替えようとして、クエリが互換性がない場合、SUSE Observability は互換性のないフィルターを削除する前に確認を求めます。フィルターを保持するには、高度なフィルタリングに留まることを選択できます。
+
+== 関連項目
+
+* xref:/use/views/k8s-filters.adoc#_basic_topology_filters[基本トポロジーフィルター]
+* xref:/use/views/k8s-filters.adoc#_topology_filtering_limits[トポロジーフィルターの制限]
+* xref:/use/views/k8s-filters.adoc[SUSE Observability UI でのトポロジーのフィルタリング方法]

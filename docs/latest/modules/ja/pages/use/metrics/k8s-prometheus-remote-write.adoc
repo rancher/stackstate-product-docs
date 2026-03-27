@@ -1,0 +1,56 @@
+= Prometheus リモート書き込み
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+自分のオンプレミスまたはセルフホストの Prometheus が実行されており、環境のメトリクスが集約されている場合、これらのメトリクスを SUSE Observability にミラーリングできます。これにより、ツール間を切り替えることなく、Kubernetes 環境のトラブルシューティングを行うために、SUSE Observability の強力なトポロジーおよび相関機能を使用できます。
+
+これを可能にするために、SUSE Observability は Prometheus `remote_write` プロトコルをエンドポイントとして公開します。このエンドポイントを使用して、Prometheus インスタンスを構成し、メトリクスを SUSE Observability に送信できます。メトリクスは自動的に取り込まれ、SUSE Observability によって観測されるコンポーネントにメトリクスをバインドすることが可能になります。以下の図は、これがどのように機能するかを示しています：
+
+image::k8s/k8s-prometheus-remotewrite.png[Prometheus リモート書き込み]
+
+== 前提条件
+
+SUSE Observability に Prometheus メトリクスをミラーリングするには、メトリクスを SUSE Observability に送信するために使用される API キーを調べる必要があります。API キーは、SUSE Observability にインストールされた Kubernetes StackPack の説明にあります。以下の手順で API キーを見つける方法を示します：
+
+. SUSE Observability UI を開き、StackPacks ページに移動します。
++
+image::k8s/k8s-stackpacks.png[StackPacks]
+
+. Kubernetes StackPack を見つけてクリックします。
+. StackPack の説明に、メトリクスを SUSE Observability に送信するために使用される API キーが記載されています。
++
+image::k8s/k8s-stackpacks-apikey.png[API キー]
+
+== Prometheus インスタンスの設定
+
+Prometheus インスタンスを SUSE Observability にメトリクスを送信するように構成するには、新しいリモート書き込みエンドポイントを Prometheus 構成に追加する必要があります。これは、`remote_write` ファイル内の `prometheus.yml` セクションを更新することで行うことができます。エンドポイントへの認証には、ヘッダーによる方法または基本認証による方法の2種類が利用可能です。
+
+=== ヘッダー認証
+
+API キーを使用して認証するには、Prometheus remote_write リクエストに `sts-api-key` ヘッダーを追加します。次の例は、これを設定する方法を示しています：
+
+[,yaml]
+----
+remote_write:
+- url: https://<tenant>.app.stackstate.io/receiver/prometheus/api/v1/write
+  headers:
+    sts-api-key: <API Key>
+----
+
+=== [基本認証]
+
+基本認証を使用して認証するには、Prometheus remote_write リクエストに `basic_auth` セクションを追加します。この API へのリクエストはヘッドレスサービスから行われるため、ユーザー名フィールドは静的値 `apikey` に設定されています。次の例は、これを設定する方法を示しています：
+
+[,yaml]
+----
+remote_write:
+- url: https://<tenant>.app.stackstate.io/receiver/prometheus/api/v1/write
+  basic_auth:
+    username: apikey
+    password: <API Key>
+----
+
+== 完了
+
+Prometheus の設定ファイルに設定変更が適用された後、Prometheus を再起動する必要があります。再起動後、Prometheus は SUSE Observability にメトリクスを送信し始めます。メトリクスは自動的に環境の残りの部分と相関付けられ、SUSE Observability UIで表示されます。

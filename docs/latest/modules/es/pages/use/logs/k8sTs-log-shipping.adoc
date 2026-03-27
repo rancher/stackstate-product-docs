@@ -1,0 +1,27 @@
+= Envío de registros
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Instalación del agente
+
+=== Openshift
+
+Los transportadores de registros de terceros no son fácilmente compatibles con Openshift; la plataforma tiene opciones para el reenvío de registros, que se utilizan en lugar de la configuración de promtail incluida en el gráfico de helm de SUSE Observability.  Para obtener instrucciones detalladas sobre cómo configurar esto, consulta la documentación del stackpack de Kubernetes en tu instancia de SUSE Observability en ejecución.
+
+=== Kubernetes
+
+La configuración predeterminada del gráfico de helm del agente k8s de SUSE Observability establece el envío de registros como habilitado a través de los valores de helm suministrados con el gráfico:
+
+[,yaml]
+----
+logsAgent:
+  # logsAgent.enabled -- Enable / disable k8s pod log collection
+  enabled: true
+----
+
+Lo anterior asegurará que se despliegue un contenedor de promtail en cada nodo para recopilar registros y enviarlos a SUSE Observability.  Para despliegues donde no es deseable enviar registros a SUSE Observability, establece el valor anterior en `false`.
+
+=== Ejecutando Pods adicionales de Promtail
+
+SUSE Observability utiliza una configuración ajustada para la ingestión de registros, y esto generalmente no está alineado con los requisitos auxiliares.  Por lo tanto, no es posible ejecutar una configuración separada para la ingestión de registros a otros puntos finales de destino; en su lugar, se recomienda ejecutar un segundo pod de promtail que se ocupe de estos requisitos como una preocupación separada del promtail que es desplegado por el gráfico de helm del agente.

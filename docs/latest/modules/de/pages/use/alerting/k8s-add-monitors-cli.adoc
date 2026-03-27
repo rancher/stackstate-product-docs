@@ -1,0 +1,224 @@
+= Fügen Sie einen Schwellenwertmonitor zu Komponenten über die CLI hinzu
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+SUSE Observability bietet xref:/use/alerting/k8s-monitors.adoc[vorkonfigurierte Monitore], die eine Überwachung häufiger Probleme in einem Kubernetes-Cluster ermöglichen. Es ist auch möglich, benutzerdefinierte Monitore für die von SUSE Observability gesammelten Metriken oder Anwendungsmetriken, die xref:/use/metrics/k8s-prometheus-remote-write.adoc[von Prometheus] erfasst werden, zu konfigurieren.
+
+== Schritte
+
+Schritte zur Erstellung eines Monitors:
+
+. <<_write_the_outline_of_the_monitor,Skizzieren Sie den Monitor>>
+. <<_bind_the_results_of_the_monitor_to_the_correct_components,Binden Sie die Ergebnisse des Monitors an die richtige Komponente>>
+. <<_write_the_remediation_hint,Schreiben Sie den Hinweis zur Behebung>>
+. <<_create_or_update_the_monitor_in_suse_observability,Erstellen oder aktualisieren Sie die Metrikbindung in SUSE Observability.>>
+. <<_verifying_the_results_of_a_monitor,Überprüfen Sie, ob der Monitor das erwartete Ergebnis liefert>>
+. <<_common_issues,Allgemeine Probleme>>
+
+Als Beispiel werden die Schritte einen Monitor für die `Replica counts` von Kubernetes-Implementierungen hinzufügen.
+
+== Skizzieren Sie den Monitor
+
+Erstellen Sie eine neue YAML-Datei namens `monitor.yaml` und fügen Sie diese YAML-Vorlage hinzu, um Ihren eigenen Monitor zu erstellen. Öffnen Sie sie in Ihrem bevorzugten Code-Editor, um sie während dieses Leitfadens zu ändern. Am Ende wird die SUSE Observability CLI verwendet, um den Monitor in SUSE Observability zu erstellen und zu aktualisieren.
+
+----
+nodes:
+- _type: Monitor
+  arguments:
+    metric:
+      query:
+      unit:
+      aliasTemplate:
+    comparator:
+    threshold:
+    failureState:
+    urnTemplate:
+    titleTemplate:
+  description:
+  function: {{ get "urn:stackpack:common:monitor-function:threshold"  }}
+  identifier: urn:custom:monitor:...
+  intervalSeconds: 30
+  name:
+  remediationHint:
+  status:
+  tags: {}
+----
+
+Die Felder in dieser Vorlage sind:
+
+* `_type`: SUSE Observability muss wissen, dass dies ein Monitor ist, daher muss der Wert immer `Monitor` sein.
+* `query`: Eine PromQL-Abfrage. Verwenden Sie den xref:/use/metrics/k8sTs-explore-metrics.adoc[Metrik-Explorer] Ihrer SUSE Observability-Instanz, http://your-instance/#/metrics, und nutzen Sie ihn, um eine Abfrage für die interessierende Metrik zu erstellen.
+* `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, die verwendet wird, um die Y-Achse des Diagramms zu rendern. Siehe die xref:/develop/reference/k8sTs-chart-units.adoc[unterstützten Einheiten]-Referenz für alle Einheiten.
+* `aliasTemplate`: Ein Alias für Zeitreihen im Metrikdiagramm. Dies ist eine Vorlage, die Labels aus der Zeitreihe mit dem Platzhalter `${my_label}` ersetzen kann.
+* `comparator`: Wählen Sie eines von LTE/LT/GTE/GT, um den Schwellenwert mit der Metrik zu vergleichen. Zeitreihen, für die `<metric> <comparator> <threshold>` wahr ist, erzeugen den Fehlerzustand.
+* `threshold`: Ein numerischer Schwellenwert zum Vergleichen.
+* `failureState`: Entweder "KRITISCH" oder "ABWEICHEND". "KRITISCH" wird in SUSE Observability als rot und "ABWEICHEND" als orange angezeigt, um unterschiedliche Schweregrade zu kennzeichnen.
+* `urnTemplate`: Eine Vorlage zur Konstruktion der URN der Komponente, an die das Ergebnis des Monitors <<_bind_the_results_of_the_monitor_to_the_correct_components,gebunden>> wird.
+* `titleTemplate`: Ein Titel für das Ergebnis eines Monitors. Da mehrere Monitorergebnisse an dieselbe Komponente gebunden werden können, ist es möglich, Zeitreihenlabels mit dem Platzhalter `${my_label}` zu ersetzen.
+* `description`: Eine Beschreibung des Monitors.
+* `function`: Eine Referenz auf die Monitorfunktion, die den Monitor ausführen wird. Gegenwärtig wird nur `{{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}` unterstützt.
+* `identifier`: Ein Identifikator der Form `urn:custom:monitor:....`, der den Monitor eindeutig identifiziert, wenn seine Konfiguration aktualisiert wird.
+* `intervalSeconds`: Das Intervall, in dem der Monitor ausgeführt wird. Für reguläre Echtzeitmetriken wird ein Intervall von 30 Sekunden empfohlen. Für länger laufende analytische Metrikabfragen wird ein größeres Intervall empfohlen.
+* `name`: Der Name des Monitors
+* `remediationHint`: Eine Beschreibung dessen, was der Benutzer tun kann, wenn beim Monitor ein Fehler auftritt. Das Format ist Markdown, mit optionaler Verwendung von Handlebars-Variablen zur Anpassung des Hinweises basierend auf Zeitreihen oder anderen Daten (<<_write_the_remediation_hint,mehr Erklärung unten>>).
+* `status`: Entweder `"DISABLED"` oder `"ENABLED"`. Bestimmt, ob der Monitor ausgeführt wird oder nicht.
+* `tags`: Fügen Sie Tags zum Monitor hinzu, um sie in der Übersicht der Monitore Ihrer SUSE Observability-Instanz zu organisieren, http://your-SUSE Observability-instance/#/monitors
+
+Zum Beispiel könnte dies der Anfang für einen Monitor sein, der die verfügbaren Replikate einer Implementierung überwacht:
+
+----
+nodes:
+- _type: Monitor
+  arguments:
+    metric:
+      query: "kubernetes_state_deployment_replicas_available"
+      unit: "short"
+      aliasTemplate: "Deployment replicas"
+    comparator: "LTE"
+    threshold: 0.0
+    failureState: "DEVIATING"
+    urnTemplate:
+  description: "Monitor whether a deployment has replicas.
+  function: {{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}
+  identifier: urn:custom:monitor:deployment-has-replicas
+  intervalSeconds: 30
+  name: Deployment has replicas
+  remediationHint:
+  status: "ENABLED"
+  tags:
+  - "deployments"
+----
+
+Die `urnTemplate` und `remediationHint` werden in den nächsten Schritten ausgefüllt.
+
+== Binden Sie die Ergebnisse des Monitors an die richtigen Komponenten
+
+Die Ergebnisse eines Monitors müssen an Komponenten in SUSE Observability gebunden werden, um sichtbar und nutzbar zu sein. Das Ergebnis eines Monitors wird unter Verwendung der Komponente `identifiers` gebunden. Jede Komponente in SUSE Observability hat eine oder mehrere Kennungen, die die Komponente eindeutig identifizieren. Um ein Ergebnis eines Monitors an eine Komponente zu binden, ist es erforderlich, die `urnTemplate` bereitzustellen. Die `urnTemplate` ersetzt die Labels in der Zeitreihe des Monitorergebnisses im Template und erzeugt eine Kennung, die mit einer Komponente übereinstimmt. Dies wird am besten mit dem Beispiel veranschaulicht:
+
+Die Metrik, die in diesem Beispiel verwendet wird, ist die `kubernetes_state_deployment_replicas_available` Metrik. Führen Sie die Metrik im Metrik-Explorer aus, um zu beobachten, welche Labels in der Zeitreihe verfügbar sind:
+
+image::k8s/available-replicas-metric-inspector.png[Die verfügbaren Replikate im Metrik-Explorer]
+
+In der obigen Tabelle wird gezeigt, dass die Metrik Labels wie `cluster_name`, `namespace` und `deployment` hat.
+
+Da die Metrik bei Implementierungen beobachtet wird, ist es am logischsten, die Monitorergebnisse an Implementierungskomponenten zu binden. Um dies zu tun, ist es erforderlich zu verstehen, wie die Kennungen für Implementierungen konstruiert sind:
+
+. Navigieren Sie in der Benutzeroberfläche zur `deployments` Ansicht und wählen Sie eine einzelne Implementierung aus.
+. Öffnen Sie die `Topology` Ansicht und klicken Sie auf die Implementierungskomponente.
+. Wenn Sie die `Properties` im rechten Bereich des Bildschirms erweitern, werden die Kennungen angezeigt, nachdem Sie darüber fahren, wie unten gezeigt:
+
+image::k8s/component-identifier.png[Eine Komponentenkennung finden]
+
+Die Kennung wird als `urn:kubernetes:/preprod-dev.preprod.stackstate.io:calico-system:deployment/calico-typha` angezeigt. Dies zeigt, dass die Kennung basierend auf dem Cluster-Namen, dem Namespace und dem Implementierungsnamen konstruiert wird. Mit diesem Wissen ist es nun möglich, die `urnTemplate` zu konstruieren:
+
+----
+  ...
+  urnTemplate: "urn:kubernetes:/${cluster_name}:${namespace}:deployment/${deployment}"
+  ...
+----
+
+<<_verifying_the_results_of_a_monitor,Um zu überprüfen>>, ob die `urnTemplate` korrekt ist, wird weiter unten erklärt.
+
+== Schreiben Sie den Hinweis zur Behebung.
+
+Der Hinweis zur Behebung soll den Benutzern helfen, die Ursache eines Problems zu finden, wenn ein Monitor auslöst. Der Hinweis zur Behebung ist in https://en.wikipedia.org/wiki/Markdown[Markdown] verfasst. Es ist auch möglich, die Labels zu verwenden, die auf der Zeitreihe des Monitorergebnisses vorhanden sind, indem man eine Handlebars-Vorlage verwendet, wie im folgenden Beispiel:
+
+----
+  ...
+  remediationHint: |-
+    To remedy this issue with the deployment {{ labels.deployment }}, consider taking the following steps:
+
+    1. Look at the logs of the pods created by the deployment
+  ...
+----
+
+== Erstellen oder aktualisieren Sie den Monitor in SUSE Observability.
+
+Nach Abschluss des `monitor.yaml` verwenden Sie die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI], um den Monitor zu erstellen oder zu aktualisieren:
+
+[,bash]
+----
+sts monitor apply -f monitor.yaml
+----
+
+Überprüfen Sie, ob der Monitor die erwarteten Ergebnisse liefert, indem Sie die Schritte <<_verifying_the_results_of_a_monitor,unten>> verwenden.
+
+[CAUTION]
+====
+Die Kennung wird als eindeutiger Schlüssel eines Monitors verwendet. Eine Änderung der Kennung erstellt einen neuen Monitor, anstatt den bestehenden zu aktualisieren.
+====
+
+
+Der `sts monitor` Befehl hat mehr Optionen, zum Beispiel kann er alle Monitore auflisten:
+
+[,bash]
+----
+sts monitor list
+----
+
+Um einen Monitor zu löschen, verwenden Sie
+
+[,bash]
+----
+sts monitor delete --id <id>
+----
+
+Um einen Monitor zu bearbeiten, bearbeiten Sie das Original des angewendeten Monitors und wenden Sie es erneut an. Oder es gibt einen `sts monitor edit` Befehl, um den konfigurierten Monitor direkt in der SUSE Observability-Instanz zu bearbeiten:
+
+[,bash]
+----
+sts monitor edit --id <id>
+----
+
+Die `<id>` in diesem Befehl ist nicht die Kennung, sondern die Zahl in der `Id` Spalte der `sts monitor list` Ausgabe.
+
+== Aktivieren oder deaktivieren Sie den Monitor.
+
+Ein Monitor kann aktiviert oder deaktiviert werden. Aktiviert bedeutet, dass der Monitor Ergebnisse produziert, deaktiviert bedeutet, dass er alle Ausgaben unterdrückt. Verwenden Sie die folgenden Befehle, um zu aktivieren/deaktivieren:
+
+[,bash]
+----
+sts monitor enable/disable --id <id>
+----
+
+== Überprüfung der Ergebnisse eines Monitors
+
+Es ist gute Praxis, nach der Erstellung eines Monitors zu validieren, ob er das erwartete Ergebnis liefert. Die folgenden Schritte können unternommen werden:
+
+=== Überprüfen Sie die Ausführung des Monitors
+
+Gehen Sie zur Monitorübersichtsseite (http://your-SUSE Observability-instance/#/monitors) und finden Sie Ihren Monitor.
+
+. Überprüfen Sie, ob die `Status` Spalte im `Enabled` Zustand ist. Wenn der Monitor im `Disabled` Zustand ist, <<_enable_or_disable_the_monitor,aktivieren Sie ihn>>. Wenn der Status im `Error` Zustand ist, folgen Sie den untenstehenden Schritten <<_the_monitor_is_showing_an_error_in_the_monitor_status_overview,um zu debuggen>>.
+. Überprüfen Sie, ob Sie die erwartete Anzahl von Zuständen in der `Clear`/`Deviating`/`Critical` Spalte sehen. Wenn die Anzahl der Zustände erheblich niedriger oder höher ist als die Anzahl der Komponenten, die Sie überwachen wollten, könnte die PromQL-Abfrage zu viele Ergebnisse liefern.
+
+=== Überprüfen Sie die Bindung des Monitors
+
+Beobachten Sie, ob der Monitor ein Ergebnis für eine der Komponenten produziert, die er überwachen soll. Wenn der Monitor nicht angezeigt wird, folgen Sie <<_the_result_of_the_monitor_isnt_showing_on_a_component,diesen Schritten>>, um das Problem zu beheben.
+
+== Häufige Probleme
+
+=== Das Ergebnis des Monitors wird nicht auf einer Komponente angezeigt
+
+Überprüfen Sie zunächst, ob der Monitor tatsächlich <<_verify_the_execution_of_the_monitor,Ergebnisse produziert>>. Wenn dies der Fall ist, die Monitorergebnisse jedoch nicht auf den Komponenten angezeigt werden, könnte ein Problem mit der Bindung vorliegen. Verwenden Sie zunächst den folgenden Befehl zur Überprüfung:
+
+[,bash]
+----
+sts monitor status --id <id>
+----
+
+Wenn die Ausgabe `Monitor health states with identifier which has no matching topology element (<nr>): ....` hat, zeigt dies, dass der `urnTemplate` möglicherweise keinen Identifikator erzeugt, der mit der Topologie übereinstimmt. Um dies zu beheben, <<_bind_the_results_of_the_monitor_to_the_correct_components,überprüfen Sie Ihre urnTemplate erneut>>.
+
+=== Der Monitor zeigt einen Fehler in der Übersicht des Monitorstatus an
+
+Holen Sie den Status des Monitors über die Kommandozeilenschnittstelle ab
+
+[,bash]
+----
+sts monitor status --id <id>
+----
+
+Der Abschnitt `Monitor Stream errors:` zeigt die Fehler an, die im Monitor auftreten, und bietet weitere Hilfe.

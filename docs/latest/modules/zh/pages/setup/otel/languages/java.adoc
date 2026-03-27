@@ -1,0 +1,47 @@
+= Java 应用程序
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Java SDK 支持在 JVM 上对应用程序进行仪器化。因此，它不仅支持 Java，还支持其他 JVM 语言，如 Kotlin 和 Scala。
+
+== 自动仪器化
+
+Java 的自动仪器化使用一个 Java 代理 JAR，可以附加到任何 Java 8 及以上的应用程序。它动态注入字节码，以捕获来自许多 https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md[流行库和框架] 的遥测数据，包括几个 Kotlin 和 Scala 库。它可以用于捕获应用程序或服务的 "`edges`" 的遥测数据，例如入站请求、出站 HTTP 调用、数据库调用等。
+
+自动仪器化不需要对应用程序进行任何修改。要设置它，请按照以下步骤操作：
+
+. 从 opentelemetry-java-instrumentation 储存库的 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar[发布] 中下载 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases[opentelemetry-javaagent.jar] 并将 JAR 文件包含在应用程序的 Docker 镜像中。JAR 文件包含代理和仪器化库。
+. 更新启动应用程序的命令以加载 Java 代理，可以通过更新 Docker 镜像的入口点或命令，或通过更新 Kubernetes 清单中的 `command` 来实现。添加 `-javaagent:/path/to/opentelemetry-javaagent.jar`：
++
+[,bash]
+----
+java -javaagent:/path/to/opentelemetry-javaagent.jar -jar myapp.jar
+----
+
+. 使用额外的环境变量 xref:/setup/otel/languages/sdk-exporter-config.adoc[配置服务名称和出口端点] 部署您的应用程序。
+. xref:/setup/otel/languages/verify.adoc[验证] SUSE Observability 是否正在接收跟踪和/或指标
+
+有关更多详细信息，请参阅 https://opentelemetry.io/docs/languages/java/automatic/[Open Telemetry 文档]。
+
+== 手动仪器化
+
+当您需要从不支持自动仪器化的代码部分获取指标、跟踪或日志时，可以使用手动仪器化。例如不支持的库、自家代码或业务级指标。
+
+要捕获这些数据，您需要修改您的应用程序。
+
+. 将 Open Telemetry SDK 作为依赖项包含
+. 在您的应用程序中添加代码，以在需要的地方捕获指标、跨度或日志
+
+有关此内容的详细文档请参见 https://opentelemetry.io/docs/languages/java/instrumentation/[Open Telemetry Java SDK 文档页面]。
+
+确保使用 OTLP 导出器（这是默认设置）和 https://opentelemetry.io/docs/languages/java/instrumentation/#_autoconfiguration[自动配置]。在部署应用程序时，服务名称和导出器是 xref:/setup/otel/languages/sdk-exporter-config.adoc[通过环境变量配置的]。
+
+== SUSE Observability 中的指标
+
+ifdef::ss-ff-stackpacks2_enabled[]
+对于某些 Java 指标，例如垃圾收集器指标，SUSE Observability 已在相关组件上定义了图表。对于 Kubernetes，图表可在 Pods 上获得。可以 xref:/setup/custom-integrations/metric-bindings/index.adoc[添加更多指标的图表]，这适用于自动仪器化的指标，也适用于手动仪器化的特定于应用程序的指标。
+
+ifndef::ss-ff-stackpacks2_enabled[]
+对于某些 Java 指标，例如垃圾收集器指标，SUSE Observability 已在相关组件上定义了图表。对于 Kubernetes，图表可在 Pods 上获得。可以 xref:/use/metrics/k8s-add-charts.adoc[为更多指标添加图表]，这适用于自动仪器化的指标，也适用于手动仪器化的应用程序特定指标。
+endif::[]

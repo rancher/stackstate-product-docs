@@ -1,0 +1,367 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Inicio
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: Introducción a la derivación de Topología a partir de OpenTelemetry
+
+== Descripción general
+
+Este documento proporciona una guía de inicio para construir topología a partir de datos de trazas de OpenTelemetry (OTel) utilizando mapeos de componentes y relaciones empaquetados como parte de un StackPack.
+
+Esta guía se centra en la topología que se puede visualizar inmediatamente en el producto utilizando datos de telemetría que ya están presentes.
+La topología de ejemplo que se generará modela cómo una instancia de servicio ejecuta un proceso, derivado de los atributos de recursos de OpenTelemetry.
+
+== Requisitos previos
+
+* Ya recoges trazas de OpenTelemetry.
+* Estás creando o ampliando un StackPack.
+* Te sientes cómodo con YAML y conceptos básicos de OTel (recursos, spans).
+
+La guía se centrará en:
+
+* Topología basada en trazas (`TRACES` señal únicamente)
+* Instancias de servicio (no servicios lógicos)
+* Visibilidad del proceso en tiempo de ejecución
+
+[NOTE]
+====
+En esta guía, los mapeos de componentes y relaciones se expresan como configuración YAML que se empaqueta, prueba y despliega como parte de un StackPack.
+====
+
+== Configurando la topología
+
+El objetivo es visualizar la topología en tiempo de ejecución, disponible de inmediato sin configuración adicional por parte del usuario.
+
+Específicamente, queremos modelar:
+
+[source]
+----
+service instance (component) -> executes (relation) -> process (component)
+----
+
+Dónde:
+
+* Un `service instance` representa una instancia en ejecución de un servicio instrumentado.
+* Un `process` representa el proceso del sistema operativo que ejecuta ese servicio.
+* La relación `executes` indica que la instancia de servicio está respaldada por, y se ejecuta dentro de, un proceso específico.
+
+Toda esta topología se deriva automáticamente de los datos de trazas de OpenTelemetry.
+
+== Datos de trazas
+
+Además de la identidad del servicio, el recurso de trazas incluye atributos a nivel de proceso, tales como:
+
+* `process.pid`
+* `process.executable.name`
+* `process.executable.path`
+* `process.command_args`
+* `process.runtime.name`
+* `process.runtime.version`
+
+Estos atributos nos permiten modelar la topología a nivel de proceso sin correlación de spans ni heurísticas.
+
+== Trazas a la topología: el modelo mental
+
+Antes de escribir cualquier configuración, es importante entender cómo funcionan conceptualmente los mapeos de topología.
+
+=== Componentes
+
+Un mapeo de componente describe cómo se crea un nodo de topología a partir de datos de telemetría.
+
+Cada mapeo de componente:
+
+* Selecciona telemetría utilizando condiciones.
+* Extrae valores utilizando expresiones.
+* Produce un único componente lógico identificado por un identificador estable.
+
+En esta guía:
+
+* Las instancias de servicio son proporcionadas por el OpenTelemetry StackPack.
+* Los procesos se derivan de los atributos de recurso de OpenTelemetry.
+
+=== Relaciones
+
+Un mapeo de relación describe cómo se crea una conexión entre dos componentes.
+
+Cada mapeo de relación:
+
+* Resuelve un `sourceId` y un `targetId`.
+* Asigna un tipo de relación.
+* Produce un edge dirigido.
+
+Las relaciones se crean una vez que tanto los componentes fuente como destino existen.
+
+== Creando componentes de servicio a partir de trazas
+
+=== Definiendo lo que significa un "servicio"
+
+Antes de escribir el mapeo, necesitamos tomar una decisión de diseño.
+
+Para esta guía, un servicio se define como:
+
+* Identificado por `service.namespace` + `service.name`.
+* Estable a lo largo de las ampliaciones.
+* Independiente de las instancias de servicio.
+
+Esto mantiene la topología legible y de baja cardinalidad.
+
+== Componentes de instancia de servicio
+
+Los componentes de instancia de servicio ya están definidos y proporcionados por el OpenTelemetry StackPack.
+
+Cada instancia de servicio:
+
+* Se deriva de `service.name`, `service.namespace` y `service.instance.id`.
+* Representa una instancia concreta en ejecución de un servicio.
+* Es estable a lo largo de las señales (trazas y métricas).
+
+Debido a que este mapeo ya existe, no se redefine en esta guía.
+En su lugar, construimos sobre él.
+
+== Creando componentes de proceso a partir de trazas
+
+=== Definiendo lo que significa un "proceso"
+
+Para esta guía, un proceso se define como:
+
+* Identificado por `host.name`, `process.pid` y metadatos ejecutables.
+* Limitado a un único entorno de ejecución.
+* Derivado exclusivamente de los atributos de recursos de OpenTelemetry.
+
+Esto mantiene la topología de baja cardinalidad, al tiempo que expone detalles útiles del tiempo de ejecución.
+
+=== Mapeo de componentes del proceso
+
+El siguiente mapeo de componentes crea un componente de topología por cada proceso observado.
+
+[,yaml]
+----
+_type: "OtelComponentMapping"
+name: "OTel Process"
+description: "Represents an operating system process derived from OpenTelemetry"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "executableName"
+    value: >-
+      ${
+        'process.executable.name' in resource.attributes ?
+         resource.attributes['process.executable.name'] :
+          'process.command' in resource.attributes ?
+           resource.attributes['process.command'] :
+            'process.command_args' in resource.attributes ?
+             resource.attributes['process.command_args'] :
+                resource.attributes['process.executable.path']
+      }
+output:
+  identifier: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  name: "${vars.hostname}/${vars.executableName}:${vars.pid}"
+  typeName: "process"
+  typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:process"
+  layerName: "Applications"
+  domainName: "Open Telemetry"
+  required:
+    tags:
+      - source: "process-component"
+        target: "custom"
+      - source: "${resource.attributes}"
+        pattern: "process.(.*)"
+        target: "process.${1}"
+expireAfter: 900000
+----
+
+==== Cómo funciona este mapeo
+
+* Procesamos solo datos de trazas (señal TRACES).
+* Se crea un componente de proceso siempre que `host.name` y `process.pid` estén presentes.
+* El identificador es estable durante la vida del proceso.
+* Se añade una etiqueta personalizada para ayudar en el filtrado (para la etapa de verificación).
+
+Sustituye `<stackpack-name>` por el nombre de tu StackPack (si aún no tienes uno, usa cualquier nombre que te guste, como `mystackpack`).
+
+== Creando relaciones de ejecución
+
+Ahora que las instancias de servicio y los procesos existen como componentes, podemos conectarlos.
+
+=== La instancia de servicio ejecuta el proceso
+
+El siguiente mapeo de relación crea una relación de `executes` de una instancia de servicio a un proceso.
+
+Este mapeo se adapta de la relación existente "el host ejecuta la instancia de servicio" proporcionada por el StackPack de OpenTelemetry.
+
+[,yaml]
+----
+_type: "OtelRelationMapping"
+name: "Executes Relation (Service Instance -> Process)"
+description: "Service instance executes a process"
+identifier: "urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance"
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: |
+      'service.name' in resource.attributes &&
+      'host.name' in resource.attributes &&
+      'process.pid' in resource.attributes
+    action: "CREATE"
+vars:
+  - name: "namespace"
+    value: "${'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ? resource.attributes['service.namespace'] : 'default'}"
+  - name: "service"
+    value: "${resource.attributes['service.name']}"
+  - name: "instanceId"
+    value: >-
+      ${
+        'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
+        resource.attributes['service.instance.id'] :
+        resource.attributes['service.name']
+      }
+  - name: "hostname"
+    value: "${resource.attributes['host.name']}"
+  - name: "pid"
+    value: "${string(int(resource.attributes['process.pid']))}"
+output:
+  sourceId: "urn:opentelemetry:namespace/${vars.namespace}:service/${vars.service}:serviceInstance/${vars.instanceId}"
+  targetId: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
+  typeName: "executes"
+expireAfter: 900000
+----
+
+==== Cómo funciona este mapeo
+
+* Procesamos solo datos de trazas (`TRACES` señal).
+* La relación se crea siempre que estén presentes tanto los datos de la instancia de servicio como los del proceso.
+* No se requiere correlación de span.
+* La expresión `targetId` debe ser la misma que la expresión `output.identifier` del mapeo del componente de proceso.
+
+El identificador de relación se construye (automáticamente) a partir de `sourceId` y `targetId`, y tiene la forma: `sourceId-relationId`
+
+Sustituye `<stackpack-name>` por el nombre de tu StackPack (si aún no tienes uno, usa cualquier nombre que te guste, como `mystackpack`).
+
+== Validando los mapeos de OTel
+
+Hay dos opciones para validar la corrección de los mapeos antes de desplegarlos en producción.
+
+1. Usando el comando `sts stackpack test-deploy` para empaquetar, subir e instalar/actualizar un StackPack que contenga los mapeos a una instancia {stackstate-product-name} en ejecución.
+2. Usando los comandos `sts otel-component-mapping apply` y `sts otel-relation-mapping apply` para crear/actualizar los mapeos individualmente a una instancia {stackstate-product-name} en ejecución.
+
+=== Probando los mapeos juntos en un StackPack
+
+Suponiendo que ambos mapeos están dentro de tu StackPack, se pueden probar juntos. Consulta la documentación de xref:/setup/cli/cli-sts.adoc[StackPack CLI] para más información.
+
+Usando el comando `sts stackpack test-deploy --yes`, puedes:
+
+* Empaquetar, subir e instalar/actualizar el StackPack
+* Validar el componente declarativo y los mapeos de relación que residen en el StackPack (por ejemplo, corrección de expresiones, referencia correcta de los datos de señal de entrada según el filtrado proporcionado)
+
+[NOTE]
+====
+El comando `sts stackpack test` no alimenta datos de traza de ejemplo a través de los mapeos.
+Para verificar que los mapeos producen la topología correcta, asegúrate de que los datos de traza de OpenTelemetry se envían a SUSE Observability.
+Consulta el xref:/setup/custom-integrations/develop.adoc[Desarrollar una Integración Personalizada (StackPack)] para más detalles sobre cómo usar `sts stackpack test`.
+====
+
+=== Probando los mapeos individualmente
+
+Suponiendo que los mapeos de componente y relación anteriores están definidos en archivos YAML, se pueden aplicar individualmente.
+
+Sustituye `<stackpack-name>` por el nombre de tu StackPack (si aún no tienes uno, usa cualquier nombre que te guste, como `mystackpack`).
+
+[,sh]
+----
+$ sts otel-component-mapping apply -f process-component-mapping.yaml
+✅ OTel component mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-component-mapping:process, Name: OTel Process
+
+$ sts otel-relation-mapping apply -f process-relation-mapping.yaml
+✅ OTel Relation Mapping upserted successfully! Identifier: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance, Name: Executes Relation (Service Instance -> Process)
+----
+
+== Topología resultante
+
+Cuando se aplican estos mapeos, la topología resultante forma un gráfico de topología de servicio-proceso derivado completamente de los datos de traza.
+
+Por ejemplo, usando el `checkoutservice` de la aplicación de demostración de OTel, visualmente, la topología debería aparecer como:
+
+----
+checkoutservice (instance) ─> executes ─> checkoutservice (process)
+----
+
+Esta topología se actualiza continuamente a medida que llegan nuevas trazas y expira automáticamente cuando el tráfico se detiene.
+
+=== Ver la topología resultante en {stackstate-product-name}
+
+Utiliza la UI {stackstate-product-name} para obtener confirmación visual de que los mapeos se materializan en la topología esperada.
+
+1. Abre la UI {stackstate-product-name} en el valor de Helm `baseUrl` configurado
+2. En la barra lateral izquierda, haz clic en `Open Telemetry > Services Instances`
+3. Encuentra el `checkoutservice` en la lista de instancias de servicio y haz clic en el nombre de la instancia de servicio para abrir la página de Visión General/Aspectos Destacados del Componente
+4. En la barra de navegación secundaria en la parte superior, selecciona `Topology`
+5. En la capa `Outgoing`, debería ser visible un nodo `od-checkoutservice-<hostId>/checkoutservice:1 (process)`
+6. Selecciona el nodo de proceso y haz clic en `Explore component`
+7. Debería ser visible una topología más pequeña que visualiza `checkoutservice -> executes -> checkoutservice (process)`
+
+Consulta la guía de xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[Troubleshooting] para obtener consejos sobre cómo depurar si la topología no se materializa como se esperaba.
+
+image:custom-integrations/otel-mappings/topology_from_otel_guide_topology_result.png[Resultado de la topología]
+
+Para ver todos los componentes de proceso creados como resultado de la aplicación del mapeo de componentes de proceso, utiliza el comando `sts topology inspect` con un filtro de tipo.
+
+[,sh]
+----
+$ sts topology inspect --type process
+NAME                                                             | TYPE    | IDENTIFIERS
+od-productcatalogservice-cf9d7b456-rlmp5/productcatalogservice:1 | process | urn:opentelemetry:process/od-productcatalogservice-cf9d7b456-rlmp5:1
+od-adservice-6c9dfcfdbf-5pdqr//opt/java/openjdk/bin/java:1       | process | urn:opentelemetry:process/od-adservice-6c9dfcfdbf-5pdqr:1
+od-frontend-685db864d9-6sh4d/node:17                             | process | urn:opentelemetry:process/od-frontend-685db864d9-6sh4d:17
+od-paymentservice-bf8f84b5d-n8k77/node:17                        | process | urn:opentelemetry:process/od-paymentservice-bf8f84b5d-n8k77:17
+od-quoteservice-859b8c5c4c-nkmgq/public/index.php:7              | process | urn:opentelemetry:process/od-quoteservice-859b8c5c4c-nkmgq:7
+od-checkoutservice-78885bf588-59p9d/checkoutservice:1            | process | urn:opentelemetry:process/od-checkoutservice-78885bf588-59p9d:1
+od-accountingservice-7c546cb977-xjp2c/accountingservice:1        | process | urn:opentelemetry:process/od-accountingservice-7c546cb977-xjp2c:1
+----
+
+== Limpiando
+
+Para eliminar los mapeos creados en esta guía, utiliza los siguientes comandos:
+
+Sustituye `<stackpack-name>` por el nombre de tu StackPack.
+
+[,sh]
+----
+$ sts otel-component-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-component-mapping:process
+✅ OTel Component Mapping deleted: urn:stackpack:mystackpack:shared:otel-component-mapping:process
+
+$ sts otel-relation-mapping delete --identifier urn:stackpack:<stackpack-name>:shared:otel-relation-mapping:executes-service-instance
+✅ OTel Relation Mapping deleted: urn:stackpack:mystackpack:shared:otel-relation-mapping:executes-service-instance
+----
+
+
+== Resumen
+
+En esta guía, tú:
+
+* Construiste sobre los componentes de instancia de servicio existentes.
+* Derivaste componentes de proceso de los atributos de recursos de OpenTelemetry.
+
+== Pasos siguientes
+
+Desde aquí, puedes:
+
+* Adjuntar procesos a hosts o contenedores.
+* Introduce relaciones de base de datos o de mensajería.
+* Introduce capas específicas de tiempo de ejecución (JVM, Go, Node.js).
+* Explora gráficos de servicio basados en métricas.
+* Amplía el StackPack con capas de topología adicionales.
+* Familiarízate con un mapeo detallado de componentes y relaciones xref:/setup/custom-integrations/otelmappings/schemas-ref.adoc[reference].
+
+endif::ss-ff-stackpacks2_enabled[]

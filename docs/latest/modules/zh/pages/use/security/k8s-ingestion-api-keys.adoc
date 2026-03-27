@@ -1,0 +1,55 @@
+= API 密钥（已弃用）
+:revdate: 2025-07-22
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+使用 API 密钥对 {stackstate-product-name} 进行身份验证，以将遥测数据发送到 {stackstate-product-name}。在 Helm 代理安装中，通过设置 `stackstate.apiKey` helm 变量来完成此操作。
+
+API 密钥和摄取 API 密钥已弃用，将在 2026 年第四季度去除。服务令牌现在是首选的身份验证机制，也用于发送遥测数据。
+
+在 xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[StackPack 安装流程] 中，将新集群添加到 {stackstate-product-name} 的流程包括创建一个与 Rancher RBAC 中的 RBAC Agent 兼容的集群专用令牌。
+
+== 从 API 密钥迁移到服务令牌
+
+有 2 种选项可以从使用单个 API 密钥迁移到使用服务令牌进行遥测数据。
+
+1. 每个集群使用单独的服务令牌。这需要更多的设置工作，但支持 Rancher RBAC。
+2. 为所有 Kubernetes 集群和 OTel 收集器统一使用单个服务令牌。这不支持 Rancher RBAC。
+
+在将所有代理和 Open Telemetry 收集器迁移到服务令牌后，您现在可以从 Helm 值中删除 `global.receiverApiKey` 或 `stackstate.apiKey`，以安装 {stackstate-product-name}，并运行 `helm upgrade` 以应用更改。
+
+=== 每个集群使用一个服务令牌。
+
+1. 在 UI 中打开 Kubernetes Stackpack
+2. 展开您正在迁移的集群
+3. 单击 "创建新服务令牌" 按钮以获取集群特定服务令牌并复制该令牌
+4. 按照 Stackpack 中的代理安装/升级说明，使用服务令牌作为 API 密钥，将代理重新部署到集群。
+
+您也可以使用 CLI 生成令牌，而不是使用 UI，如 xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[此处所述]。确保还将 `update-scoped-permissions` 权限分配给您正在迁移的集群。其他步骤与用户界面中的步骤相同。
+
+=== 迁移到单个服务令牌。
+
+按照 xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[此处文档] 的说明，使用 CLI 生成服务令牌。
+
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+请勿添加`update-scoped-permissions`权限，因为它不适用于从多个集群使用的令牌。
+
+按照用户界面中Kubernetes StackPack和xref:setup/otel/getting-started/getting-started-k8s.adoc[Open Telemetry收集器文档]中的说明重新部署您的代理和Open Telemetry收集器。按照说明将生成的服务令牌用作API密钥。
+
+== 从数据摄取 API 密钥迁移。
+
+数据摄取 API 密钥被外部工具用于将数据（如指标、事件和跟踪）摄取到 SUSE Observability 集群中。
+这些工具包括 STS 代理和/或 OTel 收集器。服务令牌具有相同的功能，甚至更多。按照与 API 密钥（在前一节中）相同的步骤，迁移到 <<_migrate_to_a_service_token_per_cluster,每个集群一个服务令牌>> 或 <<_migrate_to_a_single_service_token,单个服务令牌>>。
+
+== 详细信息：
+
+* xref:use/security/k8s-service-tokens.adoc[服务词元]

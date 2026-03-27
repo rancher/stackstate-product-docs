@@ -1,0 +1,215 @@
+= 数据保留
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+SUSE Observability 施加数据保留限制，以节省存储空间并提高性能。您可以配置数据保留期限，以平衡存储的数据量与 SUSE Observability 的性能和数据可用性。
+
+== 拓扑图数据的保留
+
+默认情况下，拓扑图数据将保留 30 天。这意味着拓扑图的最新状态将始终被保留；只有超过 30 天的历史数据会被去除。
+在某些情况下，保留超过 30 天的历史数据或减少到少于 30 天以节省磁盘空间可能是有用的。可以通过 helm 图表配置拓扑保留：
+
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week
+    retentionHours: 144
+----
+
+请注意，延长数据保留期限将导致存储的数据量增加，并需要更多的存储空间。这也可能影响视图的性能。
+
+在降低保留期限时，释放磁盘空间可能需要一些时间（至少 15 分钟）。
+
+=== 排查拓扑磁盘空间问题
+如果遇到磁盘空间问题，namenode 中会出现一行日志 - `Not enough replicas was chosen. Reason: {NOT_ENOUGH_STORAGE_SPACE=1`。请按照以下步骤处理此情况：
+
+* 降低保留期限，准备实例以立即恢复磁盘空间，并触发 helm 升级：
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+hbase:
+  console:
+    enabled: true
+    replicaCount: 1
+  hdfs:
+    datanode:
+      extraEnv:
+        open:
+          HDFS_CONF_dfs_datanode_du_reserved_pct: "0"
+----
+
+[NOTE]
+====
+在继续下一步之前，请等待所有 hbase 和 hdfs pod 稳定。
+====
+
+* 触发历史数据的压缩：
+[,bash]
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediately\(\)\)"
+----
+
+* 使用以下命令跟踪进度：
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediatelyStatus\(\)\)"
+----
+
+* 如果预算的磁盘空间不足，请联系 <support-portal-link>。
+
+* 恢复设置。一旦状态不再显示为进行中 - `Status(inProgress = false, lastFailure = null)`，请触发 helm 升级，将新的保留设置作为您 values.yaml 的一部分进行保存。
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+----
+
+== 事件和日志的保留
+
+=== SUSE Observability 数据存储
+
+如果您使用的是与 SUSE Observability 一起提供的事件/日志存储，您的数据默认将保留 30 天。在大多数情况下，默认设置足以在此时间段内存储所有索引。
+
+==== 为 Elasticsearch 配置磁盘空间
+
+在某些情况下，可能需要调整可用于 Elasticsearch 的磁盘空间以及其分配给日志和事件的方式，例如如果您预计某种特定数据类型会有大量数据到达。
+
+这是 Elasticsearch 的完整磁盘空间和保留配置的片段，包括默认值。
+
+[,yaml]
+----
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 250Gi
+stackstate:
+  components:
+    receiver:
+      esDiskSpaceShare: 70
+      # Number of days to keep the logs data on Es
+      retention: 7
+    e2es:
+      esDiskSpaceShare: 30
+      # Number of days to keep the events data on Es
+      retention: 30
+----
+
+可用于 Elasticsearch 的磁盘空间通过 `elasticsearch.volumeClaimTemplate.resources.requests.storage` 键进行配置。在初始安装后更改此值需要一些 xref:/setup/data-management/data_retention.adoc#_resizing_storage[额外步骤]。
+
+NOTE: 这是每个 ElasticSearch 实例的磁盘空间。对于非高可用性，这是总可用磁盘空间，但对于高可用性，有 3 个实例和 1 的复制因子。最终结果是总可用的 Elasticsearch 存储将是 `(250Gi * 3) / 2 = 375Gi`。
+根据 `esDiskSpaceShare` 和 `retention`，为每种数据类型保留一部分 Elasticsearch 磁盘空间。
+
+== 指标的保留
+
+SUSE Observability 使用 VictoriaMetrics 存储指标。它的默认保留期为 30 天。Helm 图表为 1 或 2 个 VictoriaMetrics 实例分配磁盘空间并配置保留期，如下所示：
+
+----
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 250Gi
+    retentionPeriod: 1 # month
+# For HA setups:
+victoria-metrics-1:
+  server:
+    persistentVolume:
+      size: 250Gi
+    retentionPeriod: 1 # month
+----
+
+在初始安装后更改卷大小需要一些 xref:/setup/data-management/data_retention.adoc#_resizing_storage[额外步骤]。
+
+要更改保留期限，请在您的 custom values.yaml 中用相同的值覆盖两个 `retentionPeriod` 键，并 xref:/setup/data-management/data_retention.adoc#_update_stackstate[更新 SUSE Observability]：
+
+* 支持以下可选后缀：h（小时）、d（天）、w（周）、y（年）。如果未设置后缀，则持续时间为月份。
+* 最小保留期限为 24 小时或 1 天。
+
+== 更新 SUSE Observability
+
+在对 values.yaml 进行更改后，需要更新 SUSE Observability 以将这些更改应用于运行时。这可能会导致服务重启时出现短暂的停机。要更新 SUSE Observability，请使用安装 SUSE Observability 时使用的相同命令，并确保包含所有配置文件，包括所做的更改：
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Kubernetes]
+* xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift]：
+
+== 调整存储大小
+
+在大多数集群中，可以在创建持久卷后调整其大小，而不会中断应用程序的操作。但是，这不能仅通过更改 SUSE Observability Helm 图表中 values.yaml 中配置的存储大小来完成。相反，需要几个步骤：
+
+. 验证所使用的存储类是否可以调整大小
+. 调整卷的大小
+. 更新 values.yaml 并应用更改（可选但推荐）
+
+以下示例使用 VictoriaMetrics 存储作为示例。SUSE Observability 安装在 `suse-observability` 名称空间中。卷将调整大小为 500Gi。
+
+=== 验证存储类是否支持调整大小
+
+使用以下 `kubectl` 命令获取使用的存储类，并检查 `allowVolumeExpansion` 是否设置为 true。
+
+[,bash]
+----
+# Get the PVC's for SUSE Observability
+kubectl get pvc --namespace suse-observability
+
+# There is a storage class column in the output, copy it and use it to describe the storage class
+kubectl describe storageclass <storage-class-name>
+----
+
+验证输出是否包含以下行：
+
+----
+AllowVolumeExpansion:  True
+----
+
+如果该行缺失或设置为 `False`，请咨询您的 Kubernetes 管理员以确认是否支持调整大小并可以启用。
+
+=== 调整卷的大小
+
+SUSE Observability Helm 图表创建一个有状态集，该集具有创建持久卷声明 (PVC) 的模板。此模板仅用于创建 PVC 一次，之后将不再应用，并且也不允许更改。因此，要增大 PVC 的大小，需要编辑 PVC 本身。
+
+要更改 PVC 大小，请使用以下命令。
+
+[,bash]
+----
+# Get the PVC's for SUSE Observability, allows us to check the current size and copy the name of the PVC to modify it with the next command
+kubectl get pvc --namespace suse-observability
+
+# Patch the PVC's specified size, change it to 500Gi
+kubectl patch pvc server-volume-stackstate-victoria-metrics-0-0 -p '{"spec":{"resources": { "requests": { "storage": "500Gi" }}}}'
+
+# Get the PVC's again to verify if it was resized, depending on the provider this can take a while
+kubectl get pvc --namespace suse-observability
+----
+
+=== 更新 values.yaml 并应用更改
+
+对持久卷声明 (PVC) 所做的更改将在 PVC 的生命周期内保持，但每当进行干净安装时，这些更改将会丢失。然而，更重要的是，调整 PVC 大小后，集群状态与 values.yaml 中期望状态的定义之间现在存在差异。因此，建议也更新 values.yaml。为了规避此更改不被允许的事实，首先去除有状态集（但保持 Pod 运行），以使用新设置重新创建它。
+
+[NOTE]
+====
+此步骤不会更改 PVC 本身的大小，因此仅执行此步骤将导致运行环境没有任何变化。
+====
+
+
+首先编辑您的 values.yaml，以更新您刚刚调整大小的 PVC 的卷大小。请参阅 xref:/setup/data-management/data_retention.adoc#_retention_of_metrics[指标] 或 xref:/setup/data-management/data_retention.adoc#_retention_of_events_traces_and_logs[事件和日志] 部分。
+
+现在去除存储已更改的应用程序的有状态集：
+
+[,bash]
+----
+# List all stateful sets, check that all are ready, if not please troubleshoot that first
+kubectl get statefulset --namespace suse-observability
+
+# Delete the
+kubectl delete statefulset --namespace suse-observability stackstate-victoria-metrics-0 --cascade=orphan
+----
+
+最后 xref:/setup/data-management/data_retention.adoc#_update_[更新 SUSE Observability] 以使用新设置。

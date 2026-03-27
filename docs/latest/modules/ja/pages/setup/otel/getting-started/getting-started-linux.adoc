@@ -1,0 +1,215 @@
+= OpenTelemetry入門
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+これから作成する、監視が必要なアプリケーションのセットアップはこちらです。
+
+* Linuxホスト上で実行されている監視対象のアプリケーション/ワークロード
+* 同じLinuxホスト上で実行されているOpen Telemetryコレクター
+* SUSE ObservabilityまたはSUSE Cloud Observability
+
+image::otel/open-telemetry-collector-linux.png[Linuxホスト上でOpen Telemetryコレクターが実行されているアプリケーションの計測]
+
+== Open Telemetryコレクターをインストールします。
+
+[NOTE]
+====
+本番環境のセットアップでは、コレクターをインストールすることを強く推奨します。これにより、サービスがデータを迅速にオフロードでき、コレクターが再試行、バッチ処理、暗号化、さらには機密データのフィルタリングなどの追加処理を行うことができます。
+====
+
+
+まず、コレクターをインストールします。次のように設定します：
+
+* 計測されたアプリケーションから、潜在的に多くのデータを受信する
+* 収集したデータにホスト属性を付加する
+* トレースのメトリクスを生成する
+* データをSUSE Observabilityに転送し、APIキーを使用して認証を行います。
+
+さらに、接続に問題がある場合はデータの送信を再試行します。
+
+=== サービストークンを作成します。
+
+サービストークンを作成するには、2つの方法があります：
+
+* **SUSE Observability UI** - 画面の左上をクリックしてメインメニューを開き、`StackPacks` > `Open Telemetry`に移動します。 まだ行っていない場合は、`INSTALL`ボタンをクリックします。 `CREATE NEW SERVICE TOKEN`ボタンをクリックして、その値をクリップボードにコピーします。
+* **SUSE Observability CLI** - xref:/use/security/k8s-service-tokens.adoc#_manage_service_tokens[サービストークンの管理]を参照してください。
+
+サービストークンの値は、以下の指示で`<SERVICE_TOKEN>`に言及されている場所で使用する必要があります。
+
+=== コレクターをインストールして構成します。
+
+コレクターは、ほとんどのLinuxバージョンとアーキテクチャ向けのパッケージ（apk、deb、rpm）を提供し、自動サービス構成には`systemd`を使用します。インストールするには、https://github.com/open-telemetry/opentelemetry-collector-releases/releases[Githubの最新リリース]を見つけ、例のURLを最新バージョンを使用するように更新します。
+
+[tabs]
+====
+DEB AMD64::
++
+--
+
+[,bash]
+----
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.123.1/otelcol-contrib_0.123.1_linux_amd64.deb
+sudo dpkg -i otelcol-contrib_0.123.1_linux_amd64.deb
+----
+
+--
+DEB ARM64::
++
+--
+
+[,bash]
+----
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.123.1/otelcol-contrib_0.123.1_linux_arm64.deb
+sudo dpkg -i otelcol-contrib_0.123.1_linux_arm64.deb
+----
+
+--
+RPM AMD64::
++
+--
+
+[,bash]
+----
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.123.1/otelcol-contrib_0.123.1_linux_amd64.rpm
+sudo rpm -iv1 otelcol-contrib_0.123.1_linux_amd64.rpm
+----
+
+--
+RPM ARM64::
++
+--
+
+[,bash]
+----
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.123.1/otelcol-contrib_0.123.1_linux_arm64.rpm
+sudo rpm -iv1 otelcol-contrib_0.123.1_linux_arm64.rpm
+----
+
+--
+====
+
+他のインストールオプションについては、https://opentelemetry.io/docs/collector/installation/#_linux[Open Telemetryの指示]を使用してください。
+
+インストール後、`/etc/otelcol-contrib/config.yaml` を編集してコレクタの構成を変更します。ファイルを次の`config.yaml`の例のように変更し、`<otlp-suse-observability-endpoint:port>`をあなたのOTLPエンドポイントに置き換え（エンドポイントについてはxref:/setup/otel/otlp-apis.adoc[OTLP API]を参照）、`<SERVICE_TOKEN>`のためにサービストークンを挿入します。
+
+.config.yaml
+[,yaml]
+----
+receivers:
+  otlp:
+    protocols:
+      # Only bind to localhost to keep the collector secure, see https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md#safeguards-against-denial-of-service-attacks
+      grpc:
+        endpoint: 127.0.0.1:4317
+      http:
+        endpoint: 127.0.0.1:4318
+  # Collect own metrics
+  prometheus:
+    config:
+      scrape_configs:
+      - job_name: 'otel-collector'
+        scrape_interval: 10s
+        static_configs:
+        - targets: ['0.0.0.0:8888']
+extensions:
+  health_check: {}
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+  # Use the API key from the env for authentication
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "<SERVICE_TOKEN>"
+exporters:
+  nop: {}
+  debug: {}
+  otlp/suse-observability:
+    compression: snappy
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+    endpoint: <otlp-suse-observability-endpoint:port>
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch: {}
+  # Optionally include resource information from the system running the collector
+  resourcedetection/system:
+    detectors: [env, system] # Replace system with gcp, ec2, azure when running in cloud environments
+    system:
+      hostname_sources: ["os"]
+connectors:
+  # Generate metrics for spans
+  spanmetrics:
+    metrics_expiration: 5m
+    namespace: otel_span
+service:
+  extensions: [ bearertokenauth, health_check, pprof, zpages ]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection/system, batch]
+      exporters: [debug, spanmetrics, otlp/suse-observability]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, batch, resourcedetection/system]
+      exporters: [debug, otlp/suse-observability]
+    logs:
+      receivers: [otlp]
+      processors: []
+      exporters: [nop]
+----
+
+
+最後にコレクターを再起動します。
+
+[,bash]
+----
+sudo systemctl restart otelcol-contrib
+----
+
+コレクタのログを見るには、次を使用します。
+
+[,bash]
+----
+sudo journalctl -u otelcol-contrib
+----
+
+== アプリケーションからテレメトリデータを収集します。
+
+テレメトリデータを収集する一般的な方法は、Open Telemetry SDKを使用してアプリケーションを計測することです。いくつかの言語のためのクイックスタートガイドを文書化しましたが、他にも多くの言語があります。
+
+* xref:/setup/otel/instrumentation/java.adoc[Java]
+* xref:/setup/otel/instrumentation/dot-net.adoc[.NET]
+* xref:/setup/otel/instrumentation/node.js.adoc[Node.js]
+
+SDKには追加の設定は必要ありません。デフォルトでは、OTLPまたはOTLP over HTTP（サポートされているプロトコルに応じて）を介してlocalhostにエクスポートします。
+
+他の言語については、https://opentelemetry.io/docs/languages/[opentelemetry.io] のドキュメントに従ってください。
+
+== 結果を表示します。
+
+SUSE Observabilityに移動し、Open Telemetry Stackpackがインストールされていることを確認してください（メインメニュー \-> Stackpacks）。
+
+少し待つと、アプリケーションがトラフィックを処理する場合、Open Telemetryのサービスおよびサービスインスタンスの概要でサービス名の下に見つけることができるはずです。トレースは、xref:/use/traces/k8sTs-explore-traces.adoc[トレースエクスプローラー]およびxref:/use/views/k8s-traces-perspective.adoc[トレースの視点]にサービスおよびサービスインスタンスのコンポーネントとして表示されます。スパンメトリクスおよび言語特有のメトリクス（利用可能な場合）は、コンポーネントのxref:/use/views/k8s-metrics-perspective.adoc[メトリクスの視点]で利用可能になります。
+
+== 次のステップ
+
+ifdef::ss-ff-stackpacks2_enabled[]
+アプリケーションのために、サービスやサービスインスタンスなどのコンポーネントに新しいチャートを追加することができます。xref:/setup/custom-integrations/metric-bindings/index.adoc[ガイド]に従ってください。メトリクスを使用してxref:/use/alerting/k8s-monitors.adoc[新しいモニター]を作成し、アプリケーションが利用できない場合やパフォーマンスの問題が発生した場合に通知を受け取るためにxref:/use/alerting/notifications/configure.adoc[通知]を設定することも可能です。
+endif::[]
+
+ifndef::ss-ff-stackpacks2_enabled[]
+アプリケーションのために、サービスやサービスインスタンスなどのコンポーネントに新しいチャートを追加することができます。xref:/use/metrics/k8s-add-charts.adoc[ガイド]に従ってください。メトリクスを使用してxref:/use/alerting/k8s-monitors.adoc[新しいモニター]を作成し、アプリケーションが利用できない場合やパフォーマンスの問題が発生した場合に通知を受け取るためにxref:/use/alerting/notifications/configure.adoc[通知]を設定することも可能です。
+endif::[]
+
+== その他の情報
+
+* xref:/use/security/k8s-service-tokens.adoc[サービストークン]
+* xref:/setup/otel/otlp-apis.adoc[Open Telemetry API]
+* xref:/setup/otel/collector.adoc[Open Telemetry Collectorの設定をカスタマイズする]
+* xref:/setup/otel/instrumentation/README.adoc[Open Telemetry SDKs]

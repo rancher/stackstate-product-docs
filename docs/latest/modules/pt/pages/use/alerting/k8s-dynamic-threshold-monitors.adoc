@@ -1,0 +1,50 @@
+= Monitores de Limiar Dinâmico
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Visão Geral
+
+Para métricas que variam significativamente ao longo do tempo e diferem de serviço para serviço, um monitor de Limiar Dinâmico fornece detecção de anomalias simples e eficiente.  Ele utiliza dados de 1, 2 ou 3 semanas atrás, além do passado recente, como contexto para comparar os dados atuais.
+
+Os dados da "janela de verificação" são comparados com os fornecidos pelo contexto histórico usando o teste de Anderson-Darling.  Isso impõe muito poucas suposições sobre a distribuição dos dados.  O teste é particularmente sensível a outliers nas extremidades superior e inferior da distribuição.  A métrica pode ser suave, espinhosa ou ter alguns "níveis" - como os valores dos dados são comparados diretamente, sem ajuste de modelo, o monitor de Limiar Dinâmico é muito robusto.
+
+Para métricas que variam suavemente ao longo do tempo (por exemplo, em uma escala de 5 minutos), o número efetivo de pontos de dados é menor do que o número bruto.  O DT compensa isso, de modo que o mesmo monitor pode ser usado para uma ampla gama de métricas sem a necessidade de ajustar seus parâmetros.
+
+Existem alguns parâmetros que podem ser configurados para a função do monitor:
+
+* `falsePositiveRate`: diga `!!float 1e-8` - a sensibilidade do monitor ao comportamento desviado.  Um valor mais baixo suprime mais (falsos) positivos, mas também pode levar a falsos negativos (anomalias não percebidas).
+* `checkWindowMinutes`: diga `10` minutos - a janela de verificação precisa ser equilibrada entre alertas rápidos (valores pequenos) e anomalias corretamente identificadas (valores altos).  Um punhado de pontos de dados funciona bem na prática.
+* `historicWindowMinutes`: diga `120` (2 horas) - delimitado em torno do tempo atual, mas então uma ou mais semanas atrás - então de 1 hora antes do tempo atual até 1 hora depois.  Além disso, as 2 horas antes da janela de verificação são utilizadas.  O monitor de limite dinâmico compara a distribuição desses dados históricos com os pontos de dados na janela de verificação.
+* `historySizeWeeks`: diga `2` - o número de semanas que os dados são retirados para contexto histórico.  Pode ser `1`, `2` ou `3`.
+* `removeTrend`: para métricas que apresentam comportamento de tendência (por exemplo, número de solicitações), de modo que o valor absoluto difira de semana para semana, essa tendência (o valor médio) pode ser considerada.
+* `includePreviousDay`: tipicamente `false` - para métricas que não têm um padrão semanal, mas apenas um diário, isso permite o uso de dados mais recentes.
+
+== Exemplo de Monitor de Limiar Dinâmico
+
+Um Monitor implementado usando a função de Limiar Dinâmico se parece com:
+
+----
+  - _type: "Monitor"
+    name: "<name of the monitor>"
+    identifier: "urn:custom:monitor:<identifier for the monitor>"
+    status: "DISABLED"
+    description: "<description>"
+    function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+    arguments:
+      telemetryQuery:
+        query: "<metric to bind to component>"
+        unit: s
+        aliasTemplate: "<name for the metric>"
+      topologyQuery: <topology query for the components to bind to>
+      falsePositiveRate: <floating point number, e.g. !!float 1e-8>
+      checkWindowMinutes: <integer, e.g. 10>
+      historicWindowMinutes: <integer, e.g. 120>
+      historySizeWeeks: <integer: 1, 2 or 3>
+      includePreviousDay: <boolean>
+      removeTrend: <boolean>
+    intervalSeconds: 60
+    remediationHint: "<how to remediate deviating states>"
+----
+
+xref:/use/alerting/k8s-add-monitors-cli.adoc[O monitor pode ser implementado usando o guia em Adicionar um monitor de limite a componentes usando a CLI]

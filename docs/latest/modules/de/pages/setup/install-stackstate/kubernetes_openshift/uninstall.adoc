@@ -1,0 +1,81 @@
+= Deinstallieren Sie SUSE Observability
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Übersicht
+
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_un_install_the_helm_chart[Deinstallieren Sie das Helm-Chart]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[Entfernen Sie verbleibende Ressourcen]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_manually_created_resources[Entfernen Sie manuell erstellte Ressourcen]
+
+== Deinstallieren Sie das Helm-Chart
+
+[NOTE]
+====
+Die Deinstallation des Helm-Charts bewahrt alle Daten, da Helm die Persistent Volume Claims und den Namespace nicht entfernt. Um diese ebenfalls zu entfernen, xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[entfernen Sie die verbleibenden Ressourcen].
+====
+
+
+Um SUSE Observability zu deinstallieren, ist die erste Aktion, den `helm uninstall` Befehl auszuführen. Dieser Befehl entfernt alle Ressourcen, die durch den `helm upgrade --install` Befehl erstellt wurden.
+
+Deinstallieren Sie das `suse-observability` Release aus dem `suse-observability` Namespace wie folgt, ersetzen Sie den Namespace oder den Release-Namen durch beliebige benutzerdefinierte Namen, die während der Installation verwendet wurden:
+
+----
+helm uninstall --namespace suse-observability suse-observability
+----
+
+Der Befehl wird fast sofort abgeschlossen, aber das Herunterfahren aller Pods und das Entfernen aller anderen Ressourcen kann eine Weile dauern. Überprüfen Sie, ob alle Pods verschwunden sind mit:
+
+----
+kubectl get pods --namespace suse-observability
+----
+
+Wenn Sie SUSE Observability später erneut installieren möchten und die alten Daten weiterhin verfügbar sein sollen, reicht dies aus. Für eine vollständige Deinstallation fahren Sie mit den nächsten beiden Abschnitten fort.
+
+== Verbleibende Ressourcen entfernen
+
+[CAUTION]
+====
+Das Entfernen der Persistent Volume Claims und/oder des Namespaces führt dazu, dass alle Daten verloren gehen, die in SUSE Observability gespeichert waren.
+====
+
+
+Um den Namespace und damit die Persistent Volume Claims und deren verknüpfte Persistent Volumes zu entfernen, entfernen Sie einfach den gesamten Namespace:
+
+----
+kubectl delete namespace suse-observability
+----
+
+Wenn der Befehl abgeschlossen ist, sind der Namespace und alle Volumes entfernt.
+
+Um nur die Persistent Volume Claims (PVCs) zu entfernen und den Namespace beizubehalten, führen Sie aus:
+
+----
+kubectl delete pvc --all -n suse-observability
+----
+
+Auf OpenShift hat das Helm-Chart auch eine Sicherheitskontextbeschränkung (SCC) erstellt. Es wird nicht automatisch von Helm bereinigt, sondern muss manuell entfernt werden:
+
+----
+# The scc is always named suse-observability-<namespace>
+oc delete scc suse-observability-suse-observability
+----
+
+== Manuell erstellte Ressourcen entfernen
+
+[NOTE]
+====
+Selbst wenn Sie beabsichtigen, SUSE Observability im selben Cluster, jedoch in einem anderen Namespace, neu zu installieren, können diese entfernt werden. Die Ressourcen enthalten Verweise auf den SUSE Observability-Namespace.
+====
+
+
+Wie in den xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_manually_create_cluster_wide_resources[erforderlichen Berechtigungen] beschrieben, könnte es notwendig gewesen sein, dass Ihr Cluster-Administrator einige Ressourcen manuell erstellt hat. Diese Ressourcen können jetzt wieder entfernt werden, aber das ist ebenfalls eine manuelle Aufgabe, die Administratorberechtigungen erfordert.
+
+Löschen Sie die Clusterrolle und die Clusterrollenbindungen, die wie folgt erstellt wurden:
+
+----
+kubectl delete cluster-role suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authentication
+----

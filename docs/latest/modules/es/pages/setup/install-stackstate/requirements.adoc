@@ -1,0 +1,150 @@
+= Requisitos
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+Los requisitos para <<_client_browser,SUSE Observability client (browser)>> se pueden encontrar al final de la página.
+
+=== Compatibilidad con Rancher y Kubernetes
+Consulta la página de compatibilidad aquí xref:setup/install-stackstate/Compatibility Self Hosted.adoc[compatibilidad de Rancher/Kubernetes].
+
+=== Requisitos de recursos
+
+Existen diferentes opciones de instalación disponibles para SUSE Observability. Es posible instalar SUSE Observability ya sea en una configuración de alta disponibilidad (HA) o en una instancia única (no-HA). La configuración no-HA se recomienda solo para fines de prueba. Para entornos de producción, se recomienda instalar SUSE Observability en una configuración de alta disponibilidad (HA). Para una ampliación estándar de producción, el chart de Helm de SUSE Observability desplegará muchos servicios en una configuración redundante con 3 instancias de cada servicio.
+
+En la tabla a continuación puedes encontrar los requisitos de recursos para las diferentes opciones de instalación. Para la configuración HA puedes encontrar diferentes perfiles de instalación dependiendo del tamaño del entorno que se está observando.
+Un nodo observado en esta tabla de dimensionamiento se considera que tiene 4 vCPUs y 16 GB de memoria, nuestro `default node size`.
+Si los nodos en tu clúster observado son más grandes, pueden contar como múltiples `default nodes`, así que un nodo de 12 vCPU y 48 GB cuenta como 3 `default nodes` bajo observación al elegir un perfil.
+
+|===
+|  | prueba | 10 no-HA | 20 no-HA | 50 no-HA | 100 no-HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *Solicitudes de CPU*
+| 7.0
+| 7.0
+| 9.3
+| 14.0
+| 23.6
+| 49.6
+| 61.6
+| 85.1
+| 212.1
+
+| *Límites de CPU*
+| 15.1
+| 15.1
+| 19.4
+| 28.8
+| 47.9
+| 105.2
+| 128.3
+| 176.2
+| 281
+
+| *Solicitudes de Memoria*
+| 22.7Gi
+| 22.7Gi
+| 26.5Gi
+| 30.9Gi
+| 47.0Gi
+| 127.0Gi
+| 142.1Gi
+| 166.4Gi
+| 263.9Gi
+
+| *Límites de Memoria*
+| 23.3Gi
+| 23.3Gi
+| 27.2Gi
+| 31.0Gi
+| 47.2Gi
+| 131.8Gi
+| 146.7Gi
+| 171.2Gi
+| 321.7Gi
+|===
+
+[NOTE]
+====
+El requisito mostrado para el perfil representa la cantidad total de recursos necesarios para ejecutar el servidor de Observabilidad de SUSE.
+Para asegurar que todos los diferentes servicios del servidor de Observabilidad de SUSE puedan ser asignados:
+
+* Para instalaciones no HA, el tamaño de nodo recomendado es de 4VCPU, 8GB
+* Para instalaciones HA de hasta 500 nodos, el tamaño mínimo recomendado de nodo es de 8VCPU, 16GB
+* Para instalaciones HA de 4000 nodos, el tamaño mínimo recomendado de nodo es de 16VCPU, 32GB
+====
+
+
+Estos son solo los límites superior e inferior de los recursos que pueden ser consumidos por SUSE Observability en las diferentes opciones de instalación. El uso real de recursos dependerá de las características utilizadas, los límites de recursos configurados y los patrones de uso dinámico, como el escalado de Deployment o DaemonSet. Para nuestros clientes autoalojados, recomendamos comenzar con los requisitos predeterminados y monitorizar el uso de recursos de los componentes de SUSE Observability.
+
+[NOTE]
+====
+Los requisitos mínimos no incluyen capacidad de CPU/memoria de repuesto para garantizar actualizaciones de aplicaciones sin problemas.
+====
+
+
+Para la instalación de SUSE Observability, por favor, sigue las instrucciones de instalación que se proporcionan a continuación:
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes]
+* xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[OpenShift]
+
+=== Almacenamiento
+
+SUSE Observability utiliza reclamaciones de volumen persistente para los servicios que necesitan almacenar datos. La clase de almacenamiento predeterminada para el clúster se utilizará para todos los servicios a menos que esto sea anulado por los valores especificados en la línea de comandos o en un archivo `values.yaml`. Todos los servicios vienen con un tamaño de volumen preconfigurado que debería ser suficiente para comenzar, pero se puede personalizar más tarde utilizando variables según sea necesario.
+
+[NOTE]
+====
+Para entornos de producción, no se recomienda ni se admite NFS para la provisión de almacenamiento en SUSE Observability debido al riesgo potencial de corrupción de datos.
+====
+
+
+Para nuestros diferentes perfiles de instalación, los siguientes son los requisitos de almacenamiento predeterminados:
+
+|===
+|  | prueba | 10 no-HA | 20 no-HA | 50 no-HA | 100 no-HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *Retención (días)*
+| 3
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+
+| *Requisito de almacenamiento*
+| 163GB
+| 358GB
+| 401GB
+| 508GB
+| 562GB
+| 2.8TB
+| 2.9TB
+| 3.9TB
+| 7.5TB
+|===
+
+[NOTE]
+====
+Las estimaciones de almacenamiento presentadas tienen en cuenta un valor predeterminado de 14 días de retención para instalaciones no-HA y 1 mes para instalaciones HA. Para instancias de prueba de corta duración, los tamaños de almacenamiento se pueden reducir aún más.
+====
+
+
+Para más detalles sobre los valores predeterminados utilizados, consulta la página xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Configurar almacenamiento].
+
+=== Límites de recursos del espacio de nombres
+
+No se recomienda establecer un ResourceQuota, ya que esto puede interferir con las solicitudes de recursos. Los recursos requeridos por SUSE Observability variarán según las características utilizadas, los límites de recursos configurados y los patrones de uso dinámico, como el escalado de Deployment o DaemonSet.
+
+Si es necesario establecer un ResourceQuota para tu implementación, el límite de recursos del espacio de nombres debe ajustarse a los xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[requisitos de dimensionamiento] del nodo.
+
+== Cliente (navegador)
+
+Para utilizar la GUI de SUSE Observability, debes usar uno de los siguientes navegadores web:
+
+* Chrome
+* Firefox

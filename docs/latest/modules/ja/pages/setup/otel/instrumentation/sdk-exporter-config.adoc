@@ -1,0 +1,91 @@
+= SDKエクスポーターの設定
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observabilityにデータを送信するために、アプリケーションを計測するために使用されるSDKは、ビルトインのエクスポーターを使用します。運用準備完了のセットアップでは、計測済みアプリケーションの近くに<<_with_a_collector_production_setup,a collector>>を配置してデータをSUSE Observabilityに送信しますが、計測済みアプリケーションが<<_without_a_collector,直接送信>>することも可能です。
+
+== コレクター使用時（運用準備完了のセットアップ）
+
+=== Kubernetes用SDKエクスポーター設定
+
+すべてのSDKは、言語に関係なく、Open Telemetryのhttps://opentelemetry.io/docs/concepts/glossary/#_service[サービス名]とエクスポーターエンドポイント（すなわち、テレメトリが送信される場所）を定義するために同じ設定を使用します。
+
+これらは、計測済みアプリケーションの環境変数を設定することで構成できます。
+
+Kubernetesでは、ワークロードのマニフェストにこれらの環境変数を設定します（`<the-service-name>`をアプリケーションサービスの名前に置き換えてください）：
+
+[,yaml]
+----
+...
+spec:
+  containers:
+  - env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317
+    - name: OTEL_SERVICE_NAME
+      value: <the-service-name>
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+...
+----
+
+例に指定されたエンドポイントは、コレクターがxref:/setup/otel/collector.adoc[インストールガイド]のデフォルトを使用してインストールされたと仮定しています。ポート`4317`を使用し、OTLPプロトコルの`gRPC`バージョンを使用します。一部の計測はHTTPのみをサポートしており、その場合はポート`4318`を使用してください。
+
+サービス名は、すでに存在するKubernetesラベルから導出することもできます。例えば、次のようになります：
+
+[,yaml]
+----
+spec:
+  containers:
+  - env:
+    - name: OTEL_SERVICE_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.labels['app.kubernetes.io/component']
+----
+
+=== 他のインストール用SDKエクスポーター設定
+
+SDKを設定するには、アプリケーションのためにこれらの環境変数を設定してください：
+
+[,bash]
+----
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://<the-host-for-the-collector>:4317"
+export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
+export OTEL_SERVICE_NAME="<the-service-name>"
+export OTEL_RESOURCE_ATTRIBUTES='service.namespace=<the-namespace>'
+----
+
+例では、ポート`4317`を使用し、OTLPプロトコルの`gRPC`バージョンを使用します。一部の計測はHTTPのみをサポートしており、ポート`4318`を使用し、プロトコルは`http`に設定されています。使用している言語のSDKドキュメントを参照して、SDKがサポートしているプロトコルを確認してください。`OTEL_EXPORTER_OLTP_ENDPOINT`と`OTEL_EXPORTER_OTLP_PROTOCOL`は省略可能で、デフォルト値があり、ローカルホストの優先エンドポイントにデータを送信します。
+
+`OTEL_RESOURCE_ATTRIBUTES`はオプションであり、サービスネームスペースを定義することに加えて、カンマ区切りのリストでより多くのリソース属性を設定するために使用できます。
+
+=== gRPC vs HTTP
+
+OTLP、オープンテレメトリプロトコルは、HTTP上でgRPCとprotobufをサポートしています。前のセクションでは、エクスポータープロトコルが`gRPC`に設定されており、通常は最良のパフォーマンスを提供します。SDKがgRPCをサポートしていないことに加えて、HTTPを好む他の理由もあります：
+
+* 一部のファイアウォールはgRPCを処理するように設定されていません。
+* （リバース）プロキシやロードバランサーは、追加の設定なしではgRPCをサポートしない場合があります。
+* gRPCの長期間接続は、負荷分散時に問題を引き起こす可能性があります。
+
+gRPCの代わりにHTTPに切り替えるには、プロトコルを`http`に変更し、ポート`4318`を使用します。
+
+要約すると、gRPCが機能しない場合はHTTPを使用してみることができます：
+
+* `grpc`プロトコルはコレクターのポート`4317`を使用します。
+* `http`プロトコルはコレクターのポート`4318`を使用します。
+
+== コレクターなし
+
+小規模なテストセットアップでは、計測済みアプリケーションからSUSE Observabilityに直接データを送信することが便利です。上記のコレクターセットアップとの唯一の違いは、`OTEL_EXPORTER_OTLP_ENDPOINT`に異なる値を使用することです：
+
+* gRPCの場合、SUSE ObservabilityのOTLPエンドポイントを使用します。xref:/setup/otel/otlp-apis.adoc[OTLP APIsページ]を参照してください。
+* HTTPの場合、SUSE ObservabilityのOTLP over HTTPエンドポイントを使用します。xref:/setup/otel/otlp-apis.adoc[OTLP APIsページ]を参照してください。
+
+[NOTE]
+====
+コレクターのURL*と*ポートの両方をSUSE Observabilityのエンドポイントに置き換えます。SUSE Observabilityのインストールに応じて、ポートは異なります。
+====
+

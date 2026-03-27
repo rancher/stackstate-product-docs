@@ -1,0 +1,170 @@
+= Auto-instrumentação de uma função Lambda NodeJS
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Introdução
+
+Este documento orienta você na auto-instrumentação de funções Lambda NodeJS usando OpenTelemetry. A auto-instrumentação simplifica o processo de adicionar observabilidade às suas funções Lambda, capturando automaticamente métricas de desempenho e informações de rastreamento.
+
+== Pré-requisitos
+
+Antes de começar, certifique-se de ter o seguinte:
+
+* *Função AWS Lambda:* A função que você deseja instrumentar.
+* *SDK OpenTelemetry:* Instalado em sua função Lambda.
+* *Coletor OpenTelemetry:* Implantado e configurado.
+* *SUSE Observability:* Uma conta com SUSE Observability onde você enviará seus dados de telemetria.
+* *MemÃ³ria:* Memória suficiente para executar a Lambda, incluindo a instrumentação.
+
+== Valores fornecidos pelo ambiente
+
+OpenTelemetry depende de vários valores de configuração para funcionar corretamente. Esses valores controlam aspectos como coleta de dados, exportação e comunicação com sistemas de backend. Para tornar sua implantação do OpenTelemetry flexível e adaptável a diferentes ambientes, você pode fornecer essas configurações por meio de variáveis de ambiente. Essa abordagem oferece vários benefícios:
+
+* *Configuração Dinâmica:* Ajuste facilmente as configurações sem alterações no código.
+* *Configurações Específicas do Ambiente:* Configure o OpenTelemetry de forma diferente para desenvolvimento, teste e produção.
+* *Gerenciamento de Segredos:* Armazene informações sensíveis, como chaves de API, de forma segura.
+
+Para a configuração do OpenTelemetry descrita nesta documentação, você precisará definir as seguintes variáveis de ambiente:
+
+* *`VERBOSITY`:* Controla o nível de detalhe nos logs do OpenTelemetry.
+* *`OTLP_API_KEY`:* Autentica sua função Lambda para enviar dados ao SUSE Observability.
+* *`OTLP_ENDPOINT`:* Especifica o endereço da sua instância do SUSE Observability.
+* *`OPENTELEMETRY_COLLECTOR_CONFIG_FILE`:* Aponta para o arquivo de configuração do OpenTelemetry Collector.
+* *`AWS_LAMBDA_EXEC_WRAPPER`:* Configura o ambiente de execução da Lambda para usar o manipulador do OpenTelemetry.
+* *`OTLP_INSTR_LAYER_ARN`:* Fornece o ARN (Amazon Resource Name) da camada de instrumentação do OpenTelemetry, que adiciona os componentes necessários para a auto-instrumentação.
+* *`OTLP_COLLECTOR_LAYER_ARN`:* Fornece o ARN da camada do coletor do OpenTelemetry, que é responsável por receber, processar e exportar dados de telemetria.
+
+*Considerações Importantes:*
+
+* *Ponto de Extremidade GRPC:* O `OTLP_ENDPOINT` deve especificar o ponto de extremidade gRPC da sua instância do SUSE Observability sem nenhum prefixo `http` ou `https`. Use a porta 443 para comunicação segura.
+* *Camadas Específicas da Região:* As camadas Lambda são vinculadas à região. Certifique-se de que os ARNs que você usa para `OTLP_INSTR_LAYER_ARN` e `OTLP_COLLECTOR_LAYER_ARN` correspondam à região da AWS onde sua função Lambda está implantada.
+* *Correspondência de Arquitetura:* A camada do OpenTelemetry Collector é específica da arquitetura. Escolha o ARN correto para a arquitetura da sua função Lambda (por exemplo, `amd64` ou `arm64`).
+
+*Um exemplo completo: esteja ciente de que você precisa inserir seus próprios valores.*
+
+[,yaml]
+----
+VERBOSITY: "normal"
+OTLP_API_KEY: "<your api key for sending data to SUSE Observability here>"
+OTLP_ENDPOINT: "<your-dns-name-for-suse-observability-here>:443"
+OPENTELEMETRY_COLLECTOR_CONFIG_FILE: "/var/task/collector.yaml"
+AWS_LAMBDA_EXEC_WRAPPER: "/opt/otel-handler"
+OTLP_INSTR_LAYER_ARN: "arn:aws:lambda:<aws-region>:184161586896:layer:opentelemetry-nodejs-0_11_0:1"
+OTLP_COLLECTOR_LAYER_ARN: "arn:aws:lambda:<aws-region>:184161586896:layer:opentelemetry-collector-<amd64|arm64>-0_12_0:1"
+----
+
+== O arquivo collector.yaml
+
+A configuração de coleta do OTEL define como os dados coletados devem ser distribuídos.  Isso é feito no arquivo collector.yaml colocado no diretório src onde os arquivos lambda podem ser encontrados.  Abaixo está um exemplo de arquivo collector.yaml.
+
+[,yaml]
+----
+# collector.yaml in the root directory
+# Set an environemnt variable 'OPENTELEMETRY_COLLECTOR_CONFIG_FILE' to
+# '/var/task/collector.yaml'
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  debug:
+    verbosity: "${env:VERBOSITY}"
+  otlp/stackstate:
+    headers:
+      Authorization: "SUSEObservability ${env:OTLP_API_KEY}"
+    endpoint: "${env:OTLP_ENDPOINT}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []
+    metrics:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []
+----
+
+Este coletor é usado para enviar os dados para um próximo coletor, que é utilizado para amostragem de cauda, agregação de métricas, etc., antes de enviar os dados para SUSE Observability. Este segundo coletor também precisa ser executado no ambiente do cliente.
+
+Dependendo da funcionalidade desejada, ou com base em fatores como volumes de dados gerados por lambdas instrumentados dessa forma, os coletores podem ser configurados para processamento em lote, amostragem de cauda e outras técnicas de pré-processamento para reduzir o impacto em SUSE Observability.
+
+Veja esta página para xref:/setup/otel/proxy-collector.adoc[orientações e instruções] sobre como configurar um coletor em lote que atua como um proxy de segurança para SUSE Observability.
+Veja esta página para xref:/setup/otel/collector.adoc[instruções] sobre como configurar um coletor que também faz amostragem de cauda.
+Para mais informações sobre a configuração do processador no coletor opentelemetry, consulte a https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/README.md[documentação oficial].
+
+image::otel/aws_nodejs_otel_auto_instrumentation.svg[Instrumentação do AWS Lambda com Opentelemetry]
+
+== Package.json
+
+Certifique-se de adicionar `"@opentelemetry/auto-instrumentations-node": "^0.55.2",+` a `package.json` e executar `npm install` para adicionar as bibliotecas de cliente de auto-instrumentação à sua Lambda NodeJS.
+
+== Solução de problemas
+
+=== Tempos de espera
+
+Se a adição das camadas OTEL Lambda resultar em lambdas que excedem o tempo limite (verificar os logs pode indicar que o coletor foi solicitado a desligar enquanto ainda estava ocupado, por exemplo, vendo a seguinte entrada de log):
+
+[,json]
+----
+{
+    "level": "info",
+    "ts": 1736867469.2312617,
+    "caller": "internal/retry_sender.go:126",
+    "msg": "Exporting failed. Will retry the request after interval.",
+    "kind": "exporter",
+    "data_type": "traces",
+    "name": "otlp/stackstate",
+    "error": "rpc error: code = Canceled desc = context canceled",
+    "interval": "5.125929689s"
+}
+----
+
+pouco depois de receber a instrução para desligar:
+
+[,json]
+----
+{
+    "level": "info",
+    "ts": 1736867468.4311068,
+    "logger": "lifecycle.manager",
+    "msg": "Received SHUTDOWN event"
+}
+----
+
+Isso indica que os recursos alocados para a função Lambda não são suficientes para permitir sua execução, além da sobrecarga adicional imposta pela instrumentação OTEL.  Para corrigir essa situação, a alocação de memória e as configurações de tempo limite da função Lambda podem ser ajustadas conforme necessário, permitindo que ela conclua seu trabalho e que a coleta de telemetria ocorra com sucesso.
+
+Tente modificar as propriedades MemorySize e TimeOut das lambdas que estão falhando:
+
+[,yaml]
+----
+MemorySize: 256
+Timeout: 25
+----
+
+Observe que a alocação de memória padrão é de 128MB
+
+Observe que o incremento de memória é de 128MB
+
+Observe que o Timeout é um valor inteiro que denota segundos.
+
+=== Autenticação e Filtragem de IP de Origem
+
+Se você encontrar `error 403 Unauthorized` ao enviar dados do coletor para seu cluster, ou para qualquer coletor de pré-processamento ou proxy, verifique se o endereço IP de origem do gateway NAT da VPC corresponde ao que está na lista de permissões do coletor, também verifique se o mecanismo de autenticação escolhido corresponde à origem e ao destino, e também se as credenciais (segredos, etc.) estão configuradas corretamente.
+
+Para mais informações sobre como configurar a autenticação para o coletor opentelemetry, consulte a https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configauth/README.md[documentação oficial].
+
+== Referências
+
+Documentação de auto-instrumentação → https://opentelemetry.io/docs/faas/lambda-auto-instrument/
+
+Documentação do coletor → https://opentelemetry.io/docs/faas/lambda-collector/
+
+Página de lançamentos do GitHub para encontrar os últimos ARNs → https://github.com/open-telemetry/opentelemetry-lambda/releases
+
+Configuração do Exportador OTLP → https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/

@@ -1,0 +1,132 @@
+= Rastreamento de requisições
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Observabilidade através de balanceadores de carga, malhas de serviço e entre clusters
+
+O SUSE Observability pode observar conexões entre serviços e pods em diferentes clusters, ou quando as conexões passam por uma malha de serviço ou balanceador de carga. A observação dessas conexões é feita através de `request tracing`. Requisições rastreadas resultarão em conexões na xref:/use/views/k8s-topology-perspective.adoc[perspectiva de topologia], para fornecer insights sobre as dependências em um aplicativo e ajudar a encontrar a causa raiz de um incidente.
+
+== Como funciona
+
+O rastreamento de requisições é feito injetando um cabeçalho único (o cabeçalho `X-Request-ID`) em todo o tráfego HTTP. Esse cabeçalho único é observado tanto no cliente quanto no servidor através de uma sonda eBPF instalada com o SUSE Observability Agent. Essas observações são enviadas para o SUSE Observability, que utiliza as observações para entender quais clientes e servidores estão conectados.
+
+Os cabeçalhos `X-Request-Id` são <<_enabling_the_trace_header_injection_sidecar,injetados>> por um proxy sidecar que pode ser injetado automaticamente pelo SUSE Observability Agent. O sidecar é injetado por um https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#_mutatingadmissionwebhook[webhook mutável], que injeta o sidecar em cada pod para o qual a anotação `http-header-injector.stackstate.io/inject: enabled` está definida. A injeção de sidecar não é suportada no OpenShift.
+
+Também é possível adicionar o cabeçalho `X-Request-Id` se sua aplicação <<_add_the_trace_header_id_to_an_existing_proxy,já tiver um proxy ou LoadBalancer>>, estiver implantada em um cluster Kubernetes habilitado para <<_add_the_trace_header_id_with_envoy_filter,malha de serviço Istio>> ou através de <<_instrument_your_application,instrumentação do seu próprio código>>. A vantagem disso é que o proxy sidecar extra não é necessário.
+
+== Habilitando a injeção do cabeçalho de rastreamento sidecar
+
+Habilitar a injeção do cabeçalho de rastreamento é um processo em duas etapas:
+
+. Instale o webhook mutável no cluster adicionando `--set httpHeaderInjectorWebhook.enabled=true` à invocação do helm upgrade ao instalar o agente SUSE Observability. Por padrão, o injetor de sidecar gera seu próprio certificado autoassinado, exigindo funções de cluster para instalar esses certificados no cluster. Também é possível xref:/setup/agent/k8sTs-agent-request-tracing-certificates.adoc[gerenciar seus próprios certificados] em um ambiente mais restrito.
+. Para cada pod que possui um endpoint que processa requisições http(s), coloque a anotação `http-header-injector.stackstate.io/inject: enabled` para que o sidecar seja injetado.
+
+[CAUTION]
+====
+*Habilitar o webhook mutável só terá efeito após a reinicialização do pod*
+
+Se a anotação for colocada antes que o webhook seja instalado. Instalar o webhook não tem efeito até que os pods sejam reiniciados.
+====
+
+
+=== Desabilitando a injeção do cabeçalho de rastreamento
+
+Desabilitar a injeção do cabeçalho de rastreamento pode ser feito com o processo reverso:
+
+. Remova a anotação `http-header-injector.stackstate.io/inject: enabled` de todos os pods.
+. Reimplante o Agente de Observabilidade SUSE sem a configuração `--set httpHeaderInjectorWebhook.enabled=true`.
+
+[CAUTION]
+====
+*Desabilitar o webhook mutável só terá efeito após a reinicialização do pod*
+
+Se o passo 1 for pulado e apenas o webhook mutável for desabilitado, todos os pods precisam ser reiniciados para que o sidecar seja removido.
+====
+
+
+=== Sobrecarga
+
+O rastreamento de requisições adiciona uma pequena quantidade fixa de sobrecarga de CPU para cada cabeçalho de requisição HTTP que é injetado e observado. A quantidade exata depende do sistema em que é executado, portanto, é aconselhável habilitar esse recurso primeiro em um ambiente de aceitação para observar o impacto antes de mover para a produção. O proxy sidecar utiliza um mínimo de 25Mb de memória por pod com o qual é implantado, até um máximo de 40Mb.
+
+== Adicione o id do cabeçalho de rastreamento a um proxy existente
+
+Para adicionar o cabeçalho `X-Request-Id` de um proxy existente, duas propriedades são importantes:
+
+. Cada par de requisição/resposta deve receber um ID único.
+. O cabeçalho `X-Request-Id` deve ser adicionado tanto à requisição quanto à resposta, para ser observado tanto no cliente quanto no servidor.
+
+=== Adicione o id do cabeçalho de rastreamento no envoy
+
+No envoy, o cabeçalho `X-Request-Id` pode ser habilitado configurando `generate_request_id: true` e `always_set_request_id_in_response: true` para https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto[conexões HTTP]
+
+== Istio
+
+Um https://istio.io/latest/docs/reference/config/networking/envoy-filter/[Filtro Envoy] pode ser usado para definir o cabeçalho de rastreamento para o Envoy.
+
+=== Adicione o id do cabeçalho de rastreamento com o filtro envoy
+
+Use `kubectl` para aplicar a seguinte definição ao cluster Kubernetes,
+
+[,yaml]
+----
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: responsed-x-request-id-always
+  namespace: istio-system
+spec:
+  configPatches:
+    - applyTo: NETWORK_FILTER
+      match:
+        context: ANY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: MERGE
+        value:
+          typed_config:
+            '@type': >-
+              type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            always_set_request_id_in_response: true
+            generate_request_id: true
+            preserve_external_request_id: true
+  priority: 0
+----
+
+== Instrumente sua aplicação
+
+Também é possível adicionar o cabeçalho `X-Request-Id` tanto do lado do cliente a cada solicitação, quanto do lado do servidor a cada resposta. É importante garantir que cada solicitação/resposta receba um valor `X-Request-Id` único. Além disso, o `X-Request-Id` requer que, se um ID já estiver presente em uma solicitação, a resposta deve conter esse mesmo ID.
+
+== Sistemas/tecnologias suportados
+
+* HTTP/1.0 e HTTP/1.1 com keepAlive
+* Injeção de cabeçalho de rastreamento e observação de rastreamento em tráfego não criptografado
+* Observação de rastreamento para tráfego criptografado com OpenSSL
+* Injeção de cabeçalho de rastreamento ao lado do LinkerD
+* Qualquer LoadBalancer que encaminhe o cabeçalho `X-Request-Id` em solicitações e respostas
+* Qualquer solução de rede entre clusters que encaminhe o cabeçalho `X-Request-Id` em solicitações e respostas
+
+== Problemas conhecidos
+
+=== Nenhum sidecar é injetado para meus pods
+
+Para garantir que sua configuração esteja correta, primeiro valide se os seguintes passos foram realizados:
+
+* A flag `--set httpHeaderInjectorWebhook.enabled=true` foi definida durante a instalação do agente
+* O pod tem `http-header-injector.stackstate.io/inject: enabled` definido
+* O pod foi reiniciado
+
+Se isso não resolver o problema, o seguinte pode ser a causa:
+
+==== Políticas de rede do cluster
+
+O cluster pode ter políticas de rede configuradas, impedindo que o apiserver do plano de controle do Kubernetes contate o mutatingvalidationwebhook que injeta o sidecar. Para validar isso, verifique os logs do kube-apiserver, que estão no namespace kube-system ou podem ser gerenciados pelo seu provedor de nuvem. Um erro como o seguinte deve ser encontrado nesses logs:
+
+----
+Failed calling webhook, failing open stackstate-agent-http-header-injector-webhook.stackstate.io: failed calling webhook "stackstate-agent-http-header-injector-webhook.stackstate.io": failed to call webhook: Post "https://stackstate-agent-http-header-injector.monitoring.svc:8443/mutate?timeout=10s": context deadline exceeded
+----
+
+Se isso acontecer, certifique-se de adaptar suas políticas de rede do cluster para que o apiserver possa alcançar o mutatingvalidationwebhook.

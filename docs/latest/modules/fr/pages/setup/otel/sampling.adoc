@@ -1,0 +1,131 @@
+= Échantillonnage
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+L'échantillonnage est utilisé pour réduire le volume de données qui est exporté vers SUSE Observability, tout en compromettant le moins possible la qualité des données de télémétrie. La principale raison d'appliquer l'échantillonnage est de réduire les coûts (de réseau, de stockage, etc.).
+
+Si vos applications génèrent peu de données, il n'est pas nécessaire d'échantillonner et cela peut même nuire à l'observabilité en raison d'un manque de données de télémétrie. Cependant, si votre application a un volume de trafic significatif, par exemple plus de 1000 spans par seconde, il peut déjà être judicieux d'appliquer l'échantillonnage.
+
+Il existe 2 types principaux d'échantillonnage : l'échantillonnage par tête et l'échantillonnage par queue.
+
+== Échantillonnage par tête
+
+L'échantillonnage par tête prend la décision d'échantillonnage (qu'il s'agisse d'exporter les données ou non) le plus tôt possible. Par conséquent, la décision ne peut pas être basée sur l'ensemble de la trace, mais uniquement sur les informations, très limitées, qui sont disponibles. Le collecteur otel dispose du https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[processeur d'échantillonnage probabiliste] qui implémente l'échantillonnage de probabilité cohérente. Le sampler est configurable et prend une décision d'échantillonnage basée sur l'identifiant de trace (utile pour les traces) ou sur un hachage d'un attribut (utile pour les journaux). Cela garantit que tous les spans d'une trace sont toujours échantillonnés ou non et vous aurez des traces complètes dans SUSE Observability.
+
+Les avantages de l'échantillonnage par tête sont :
+
+* Facile à comprendre
+* Le réseau est plus efficace.
+* Simple à configurer
+
+Mais un inconvénient est qu'il est impossible de prendre des décisions d'échantillonnage sur une trace entière, par exemple pour échantillonner toutes les traces échouées et seulement une petite sélection des traces réussies.
+
+Pour activer l'échantillonnage par tête, configurez le processeur et incluez-le dans les pipelines. Cet exemple échantillonne 1 trace sur 4 en fonction de l'identifiant de trace :
+
+[,yaml]
+----
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+----
+
+== Échantillonnage par queue
+
+L'échantillonnage par queue reporte la décision d'échantillonnage jusqu'à ce qu'une trace soit (presque) complète. Cela permet à l'échantillonneur par queue de prendre des décisions d'échantillonnage basées sur l'ensemble de la trace, par exemple pour toujours échantillonner les traces échouées et/ou les traces lentes. Il existe de nombreuses autres possibilités, telles que l'échantillonnage basé sur des attributs spécifiques ou la participation à des services.
+
+Le Collecteur OpenTelemetry fournit un https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[processeur d'échantillonnage par queue] qui peut être utilisé pour appliquer des politiques d'échantillonnage de queue.
+
+L'avantage principal de l'échantillonnage par queue est la flexibilité supplémentaire qu'il offre pour prendre des décisions d'échantillonnage basées sur des données de trace complètes, plutôt que sur des informations partielles disponibles lors de la création de spans individuels.
+
+
+[WARNING]
+====
+Bien qu'avantageux, l'échantillonnage par queue présente les inconvénients suivants :
+
+* Plus difficile à configurer et à comprendre.
+* Doit être doté d'un état pour stocker les spans pour les traces jusqu'à ce qu'une décision d'échantillonnage soit prise.
+* Par conséquent, également (beaucoup) plus d'utilisation des ressources.
+* Le sampler pourrait ne pas suivre et nécessite une surveillance et une mise à l'échelle supplémentaires pour cela.
+====
+
+Pour activer l'échantillonnage par queue, configurez le processeur et incluez-le dans les pipelines.
+
+[,yaml]
+----
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+    - name: rate-limited-composite
+      type: composite
+      composite:
+        max_total_spans_per_second: 500
+        policy_order: [errors, slow-traces, rest]
+        composite_sub_policy:
+        - name: errors
+          type: status_code
+          status_code:
+            status_codes: [ ERROR ]
+        - name: slow-traces
+          type: latency
+          latency:
+            threshold_ms: 1000
+        - name: rest
+          type: always_sample
+        rate_allocation:
+        - policy: errors
+          percent: 33
+        - policy: slow-traces
+          percent: 33
+        - policy: rest
+          percent: 34
+----
+
+L'exemple échantillonne :
+
+* Un maximum de 500 spans par seconde.
+* tous les spans dans les traces qui ont des erreurs jusqu'à 33 % du maximum.
+* tous les spans dans les traces plus lentes qu'une seconde jusqu'à 33 % du maximum.
+* autres spans jusqu'au taux maximum autorisé.
+
+Pour plus de détails sur les options de configuration et les différentes politiques, utilisez le https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[readme d'échantillonnage de queue].
+
+Cependant, ce n'est pas du type « configurez-le et oubliez-le ». Si son utilisation des ressources commence à augmenter, vous devez étendre en utilisant plusieurs collecteurs afin de gérer l'échantillonnage par queue, ce qui nécessitera également https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[routage] pour diriger le trafic en fonction de l'ID de trace.
+
+== Échantillonnage des traces en combinaison avec des métriques de span.
+
+Dans la section de démarrage, la configuration du collecteur n'inclut pas l'échantillonnage. Lors de l'ajout d'échantillonnage, nous devons être prudents pour maintenir les métriques calculées à partir des traces aussi précises que possible. En particulier, l'échantillonnage par queue peut entraîner des métriques très biaisées, car la quantité relative d'erreurs est généralement beaucoup plus élevée. Pour éviter cela, nous avons divisé le pipeline des traces en plusieurs parties et les avons reliées via le forward connector. Modifiez la configuration pour inclure le connecteur supplémentaire et le processeur d'échantillonnage. Et modifiez les pipelines comme indiqué ici :
+
+[,yaml]
+----
+connectors:
+  # enable the forwarder
+  forward:
+processors:
+  # Configure the probabilistic sampler to sample 25% of the traffic
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [forward]
+    traces/spanmetrics:
+      receivers: [forward]
+      processors: []
+      exporters: [spanmetrics]
+    traces/sampling:
+      receivers: [forward]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, otlp/stackstate]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/stackstate]
+----
+
+L'exemple utilise l'échantillonneur probabiliste configuré pour échantillonner 25 % du trafic. Vous voudrez probablement ajuster le pourcentage en fonction de votre situation ou passer à <<_tail_sampling,l'échantillonneur par queue>> à la place. La configuration du pipeline est la même pour l'échantillonneur par queue, il suffit de remplacer la référence à `probabilistic_sampler` par `tail_sampling`.

@@ -1,0 +1,119 @@
+= 繰り返し状態
+:revdate: 2025-10-27
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、ヘルス同期（synchronization）の繰り返し状態整合性モデルに送信できる正確なJSONメッセージについて説明します。
+
+== JSONプロパティ: "health"
+
+ヘルスは、`"health"`プロパティを使用してxref:/configure/health/send-health-data/send-health-data.adoc#_common_json_object[共通JSONオブジェクト]に送信できます。
+
+[tabs]
+====
+例: ヘルス`repeat_states` JSON::
++
+--
+
+[,javascript]
+----
+   "apiKey":"<STACKSTATE_RECEIVER_API_KEY>",
+   "collection_timestamp":1585818978,
+   "internalHostname":"lnx-343242.srv.stackstate.com",
+   "events":{},
+   "metrics":[],
+   "service_checks":[],
+   "health":[
+      {
+        "consistency_model": "REPEAT_STATES",
+        "expiry": {
+          "repeat_interval_s": 50,
+          "expiry_interval_s": 100
+        },
+        "stream": {
+          "urn": "urn:health:sourceId:streamId"
+          //"sub_stream_id": "subStreamId" Optional
+        },
+        "check_states": [
+          {
+            "checkStateId": "checkStateId1",
+            "message": "Server Running out of disk space",
+            "health": "Deviating",
+            "topologyElementIdentifier": "server-1",
+            "name": "Disk Usage"
+          },
+          {
+            "checkStateId": "checkStateId2",
+            "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+            "health": "critical",
+            "topologyElementIdentifier": "server-2",
+            "name": "Health monitor"
+          }
+        ]
+      }
+   ],
+   "topologies":[]
+----
+
+--
+====
+
+すべてのヘルス繰り返し状態データペイロードには、以下の詳細が含まれています:
+
+* *expiry* - オプションです。有効期限の更新は、`check_states`を処理する前に処理される必要があります。これにより、SUSE Observabilityは、外部チェックが再送信されない場合に、システムにどのくらいの期間外部チェックが存在するべきかを追跡できます。有効期限メタデータとして以下のフィールドを持ちます:
+ ** *repeat_interval_s* - 秒単位の時間。外部ソースがSUSE Observabilityにヘルスデータを送信する頻度。最大許容値は1800（30分）です。
+ ** *expiry_interval_s* - 秒単位の時間。外部チェックが再度観測されない場合、SUSE Observabilityによって外部チェックが削除される前の最後の更新後に待機する時間。
+* *ストリーム* - どのスナップショットと`check_states`が一緒に属するかを識別するオブジェクトを提供します。以下のフィールドがあります。
+ ** *urn* - データソースとストリームIDがSUSE Observability xref:/configure/topology/identifiers.adoc[URN]としてエンコードされ、次の規則に従います: `urn:health:<sourceId>:<streamId>` ここで`<sourceId>`は外部データソースの名前で、`<streamId>`はヘルスデータストリームの一意の識別子です。
+ ** *sub_stream_id* - Optional.ストリームヘルスデータのサブセットの識別子です。ストリームデータが複数のエージェントによって配布され、報告される場合、これにより`sub_stream_id`ごとのスナップショットのライフサイクルが可能になります。
+* *check_states* - チェック状態のリストです。各チェック状態には以下のフィールドを持つことができます：
+ ** *checkStateId* - 外部システムにおけるチェック状態の識別子です。
+ ** *message* - オプションです。SUSE ObservabilityのUIに表示するメッセージです。データはマークダウンとして解釈され、外部チェック状態を生成した外部システムチェックへのリンクを含めることができます。
+ ** *ヘルス* - 次のいずれかのSUSE Observabilityヘルス状態値： `Clear`、`Deviating`、`Critical`.
+ ** *topologyElementIdentifier* - チェック状態をSUSE Observabilityトポロジー要素にバインドするために使われます。
+ ** *name* - 外部チェック状態の名前です。
+
+== ヘルスをSUSE Observabilityに送信します。
+
+ヘルスはHTTP POSTを介して1つのJSONメッセージで送信できます。以下の例では、1つの外部監視システムからSUSE Observabilityに2つのチェック状態を含むスナップショットが送信されます。
+
+[,bash]
+----
+curl -X POST \
+ '<STACKSTATE_RECEIVER_API_ADDRESS>' \
+ -H 'Content-Type: application/json' \
+ -d '{
+  "collection_timestamp": 1548857167,
+  "internalHostname": "local.test",
+  "health": [
+    {
+      "consistency_model": "REPEAT_STATES",
+      "expiry": {
+        "repeat_interval_s": 300,
+        "expiry_interval_s": 600
+      },
+      "stream": {
+        "urn": "urn:health:sourceId:streamId"
+      },
+      "check_states": [
+        {
+          "checkStateId": "checkStateId1",
+          "message": "Server Running out of disk space",
+          "health": "Deviating",
+          "topologyElementIdentifier": "server-1",
+          "name": "Disk Usage"
+        },
+        {
+          "checkStateId": "checkStateId2",
+          "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+          "health": "critical",
+          "topologyElementIdentifier": "server-2",
+          "name": "Health monitor"
+        }
+      ]
+    }
+  ]
+}'
+----

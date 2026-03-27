@@ -1,0 +1,98 @@
+= Prueba de rendimiento del clúster de SUSE Observability
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+Esta página proporciona un método para perfilar un clúster en ejecución para verificar que está funcionando según lo esperado. Esto se puede utilizar cuando se experimenta un rendimiento degradado para investigar activamente cómo están funcionando varias partes. Esto es una adición al xref:/setup/install-stackstate/support-package-logs.adoc[Paquete de Soporte (Registros)] recolector para recopilar registros en general.
+
+== Notas
+
+El script debe ejecutarse desde un host que tenga kubectl configurado con acceso al clúster {stackstate-product-name} o desde cualquier otro host con los permisos y la conectividad necesarios al clúster.
+Esto se puede hacer directamente en el host utilizando el usuario root o a través de sudo. Si kubeconfig no está configurado, utiliza el comando `export KUBECONFIG=$PATH-TO-YOUR/kubeconfig`.
+
+== Uso
+
+El script necesita ser descargado y ejecutado directamente en el host, utilizando el usuario `root` o `sudo`.
+
+=== Descargar y ejecutar el script
+
+Descargar el script xref::attachment$suse-observability_performance_collector.sh[suse-observability_performance_collector.sh].
+
+* Guardar el script como: `suse-observability_performance_collector.sh`
+* Ejecutar el script utilizando los siguientes comandos:
++
+[,bash]
+----
+bash suse-observability_performance_collector.sh
+----
++
+Esto generará un archivo en el directorio actual llamado `suse-observability_performance_<date>.tar.gz`. Sube este archivo al caso.
+
+Se pueden especificar argumentos adicionales. Por ejemplo, para elegir un espacio de nombres diferente:
+[,bash]
+----
+> bash suse-observability_performance_collector.sh -h
+SUSE Observability performance measurement tool.
+Runs some rudimentary performance tests on a deployed instance to validate performance.
+
+Usage: $0 [options] [<namespace>]
+
+options:
+  -h  Print this help
+
+<namespace>:
+  The namespace that is running SUSE Observability, or
+  "suse-observability" when not specified
+----
+
+== Rendimiento de referencia
+
+A continuación se muestra una salida que utilizamos como referencia para el rendimiento de un sistema, que también utilizamos para ajustar nuestros propios perfiles. El disco y las velocidades del cliente deberían acercarse a estos números.
+
+----
+=== SUSE Observability Performance Summary ===
+Date: 2026-03-09T09:46:18Z
+
+--- Hdfs Disk Buffered ---
+  suse-observability-hbase-hdfs-dn-0                           151 MB/s
+  suse-observability-hbase-hdfs-dn-1                           150 MB/s
+  suse-observability-hbase-hdfs-dn-2                           150 MB/s
+
+--- Hdfs Disk Direct ---
+  suse-observability-hbase-hdfs-dn-0                           58.3 MB/s
+  suse-observability-hbase-hdfs-dn-1                           56.6 MB/s
+  suse-observability-hbase-hdfs-dn-2                           56.7 MB/s
+
+--- Kafka Disk Buffered ---
+  suse-observability-kafka-0                                   173 MB/s
+  suse-observability-kafka-1                                   142 MB/s
+  suse-observability-kafka-2                                   143 MB/s
+
+--- Kafka Disk Direct ---
+  suse-observability-kafka-0                                   59.2 MB/s
+  suse-observability-kafka-1                                   59.2 MB/s
+  suse-observability-kafka-2                                   59.4 MB/s
+
+--- Kafka Producer Local ---
+  suse-observability-kafka-0                                   50241.157556 records/sec (49.06 MB/sec), 557.44 ms avg latency
+  suse-observability-kafka-1                                   31422.825540 records/sec (30.69 MB/sec), 903.49 ms avg latency
+  suse-observability-kafka-2                                   31703.760066 records/sec (30.96 MB/sec), 893.00 ms avg latency
+
+--- Kafka Producer Remote ---
+  suse-observability-kafka-0                                   59765.718384 records/sec (58.36 MB/sec), 453.19 ms avg latency
+  suse-observability-kafka-1                                   54656.755575 records/sec (53.38 MB/sec), 500.53 ms avg latency
+  suse-observability-kafka-2                                   39503.831872 records/sec (38.58 MB/sec), 703.39 ms avg latency
+
+--- Hdfs Network ---
+  suse-observability-hbase-hdfs-dn-0 -> suse-observability-hbase-hdfs-dn-1 571 MB/s
+  suse-observability-hbase-hdfs-dn-1 -> suse-observability-hbase-hdfs-dn-2 524 MB/s
+  suse-observability-hbase-hdfs-dn-2 -> suse-observability-hbase-hdfs-dn-0 597 MB/s
+----
+
+Aclaraciones:
+
+- El IO en búfer se relaciona con el rendimiento bruto del disco, permitiendo que los datos se almacenen en búfer en el núcleo de Linux.
+- El disco directo mide el rendimiento del disco utilizando O_DIRECT, deshabilitando el almacenamiento en búfer, lo que se aproxima más a nuestras bases de datos utilizando fsync() y proporciona información sobre la latencia del almacenamiento subyacente.
+- El productor de Kafka local envía datos a Kafka a través del host local, y de forma remota a través de la red. La conexión remota puede ser más rápida que la local cuando la CPU es el cuello de botella en lugar de la red (que fue el caso aquí, lo que hizo que la conexión remota fuera más eficiente).

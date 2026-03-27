@@ -1,0 +1,201 @@
+= 亲和性值配置
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 亲和配置
+
+亲和配置控制在 {stackstate-product-name} 中的 Pod 调度行为。亲和性值通过控制 Pod 的调度位置来帮助优化资源利用率并确保高可用性。
+
+== 可用配置选项
+
+=== 节点亲和性
+
+您可以使用节点亲和性将 Pod 调度到特定节点或实例组，例如部署在同一可用区的 EC2 节点。
+
+[,yaml]
+----
+affinity:
+  # Node Affinity settings - applied to all components when configured
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== Pod 反亲和性
+
+您可以使用 Pod 反亲和性将数据服务的副本调度到不同的节点，以确保高可用性。默认情况下，调度是必需的（强制反亲和性），并且 `topologyKey` 是 `kubernetes.io/hostname`。
+
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    # Enable required pod anti-affinity (true = hard, false = soft)
+    requiredDuringSchedulingIgnoredDuringExecution: true
+    # Topology key for pod anti-affinity
+    topologyKey: "kubernetes.io/hostname"
+----
+
+== 行为
+
+=== 节点亲和性
+
+* **配置时**:应用于所有组件
+
+=== Pod 反亲和性
+
+* **配置时**:仅在 `sizing.profile` 以 `-ha` 结尾时应用（高可用性控制文件）
+* **HA 控制文件**: `150-ha`, `250-ha`, `500-ha`, `4000-ha`
+* **受影响的组件**:所有有状态数据服务，包括 Clickhouse、Kafka、Zookeeper、VictoriaMetrics、StackGraph、Elasticsearch
+
+== 示例配置
+
+=== 基本节点亲和性（同一可用区）+ 强制 Pod 反亲和性以实现高可用性部署
+
+假设您将 `sizing.profile` 设置为其中一个 HA 控制文件。以下值配置 nodeAffinity，以将 {stackstate-product-name} 的组件调度到 `us-west-2a` 区域，并强制将相同数据服务的副本调度到不同主机（默认为 `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true`）。
+[,yaml]
+----
+affinity:
+  # Schedule all pods to nodes in the same AZ
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== 软 Pod 反亲和性用于高可用部署
+如果不希望将数据服务调度到不同节点，可以将 podAntiAffinity 配置为 "软" 模式：
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: false
+----
+
+== 用法
+
+[tabs]
+====
+推荐的方法::
++
+--
+[NOTE]
+=====
+从版本 `global.suseObservability` 开始提供 `2.8.0` 配置方法。对于早期版本，请使用遗留方法。
+=====
+
+将亲和性配置直接添加到 `values.yaml` 下的 `global.suseObservability.affinity` 文件中：
+
+[source,yaml]
+----
+global:
+  suseObservability:
+    # Your existing configuration
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    sizing:
+      profile: "150-ha"
+    adminPassword: "your-password"
+
+    # Affinity configuration
+    affinity:
+      # Node affinity - schedule all pods to nodes in the same AZ
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        # true = hard anti-affinity, false = soft anti-affinity
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+----
+
+然后使用单个命令安装或升级：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+TIP: 对于高可用控制文件，Pod 反亲和性会自动应用于所有有状态数据服务。如果您想更改默认行为，则只需配置它。
+
+有关从遗留方法迁移的更多详细信息，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南]。
+--
+遗留方法（已弃用）::
++
+--
+[WARNING]
+=====
+此方法已弃用。对于新安装，请使用上述推荐的方法。对于使用此方法的现有安装，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南] 以过渡到新的配置格式。
+=====
+
+==== 第 1 步：创建您的亲和性值文件
+
+创建一个单独的值文件，包含您所需的亲和性配置。例如，将以下内容保存为 `suse-observability-values-values.yaml`：
+
+[,yaml]
+----
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: true
+----
+
+==== 第 2 步：生成亲和性模板值
+
+运行以下命令以生成亲和性值模板：
+
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  --values suse-observability-values-values.yaml \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+==== 第三步：在 Helm 安装中使用生成的值
+
+在您的 Helm 安装中包含生成的亲和性值：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+--
+====

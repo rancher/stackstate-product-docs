@@ -1,0 +1,477 @@
+= Activer les sauvegardes
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+[NOTE]
+====
+Cette page s'applique à {stackstate-product-name} v2.7.0 ou version ultérieure.
+====
+
+== Présentation
+
+{stackstate-product-name} dispose d'un mécanisme de sauvegarde intégré qui peut être configuré pour stocker les sauvegardes sur AWS S3, Azure Blob Storage ou un volume persistant Kubernetes.
+
+La plupart des sauvegardes sont activées avec une seule valeur Helm `global.backup.enabled`. Les sauvegardes des paramètres sont toujours activées mais se comportent différemment en fonction des valeurs suivantes :
+
+=== Portée de la sauvegarde
+
+Les données suivantes peuvent être sauvegardées automatiquement :
+
+* *Paramètres* (StackPacks, moniteurs, vues, jetons) - toujours activé :
+** Lorsque `global.backup.enabled` est `true` : les sauvegardes sont stockées via MinIO sur votre backend de stockage configuré
+** Lorsque `global.backup.enabled` est `false` : les sauvegardes sont stockées sur un volume persistant Kubernetes dédié, contournant MinIO
+* *Données de topologie et paramètres* stockés dans StackGraph - activé lorsque `global.backup.enabled` est `true`
+* *Métriques* stockées dans l'instance(s) de Victoria Metrics de {stackstate-product-name} - activées lorsque `global.backup.enabled` est `true`
+* *Données de télémétrie* stockées dans l'instance Elasticsearch de {stackstate-product-name} - activées lorsque `global.backup.enabled` est `true`
+* *Données OpenTelemetry* stockées dans l'instance ClickHouse de {stackstate-product-name} - activées lorsque `global.backup.enabled` est `true`
+
+=== Options de stockage
+
+Les sauvegardes utilisent https://min.io/[MinIO (min.io)] comme passerelle compatible S3 vers votre backend de stockage. MinIO est automatiquement déployé par le chart Helm lorsque les sauvegardes sont activées.
+
+L'instance MinIO intégrée peut être configurée pour stocker les sauvegardes à trois emplacements :
+
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[AWS S3]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Azure Blob Storage]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Stockage Kubernetes]
+
+== Activer les sauvegardes
+
+=== AWS S3
+
+[CAUTION]
+====
+
+*Chiffrement*
+
+Les clés gérées par Amazon S3 (SSE-S3) doivent être utilisées lors du chiffrement des buckets S3 qui stockent les sauvegardes.
+
+⚠️ Le chiffrement avec des clés AWS KMS stockées dans le service de gestion des clés AWS (SSE-KMS) n'est pas pris en charge. Cela entraînera des erreurs telles que celle-ci dans les journaux Elasticsearch :
+
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)\",`
+====
+
+
+==== Utilisation de buckets S3 séparés
+
+Pour activer les sauvegardes planifiées vers des buckets AWS S3 séparés (un par magasin de données), ajoutez le fragment YAML suivant au fichier Helm `values.yaml` utilisé pour installer {stackstate-product-name} :
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  stackGraph:
+    bucketName: AWS_STACKGRAPH_BUCKET
+  elasticsearch:
+    bucketName: AWS_ELASTICSEARCH_BUCKET
+  configuration:
+    bucketName: AWS_CONFIGURATION_BUCKET
+victoria-metrics-0:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+victoria-metrics-1:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+clickhouse:
+  backup:
+    bucketName: AWS_CLICKHOUSE_BUCKET
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+Remplacez les valeurs suivantes :
+
+* `YOUR_ACCESS_KEY` et `YOUR_SECRET_KEY` sont les identifiants qui seront utilisés pour sécuriser le système MinIO. Ces identifiants sont définis sur le système MinIO et utilisés par les tâches de sauvegarde automatiques et les tâches de restauration. Ils sont également requis si vous souhaitez accéder manuellement au système MinIO.
+ ** VOTRE_CLÉ_D'ACCÈS doit contenir de 5 à 20 caractères alphanumériques.
+ ** VOTRE_CLÉ_SECRÈTE doit contenir de 8 à 40 caractères alphanumériques.
+* `AWS_ACCESS_KEY` et `AWS_SECRET_KEY` sont les identifiants AWS pour l'utilisateur IAM qui a accès aux buckets S3 où les sauvegardes seront stockées. Voir ci-dessous la stratégie d'autorisation qui doit être attachée à cet utilisateur.
+* `AWS_*_BUCKET` sont les noms des buckets S3 où les sauvegardes doivent être stockées.
++
+[Note]
+====
+Les noms des buckets AWS S3 sont globaux dans l'ensemble d'AWS. Par conséquent, les buckets S3, avec le nom par défaut (`sts-elasticsearch-backup`, `sts-configuration-backup`, `sts-stackgraph-backup`, `sts-victoria-metrics-backup` et `sts-clickhouse-backup`), ne seront probablement pas disponibles.
+====
+
+==== Utilisation d'un seul bucket S3 avec des préfixes
+
+Au lieu d'utiliser des buckets séparés pour chaque magasin de données, vous pouvez utiliser un seul bucket S3 avec différents préfixes :
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: BUCKET
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: BUCKET
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: BUCKET
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: clickhouse
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+Remplacez `BUCKET` par le nom de votre bucket S3. Les sauvegardes pour différents magasins de données sont organisées en utilisant les valeurs `s3Prefix` configurées. Les mêmes valeurs `YOUR_ACCESS_KEY`, `YOUR_SECRET_KEY`, `AWS_ACCESS_KEY` et `AWS_SECRET_KEY` de la section précédente s'appliquent ici.
+
+=== Permissions AWS S3
+
+L'utilisateur IAM identifié par `AWS_ACCESS_KEY` et `AWS_SECRET_KEY` doit être configuré avec la stratégie d'autorisation suivante pour accéder aux buckets S3 :
+
+[,javascript]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowListMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        },
+        {
+            "Sid": "AllowWriteMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET/*",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET/*",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET/*",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET/*",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        }
+    ]
+}
+----
+
+=== Stockage Azure Blob
+
+==== Utilisation de conteneurs séparés
+
+Pour activer les sauvegardes dans des conteneurs Azure Blob Storage séparés (un par magasin de données), ajoutez le fragment YAML suivant au fichier Helm `values.yaml` utilisé pour installer {stackstate-product-name} :
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+Remplacez les valeurs suivantes :
+
+* `AZURE_STORAGE_ACCOUNT_NAME` - le https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[nom du compte de stockage Azure (learn.microsoft.com)]
+* `AZURE_STORAGE_ACCOUNT_KEY` - la https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[clé du compte de stockage Azure (learn.microsoft.com)] où les sauvegardes doivent être stockées.
+
+Les sauvegardes de StackGraph, Elasticsearch, Victoria Metrics et ClickHouse sont stockées dans des conteneurs BLOB appelés `sts-stackgraph-backup`, `sts-configuration-backup`, `sts-elasticsearch-backup`, `sts-victoria-metrics-backup`, `sts-clickhouse-backup` respectivement. Ces noms peuvent être modifiés en définissant les valeurs Helm `backup.stackGraph.bucketName`, `backup.elasticsearch.bucketName`, `victoria-metrics-0.backup.bucketName`, `victoria-metrics-1.backup.bucketName` et `clickhouse.backup.bucketName` respectivement.
+
+==== Utilisation d'un seul conteneur avec des préfixes
+
+Au lieu d'utiliser des conteneurs séparés pour chaque magasin de données, vous pouvez utiliser un seul conteneur Azure Blob Storage avec différents préfixes :
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: CONTAINER
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: CONTAINER
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: CONTAINER
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: clickhouse
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+Remplacez `CONTAINER` par le nom de votre conteneur Azure Blob Storage. Les sauvegardes pour différents magasins de données seront organisées en utilisant les valeurs `s3Prefix` configurées. Les mêmes valeurs `AZURE_STORAGE_ACCOUNT_NAME` et `AZURE_STORAGE_ACCOUNT_KEY` de la section précédente s'appliquent ici.
+
+=== Volume persistant Kubernetes
+
+[CAUTION]
+====
+L'utilisation de volumes persistants Kubernetes pour les sauvegardes présente des limitations significatives :
+
+* Coûteux - Les fournisseurs de cloud utilisent généralement du stockage de blocs (EBS/Azure Block) qui est coûteux pour de grandes sauvegardes.
+* Pas de récupération après sinistre - Les PVs sont détruits si le cluster est supprimé
+* Non portable - Impossible de restaurer des sauvegardes sur un cluster différent
+
+**Recommandation:** Utilisez AWS S3 ou Azure Blob Storage à la place pour les environnements de production.
+====
+
+==== Configuration de base
+
+Pour activer les sauvegardes vers le stockage local du cluster, activez MinIO en ajoutant le fragment YAML suivant au fichier Helm `values.yaml` utilisé pour installer {stackstate-product-name} :
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+Remplacez les valeurs suivantes :
+
+* `YOUR_ACCESS_KEY` et `YOUR_SECRET_KEY` - les identifiants qui seront utilisés pour sécuriser le système MinIO. Les tâches de sauvegarde automatiques et les tâches de restauration les utiliseront. Ils sont également nécessaires pour accéder manuellement au stockage MinIO. `YOUR_ACCESS_KEY` doit contenir de 5 à 20 caractères alphanumériques et `YOUR_SECRET_KEY` doit contenir de 8 à 40 caractères alphanumériques.
+
+== Données de configuration et de topologie (StackGraph)
+
+Les sauvegardes des données de configuration et de topologie (StackGraph) sont des sauvegardes complètes, stockées dans un seul fichier avec l'extension `.graph`. Chaque fichier contient une sauvegarde complète et peut être déplacé, copié ou supprimé selon les besoins.
+
+=== Calendrier de sauvegarde
+
+Par défaut, les sauvegardes StackGraph sont créées quotidiennement à 03h00, heure du serveur.
+
+Le calendrier de sauvegarde peut être configuré en utilisant la valeur Helm `backup.stackGraph.scheduled.schedule`, spécifiée dans https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[la syntaxe de calendrier cron Kubernetes (kubernetes.io)].
+
+=== Conservation des sauvegardes
+
+Par défaut, les sauvegardes StackGraph sont conservées pendant 30 jours. Comme les sauvegardes StackGraph sont des sauvegardes complètes, cela peut nécessiter beaucoup de stockage.
+
+Le delta de conservation des sauvegardes peut être configuré en utilisant la valeur Helm `backup.stackGraph.scheduled.backupRetentionTimeDelta`, spécifiée au format de l'argument de date GNU `--date`. La valeur par défaut est `30 days ago`. Voir https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[Éléments relatifs dans les chaînes de date] pour plus d'exemples.
+
+=== Désactiver les sauvegardes programmées
+
+Pour désactiver les sauvegardes programmées de StackGraph, définissez le calendrier de sauvegarde à une date lointaine dans le passé en utilisant la valeur Helm `backup.stackGraph.scheduled.schedule` :
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Paramètres
+
+Les paramètres (Configuration précédemment) incluent les instances installées de StackPacks avec leur configuration et d'autres personnalisations créées par l'utilisateur, telles que des moniteurs, des vues personnalisées et des jetons de service.
+
+Les sauvegardes de paramètres sont légères (généralement seulement quelques mégaoctets) et rapides à restaurer avec un temps d'arrêt minimal. Après la restauration d'une sauvegarde de paramètres, de nouvelles données seront traitées comme auparavant, recréant la topologie, les états de santé et les alertes. Cependant, l'historique de la topologie (y compris la santé) n'est pas préservé dans les sauvegardes de paramètres - à cette fin, utilisez la sauvegarde StackGraph décrite ci-dessus.
+
+[NOTE]
+====
+*Les sauvegardes de paramètres sont toujours activées*, indépendamment de la valeur `global.backup.enabled` :
+
+* Lorsque `global.backup.enabled` est `true` : Les sauvegardes de paramètres sont stockées via MinIO sur votre backend de stockage configuré (AWS S3, Azure Blob Storage ou volume persistant Kubernetes)
+* Lorsque `global.backup.enabled` est `false` : Les sauvegardes de paramètres sont stockées sur un volume persistant Kubernetes dédié, contournant MinIO
+====
+
+=== Calendrier de sauvegarde
+
+Par défaut, les sauvegardes de paramètres sont créées quotidiennement à 04:00, heure du serveur.
+
+Le calendrier de sauvegarde peut être configuré en utilisant la valeur Helm `backup.configuration.scheduled.schedule`, spécifiée dans https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[la syntaxe de calendrier cron Kubernetes (kubernetes.io)].
+
+=== Conservation des sauvegardes
+
+La conservation des sauvegardes dépend du paramètre `global.backup.enabled` :
+
+**Lorsque `global.backup.enabled` est `true`** (sauvegardes stockées via MinIO):
+
+* Par défaut, les sauvegardes de paramètres sont conservées pendant 365 jours
+* Configurez la rétention en utilisant `backup.configuration.scheduled.backupRetentionTimeDelta` - spécifié au format de l'argument de date GNU `--date`. La valeur par défaut est `365 days ago`
+
+**Lorsque `global.backup.enabled` est `false`** (sauvegardes stockées sur un PV dédié) :
+
+* Par défaut, les 10 derniers fichiers de sauvegarde sont conservés sur le Volume Persistant
+* Configurez le nombre maximum de fichiers en utilisant `backup.configuration.maxLocalFiles` (par défaut : `10`)
+* Configurez la taille du PV en utilisant `backup.configuration.scheduled.pvc.size` (par défaut : `1Gi`)
+
+Exemple de configuration pour le stockage sur PV dédié :
+
+[,yaml]
+----
+backup:
+  configuration:
+    maxLocalFiles: 10
+    scheduled:
+      pvc:
+        size: '1Gi'
+----
+
+=== Désactiver les sauvegardes programmées
+
+Pour désactiver les sauvegardes de paramètres programmées, définissez le calendrier de sauvegarde à une date lointaine dans le passé en utilisant la valeur Helm `backup.configuration.scheduled.schedule` :
+
+[,yaml]
+----
+backup:
+  configuration:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Métriques (Victoria Metrics)
+
+Victoria Metrics crée des sauvegardes en prenant un instantané des données de métriques actuelles et en ne stockant que les changements depuis la dernière sauvegarde (approche incrémentale).
+
+[WARNING]
+====
+*Limitation de versionnage des sauvegardes*
+
+Les sauvegardes de Victoria Metrics remplacent la sauvegarde précédente chaque fois qu'une nouvelle sauvegarde est effectuée. Cela signifie que vous n'avez accès qu'à *la sauvegarde la plus récente*, et non à un historique de plusieurs versions de sauvegarde.
+
+**Important** : Si une sauvegarde échoue ou si les données deviennent corrompues, vos données de sauvegarde précédentes peuvent être perdues. Seule la dernière sauvegarde réussie est disponible pour la restauration.
+
+**Exception** : Si le volume de stockage de Victoria Metrics est vidé ou réinitialisé (par exemple, si le répertoire `/storage` est monté vide ou supprimé), le système le détectera et créera automatiquement une nouvelle série de sauvegardes. Dans ce cas, à la fois l'ancienne sauvegarde (avant la réinitialisation) et la nouvelle sauvegarde seront préservées et disponibles pour la restauration.
+====
+
+[NOTE]
+====
+*Déploiements haute disponibilité*
+
+Les déploiements haute disponibilité utilisent deux instances de Victoria Metrics (`victoria-metrics-0` et `victoria-metrics-1`). Les sauvegardes sont configurées indépendamment pour chaque instance.
+====
+
+=== Calendrier de sauvegarde
+
+Les sauvegardes de Victoria Metrics sont créées toutes les 1h :
+
+* `victoria-metrics-0` - 25 minutes après l'heure
+* `victoria-metrics-1` - 35 minutes après l'heure
+
+=== Désactiver les sauvegardes programmées
+
+Pour désactiver les sauvegardes programmées de Victoria Metrics, définissez le calendrier de sauvegarde pour les deux instances à une date très éloignée dans le passé :
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== OpenTelemetry (ClickHouse)
+
+ClickHouse utilise à la fois des sauvegardes incrémentales et complètes. Les anciennes sauvegardes sont supprimées en fonction de la stratégie de conservation configurée.
+
+=== Calendrier de sauvegarde
+
+Les sauvegardes ClickHouse sont créées :
+
+* Sauvegarde complète - à 00h45 chaque jour
+* Sauvegarde incrémentielle - 45 minutes après l'heure (de 3h à minuit)
+
+=== Conservation des sauvegardes
+
+Par défaut, l'outil conserve les 308 dernières sauvegardes (complètes et incrémentielles), ce qui équivaut à environ 14 jours.
+
+La conservation des sauvegardes peut être configurée en utilisant la valeur Helm `clickhouse.backup.config.keep_remote`.
+
+=== Désactiver les sauvegardes programmées
+
+Pour désactiver les sauvegardes ClickHouse programmées, définissez les horaires de sauvegarde complète et incrémentielle à une date lointaine dans le passé :
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== Données de télémétrie (Elasticsearch)
+
+Les instantanés Elasticsearch sont incrémentiels.
+
+=== Calendrier des instantanés
+
+Les instantanés Elasticsearch sont créés quotidiennement à 03h00, heure du serveur.
+
+=== Conservation des instantanés
+
+Par défaut, les instantanés Elasticsearch sont conservés pendant 30 jours, avec un minimum de 5 instantanés et un maximum de 30 instantanés.
+
+Le temps de conservation et le nombre d'instantanés conservés peuvent être configurés en utilisant les valeurs Helm suivantes :
+
+* `backup.elasticsearch.scheduled.snapshotRetentionExpireAfter`, spécifié dans https://www.elastic.co/guide/en/elasticsearch/reference/7.6/common-options.html#_time_units[unités de temps Elasticsearch (elastic.co)].
+* `backup.elasticsearch.scheduled.snapshotRetentionMinCount`
+* `backup.elasticsearch.scheduled.snapshotRetentionMaxCount`
+
+=== Désactiver les instantanés programmés
+
+Pour désactiver les instantanés Elasticsearch programmés, définissez le calendrier des instantanés à une date lointaine dans le passé en utilisant la valeur Helm `backup.elasticsearch.scheduled.schedule` :
+
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----

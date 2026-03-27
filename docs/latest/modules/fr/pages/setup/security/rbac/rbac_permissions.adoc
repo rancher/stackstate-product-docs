@@ -1,0 +1,282 @@
+= Autorisations
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Présentation
+
+Les autorisations dans SUSE Observability permettent aux administrateurs de gérer les actions que chaque utilisateur ou groupe d'utilisateurs peut effectuer dans SUSE Observability et les informations qui seront affichées dans leur interface utilisateur SUSE Observability. Seul l'ensemble des fonctionnalités pertinentes pour le rôle actif de chaque utilisateur sera présenté. Les actions, informations et pages auxquelles un utilisateur n'a pas accès ne sont tout simplement pas affichées dans son interface utilisateur SUSE Observability.
+
+[NOTE]
+====
+Les autorisations sont stockées dans StackGraph. Cela signifie que :
+
+* Si vous effectuez une mise à niveau avec "effacer toutes les données", la configuration des autorisations sera également supprimée.
+* Pour supprimer complètement un utilisateur, celui-ci doit également être supprimé manuellement de StackGraph.
+====
+
+
+== Autorisations SUSE Observability
+
+Il existe deux types d'autorisations dans SUSE Observability. *Les autorisations système* définissent les capacités des utilisateurs, telles que l'accès aux paramètres, l'exécution de requêtes et le scripting. *Les autorisations ciblées* déterminent l'accès aux données d'observabilité et à certains types de ressources comme les vues de SUSE Observability.  Pour les opérations CRUD sur les vues de SUSE Observability, celles-ci peuvent être accordées pour une vue spécifique ou pour toutes les vues. Pour les détails des autorisations attachées à chaque rôle prédéfini dans SUSE Observability, voir xref:/setup/security/rbac/rbac_roles.adoc#_predefined_roles[les rôles prédéfinis]
+
+Les autorisations suivantes sont disponibles dans SUSE Observability :
+
+.Autorisations
+[cols="2,2,5"]
+|===
+|Ressources |Verbes |Description
+
+|agents
+|obtenir
+|Agents connectés
+
+|api-tokens
+|obtenir
+|La clé API à utiliser pour l'authentification avec le CLI SUSE Observability.  Ceci est unique par utilisateur.
+
+|actions-composant
+|execute
+|xref:/use/views/k8s-topology-perspective.adoc#_actions[Actions des composants dans la perspective de topologie].
+
+|tableaux de bord
+|obtenir, créer, mettre à jour, supprimer
+|xref:/use/dashboards/dashboards.adoc[Tableaux de bord].
+
+|liaisons-métriques
+|obtenir, créer, mettre à jour, supprimer
+ifdef::ss-ff-stackpacks2_enabled[]
+|xref:/setup/custom-integrations/metric-bindings/index.adoc[Liaisons pour visualiser les données dans la perspective des métriques].
+endif::[]
+ifndef::ss-ff-stackpacks2_enabled[]
+|xref:/use/metrics/k8s-add-charts.adoc[Liaisons pour visualiser les données dans la perspective des métriques].
+endif::[]
+
+|métriques
+|obtenir^[1]^, mettre à jour
+|Ingestion et requête de données métriques en utilisant PromQL
+
+|moniteurs
+|obtenir, créer, mettre à jour, supprimer, exécuter
+|xref:/use/alerting/k8s-monitors.adoc[Déterminer la santé des composants avec des moniteurs].
+
+|notifications
+|obtenir, créer, mettre à jour, supprimer
+|xref:/use/alerting/notifications/configure.adoc[Recevoir des alertes avec des notifications].
+
+|permissions
+|obtenir, mettre à jour
+|Gérer les autorisations sur les sujets.
+
+|autorisations ciblées
+|update^[1]^
+|Gérer les autorisations ciblées, accordant (ou révoquant) l'accès à la topologie, aux métriques et aux traces depuis un seul cluster.
+
+|scripts
+|execute
+|Exécuter un script dans l'environnement Analytics de l'interface utilisateur SUSE Observability.
+
+|scripts restreints
+|execute
+|Utilisez le script HTTP et l'API de graphes Gremlin dans l'environnement Analytics.
+
+|service-token
+|obtenir, créer, supprimer
+|xref:/setup/security/authentication/service_tokens.adoc[Les tokens de service] authentifient un service externe et peuvent être utilisés pour l'ingestion de données.
+
+|paramètres
+|obtenir, mettre à jour, déverrouiller
+|Exporter ou importer des configurations ou déverrouiller xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[les éléments de configuration verrouillés].
+
+|stackpacks
+|obtenir, mettre à jour
+|Lister ou télécharger xref:/stackpacks/about-stackpacks.adoc[Stackpacks].
+
+|stackpack-configurations
+|créer, mettre à jour, supprimer
+|Gérer les intégrations en utilisant xref:/stackpacks/about-stackpacks.adoc[Stackpacks].
+
+|sync-data
+|obtenir, supprimer
+|Inspecter ou réinitialiser la topologie et les pipelines de synchronisation de santé.
+
+|system-notifications
+|obtenir
+|Accéder aux notifications système dans l'interface utilisateur
+
+|messages de sujet
+|obtenir
+|Accéder aux données du SUSE Observability Receiver.
+
+|topologie
+|get^[1]^
+|xref:/use/views/k8s-views.adoc[Explorer les vues de topologie ciblées].
+
+|traces
+|get^[1]^
+|xref:/use/traces/k8sTs-explore-traces.adoc[Explorer les traces].
+
+|vues
+|obtenir^[1]^, créer, mettre à jour^[1]^, supprimer^[1]^
+|Utiliser ou gérer xref:/use/views/k8s-custom-views.adoc[des vues personnalisées].
+
+|vues favorites
+|créer, supprimer
+|Ajouter et retirer des étoiles des vues.
+
+|visualization
+|update
+|Modifier xref:/use/views/k8s-topology-perspective.adoc#_visualization_settings[les paramètres de visualisation].
+
+|===
+^[1]^ Ceci est une *autorisation ciblée*, l'interprétation du nom de la ressource dépend du contexte
+
+=== Autorisations ciblées
+
+Vous pouvez accorder certaines autorisations à l'échelle du système, ou vous pouvez les limiter à un sous-ensemble des ressources.  Vous pouvez leur donner un *Nom de ressource*, qui indique la portée.  L'interprétation de ce nom dépend du type de ressource.  Notez que la portée peut ne s'appliquer qu'à certains des verbes.
+
+* `views` - Le nom de la vue
+* `topology` - Toute étiquette de composant. Dans un environnement Kubernetes, cela peut être, par exemple, `cluster-name:<cluster-name>` ou `k8s-scope:<cluster-name>/<namespace>`
+* `metrics` - Dans un environnement Kubernetes, soit `k8s:<cluster-name>:\\__any__` soit `k8s:<cluster-name>:<namespace>`
+* `traces` - Dans un environnement Kubernetes, soit `k8s.cluster.name:<cluster-name>` soit `k8s.scope:<cluster-name>/<namespace>`
+* `scoped-permissions` - Le nom du cluster pour lequel les autorisations sont gérées
+
+== Gérer les autorisations
+
+Vous pouvez gérer les autorisations de SUSE Observability en utilisant la `sts` CLI.
+Pour les autorisations ciblées, un nom de ressource peut être spécifié.  Si aucun n'est donné, l'autorisation sera accordée (ou révoquée) à l'échelle du système.
+
+[NOTE]
+====
+*Remarque importante :* Toutes les autorisations dans SUSE Observability sont sensibles à la casse.
+====
+
+
+=== Lister toutes les autorisations disponibles
+
+Lister toutes les autorisations disponibles :
+
+[,text]
+----
+sts rbac list-permissions
+----
+
+=== Lister tous les sujets
+
+Lister tous les sujets :
+
+[,text]
+----
+sts rbac describe-subjects
+
+SUBJECT                                    | SOURCE
+stackstate-admin                           | Static
+suse-observability-instance-admin          | Kubernetes
+suse-observability-agent-clusterA          | Observability
+----
+[NOTE]
+====
+`Le sujet `SOURCE` montre qui possède et gère le sujet. Cela peut être l'une de nos sources RBAC (Configuration|Statique, Observabilité, Kubernetes)
+
+* Configuration|Statique : Sujets obtenus via la configuration de SUSE Observability par Helm
+* Observability : Sujets gérés via la CLI sts
+* Kubernetes : Sujets obtenus via l'agent RBAC à partir des RoleBindings et ClusterRoleBindings de Kubernetes
+====
+
+=== Lister les sujets pour un utilisateur
+
+Liste tous les sujets qui sont assignés au contexte, la première entrée affichée est le nom d'utilisateur et les rôles potentiels que l'utilisateur a :
+
+[,text]
+----
+sts user-session roles
+
+user-dkzwh
+keycloakoidc_group://suse-observability-instance-troubleshooter
+keycloakoidc_group://suse-observability-instance-observer
+keycloakoidc_group://suse-observability-cluster-observer
+keycloakoidc_group://suse-observability-instance-admin
+keycloakoidc_group://suse-observability-observer
+----
+
+Liste tous les sujets qui sont assignés à un utilisateur, en fournissant leur `api-token` (utile car l'administrateur peut aider à déboguer les utilisateurs avec moins de privilèges) :
+
+[,text]
+----
+sts user-session roles --api-token [api-token]
+
+u-3p775e7w7l
+keycloakoidc_group://suse-observability-cluster-observer
+----
+
+=== Afficher les autorisations accordées
+
+Afficher les autorisations accordées à un utilisateur ou à un rôle spécifique.
+
+[,text]
+----
+> sts rbac describe-permissions --subject [role-name]
+Got subject from the following subject sources: Kubernetes
+
+PERMISSION   | RESOURCE
+get-topology | cluster-name:rbac-t2
+get-traces   | k8s.cluster.name:rbac-t2
+get-metrics  | k8s:rbac-t2:__any__
+----
+
+[NOTE]
+====
+`--subject` peut être l'un des sujets disponibles dans les différentes sources RBAC (Configuration, Observability, Kubernetes)
+====
+
+=== Accorder des autorisations
+[NOTE]
+====
+`--subject` peut être un sujet d'Observability, les sujets de Configuration et de Kubernetes sont en lecture seule
+====
+
+==== Permettre à un utilisateur d'ouvrir une vue
+
+Donner à un sujet ayant l'autorisation d'ouvrir une vue :
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-views --resource [view-name]
+----
+
+==== Permettre à un utilisateur de créer des vues
+
+Donner à un sujet ayant l'autorisation système de créer des vues :
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission create-views
+----
+
+==== Permettre à un utilisateur de vérifier les paramètres de SUSE Observability
+
+Donner à un sujet ayant l'autorisation système de vérifier les paramètres de SUSE Observability :
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-settings
+----
+
+=== Révoquer des autorisations
+[NOTE]
+====
+`--subject` peut être un sujet d'Observability, les sujets de Configuration et de Kubernetes sont en lecture seule
+====
+
+Révoquer des autorisations pour un sujet d'ouvrir une vue :
+
+[,text]
+----
+sts rbac revoke --subject [role-name] --permission get-views --resource [view-name]
+----
+
+== Interface utilisateur de SUSE Observability sans autorisations
+
+Voici un exemple de ce à quoi l'interface utilisateur de SUSE Observability ressemblerait pour un utilisateur sans aucune autorisation :
+
+image::noperm.png[Aucune autorisation]

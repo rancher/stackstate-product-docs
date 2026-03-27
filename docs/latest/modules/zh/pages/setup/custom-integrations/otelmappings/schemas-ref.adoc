@@ -1,0 +1,467 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= 纲要
+:revdate: 2025-12-23
+:page-revdate: {revdate}
+:description: OpenTelemetry 映射模式
+
+== 概述
+
+本页面描述了定义 `OtelComponentMapping` 或 `OtelRelationMapping` 的模式，以及构造、表达式语法和语义的详细解释。
+
+== OTel 组件与关系映射的模式
+
+=== OtelComponentMapping
+
+每个组件映射：
+
+* 使用条件选择遥测。
+* 使用表达式提取值。
+* 生成一个由稳定标识符标识的单一逻辑组件。
+
+多个遥测记录可能解析为相同的组件标识符；在这种情况下，组件会被合并并刷新。
+
+[,yaml]
+----
+_type: "OtelComponentMapping"
+name: string
+input:
+  signal: ["TRACES" | "METRICS"]
+  resource:
+    condition: <cel-boolean>        # default: true
+    action: CONTINUE                # default
+    scope:
+      condition: <cel-boolean>      # default: true
+      action: CONTINUE              # default
+      span:                         # TRACES only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+      metric:                       # METRICS only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+        datapoint:                  # METRICS only
+          condition: <cel-boolean>  # default: true
+          action: CONTINUE          # default
+vars:                               # Optional
+  - name: string
+    value: <cel-expression>
+output:
+  identifier: <cel-string>
+  name: <cel-string>
+  typeName: <cel-string>
+  typeIdentifier: <cel-string>      # Optional
+  domainName: <cel-string>
+  domainIdentifier: <cel-string>    # Optional
+  layerName: <cel-string>
+  layerIdentifier: <cel-string>     # Optional
+  required:                         # Optional (required means that if any expression fails, the mapping fails)
+    version: <cel-string>           # Optional
+    additionalIdentifiers:          # Optional
+      - <cel-string>
+    tags:                           # Optional
+      - source: <cel-string>
+        target: string
+      - source: <cel-string>
+        pattern: regex
+        target: string
+  optional:                         # Optional (besides being optional on the schema, optional means that if any expression under `optional` fails, the mapping will continue, but without the failed expression/field)
+    version: <cel-string>           # Optional
+    additionalIdentifiers:          # Optional
+      - <cel-string>
+    tags:                           # Optional
+      - source: <cel-string>
+        target: string
+      - source: <cel-map>
+        pattern: regex
+        target: string
+expireAfter: duration-ms
+----
+
+=== OtelRelationMapping
+
+每个关系映射：
+
+* 解析一个 `sourceId` 和一个 `targetId`。
+* 分配关系类型。
+* 在现有或未来组件之间产生一个有向边。
+
+当源组件和目标组件存在时，关系会被具体化。
+
+[,yaml]
+----
+_type: "OtelRelationMapping"
+name: string
+input:
+  signal: ["TRACES" | "METRICS"]
+  resource:
+    condition: <cel-boolean>        # default: true
+    action: CONTINUE                # default
+    scope:
+      condition: <cel-boolean>      # default: true
+      action: CONTINUE              # default
+      span:                         # TRACES only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+      metric:                       # METRICS only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+        datapoint:                  # METRICS only
+          condition: <cel-boolean>  # default: true
+          action: CONTINUE          # default
+vars:                               # Optional
+  - name: string
+    value: <cel-expression>
+output:
+  sourceId: <cel-string>
+  targetId: <cel-string>
+  typeName: <cel-string> 
+  typeIdentifier: <cel-string>      # Optional
+expireAfter: duration-ms
+----
+
+== 组件与关系的身份、合并和生命周期
+
+=== 组件身份
+
+`output.identifier` 字段定义了组件的主要身份，并且在整个拓扑中必须是 "全局" 唯一的。通过 `output.required.additionalIdentifiers`，您可以为组件指定更多标识符。 具有至少一个重叠标识符的组件被视为相同的逻辑实体，并由平台合并。这使得标识符的构造成为一个关键的设计选择。
+
+标识符应：
+
+* 遵循 {stackstate-product-name} 标识符（即 `urn:...`）格式。有关更多信息，请参阅 xref:/configure/topology/identifiers.adoc[标识符] 文档。
+* 在时间上保持稳定。
+* 反映预期的基数（服务、实例、数据库等）。
+* 避免无界维度。
+
+[NOTE]
+====
+使用 `output.required.additionalIdentifiers` 列表，您可以指定其他标识符以将生成的组件与之关联。这可能有助于将组件与另一个系统中的外部标识符关联。
+====
+
+=== 关系身份
+
+关系身份是形式为 `output.sourceId-output.targetId` 的复合体，其中 `sourceId` 和 `targetId` 是组件标识符（例如，来自 `output.identifier`）。
+
+=== 刷新和过期
+
+每个映射定义一个 `expireAfter` 持续时间。该值控制组件或关系在拓扑中保持多长时间而不被新的匹配遥测刷新。如果没有刷新，组件或关系将从拓扑中去除。
+
+在内部，OTel 收集器会持续刷新组件，随着遥测匹配 - 此刷新窗口基于每个映射的 `expireAfter` 字段。
+
+== 输入遍历模型
+
+拓扑映射以层次方式遍历 OpenTelemetry 数据 - `resource → scope → metric/span → datapoint`
+
+每个级别可以定义：
+
+* 一个条件：一个 CEL 布尔表达式。
+* 一个动作：如果条件匹配，则执行的操作。
+
+=== 每个信号的可用字段
+
+所选信号决定了哪些数据结构和属性可用于表达式评估。
+
+**TRACES**
+
+提供访问：
+
+* resource.attributes
+* scope.name, scope.version, scope.attributes
+* span.name, span.kind, span.statusMessage, span.statusCode, span.attributes
+
+示例：
+
+[source]
+----
+resource.attributes['service.name'] == 'checkout'
+# OR
+span.kind == 'SPAN_KIND_SERVER' && span.attributes['http.method'] == 'POST'
+----
+
+**METRICS**
+
+提供访问：
+
+* resource.attributes
+* scope.name, scope.version, scope.attributes
+* metric.name, metric.description, metric.unit
+* datapoint.attributes
+
+示例：
+
+[source]
+----
+metric.name == 'traces_service_graph_request_total'
+# OR
+datapoint.attributes['connection_type'] == 'database'
+----
+
+
+=== 条件和动作
+
+**条件**
+
+条件决定处理是否在给定级别继续。如果条件评估为假，则该遥测元素的映射将被跳过。
+
+Defaults（默认）：
+
+* 条件默认为“真”。这允许在每个级别省略显式条件，以作为默认处理。
+
+约束：
+
+* 当声明多个输入信号时（例如，`TRACES`和`METRICS`），表达式中的数据只能从共同祖先级别访问，在所有情况下都是作用域级别。
+* 不允许从较低/子级别访问数据/字段。例如，作用域级别字段不能在资源级别访问。
+* 不允许从另一个输入信号访问数据/字段。例如，度量级别字段不能从跨度级别访问，反之亦然。
+
+条件可以访问父级的数据。例如，在跨度级别，可以访问作用域和资源级别的数据。
+
+[,yaml]
+----
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: "${'service.name' in resource.attributes}"
+    # action omitted since the default is `CONTINUE`
+    scope:
+      action: "CREATE" # input block describes that it expects to filter until this level only
+      condition: "${scope.name.contains('http') && resource.attributes['service.name'] == 'cart-svc'}" # it's allowed to access resource-level fields at scope-level
+----
+
+**行动**
+
+支持的动作：
+
+* 继续 – 继续评估到下一个级别。
+* 创建 – 在此级别创建一个组件或关系。
+
+Defaults（默认）：
+
+* 动作默认为“继续”。
+
+这意味着需要在输入级别显式指定`CREATE`动作，以便应用映射。
+
+以下是一些有效输入声明的更多示例：
+
+**TRACES**
+
+[,yaml]
+----
+input:
+  signal:
+    - "TRACES"
+  resource:
+    condition: "${'service.name' in resource.attributes}"
+    # action omitted since the default is `CONTINUE`
+    scope:
+      # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+      span:
+        action: "CREATE"
+        condition: "${span.attributes['http.method'] == 'POST'}"
+----
+
+**METRICS**
+
+[,yaml]
+----
+input:
+  signal:
+    - "METRICS"
+  resource:
+    # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+    scope:
+      condition: "scope.name == 'traces_service_graph'"
+      metric:
+        # action omitted since the default is `CONTINUE`
+        condition: "metric.name == 'traces_service_graph_request_total'"
+        datapoint:
+          action: "CREATE"
+          condition: |
+            'client' in datapoint.attributes &&
+            'server' in datapoint.attributes
+----
+
+== 变量（vars）
+
+映射可以定义变量以避免重复并提高可读性。
+
+变量：
+
+* 使用CEL表达式进行评估。
+* 可以引用输入过滤器匹配的最深输入级别中可用的任何字段。例如，如果输入选择在跨度级别具有`CREATE`操作，则可以使用资源、范围和跨度字段。
+* 可以在输出字段中重复使用。
+
+示例：
+
+[,yaml]
+----
+vars:
+- name: "service"
+  value: "${resource.attributes['service.name']}"
+----
+
+在评估输出表达式之前解析变量。
+
+== 输出
+
+`output`部分定义了OpenTelemetry信号（跟踪/指标）应如何映射到组件或关系。
+
+输出字段：
+
+* 使用CEL表达式动态生成值。
+* 可以引用输入过滤器匹配的最深输入级别中可用的任何字段。例如，如果输入选择在跨度级别具有`CREATE`操作，则可以使用资源、范围和跨度字段。
+
+如果字段的值不需要动态生成，则可以在模式指定的`<cel-string>`表达式声明的位置设置字符串字面量。
+
+=== 必需与可选可选子部分
+
+组件映射模式区分两种错误处理行为：
+
+==== 必需（可选子部分）
+
+如果必需下的任何表达式失败，则整个映射失败。
+
+==== 可选（可选子部分）
+
+如果可选下的任何表达式失败，则映射继续，但不包括失败的字段。
+
+==== 标签映射
+
+组件映射可以定义标签映射，以丰富组件的元数据。
+
+支持两种形式：
+
+**直接映射**
+
+[,yaml]
+----
+- source: "value"
+  target: "key"
+----
+结果：`key:value`
+
+[,yaml]
+----
+- source: "${resource.attributes['service.name']}"
+  target: "service.name"
+----
+给定：`resource.attributes { 'service.name': 'cart-svc' }`
+
+结果：`service.name:cart-svc`
+
+直接映射的源需要是：
+
+* 字符串字面量
+* 字符串表达式
+
+**基于正则表达式的提取**
+
+[,yaml]
+----
+- source: "${resource.attributes}"
+  pattern: "telemetry.sdk\.(.*)"
+  target: "telemetry.sdk.${1}"
+----
+给定：`resource.attributes: { 'telemetry.sdk.language': 'go', 'telemetry.sdk.version': '1.23.1' }`
+
+结果：`telemetry.sdk.language:go;telemetry.sdk.version:1.23.1`
+
+基于正则表达式的映射支持多个捕获组，可以在目标表达式中按位置引用。
+
+基于正则表达式的映射的源需要是：
+
+* 映射表达式
+
+多个捕获组的示例：
+
+[,yaml]
+----
+- source: "${resource.attributes}"
+  pattern: "^(os|host|cloud|azure|gcp)\.(.*)"
+  target: "${1}.${2}"
+----
+
+在基于正则表达式的映射中，捕获组被替换到目标中。
+
+== CEL 表达式 (`<cel-*>`) 说明：
+
+* `<cel-string>` - 需要返回一个字符串；可以是以下之一：
+** 字符串字面量（例如，"hello"）
+** 字符串表达式，包裹在 `${...}` 中（例如，"${resource.attributes['service.name']}"）
+** 字符串插值（例如，"urn:opentelemetry:namespace/$\{resource.attributes['namespace']}:service/$\{resource.attributes['service.name']}"） - 注意：对于字符串插值，整个表达式不包裹在 `$\{...}` 中
+* `cel-boolean` - 需要返回一个布尔数据类型；可以是以下之一：
+** 布尔字面量（例如，"true"）
+** 布尔表达式（例如，"'namespace' in resource.attributes"） - 注意：布尔表达式不被包裹在`${...}`中
+* `cel-map` - 需要返回一个映射；可以是以下之一：
+** 映射字面量（例如，"${{'a':1, 'b': 'two'}}"）
+** 映射表达式（例如，"${resource.attributes}"）
+* `cel-expression` - 返回"任何"类型，可以是以下之一：
+** 字符串表达式
+** 布尔表达式
+** 映射表达式（例如，"${resource.attributes}" - 返回属性映射）
+** 列表表达式（例如，"${resource.attributes['process.command_args']}" - 返回一个列表）
+
+=== 插值
+
+字符串插值允许您在字符串字面量中嵌入表达式。虽然CEL规范不直接支持，但OTel映射配置提供了`prefix-$\{expression1}/suffix-$\{expression2}`形式的插值语法，内部重写为使用`+`运算符的字符串连接（例如，`"prefix-" + expression1 + "/suffix-" + expression2`）。
+
+理解这种重写行为很重要，原因有两个：
+
+1. *不支持嵌套插值*：由于字符串表达式用`${...}`标记，您不能嵌套插值表达式。但是，您可以直接使用`+`运算符编写连接。例如：
++
+[source]
+----
+${
+  'service.instance.id' in resource.attributes ?
+    resource.attributes['service.name'] + " - " + resource.attributes['service.instance.id'] :
+    resource.attributes['service.name'] + " - instance"
+}
+----
+
+2. *非字符串值需要类型转换*：CEL是强类型的，在连接时不会自动转换类型。在插值不同类型的值时，您必须显式将非字符串类型转换为字符串。
++
+例如，如果`process.pid`是一个整数（例如，`1`），则此表达式将失败：
++
+[source]
+----
+${resource.attributes['service.name']}/${resource.attributes['process.pid']}
+----
++
+正确的形式需要先将动态值转换为具体类型，然后再将其转换为字符串：
++
+[source]
+----
+${resource.attributes['service.name']}/${string(int(resource.attributes['process.pid']))}
+----
++
+双重转换（`string(int(...))`）是必要的，因为：
++
+* `resource.attributes['process.pid']` 返回一个动态（`dyn`）类型
+* `int()` 将动态值转换为具体的整数类型
+* `string()` 将整数转换为字符串以进行连接
++
+对于其他类型，使用类似的模式：`string(double(...))` 用于浮点数，`string(bool(...))` 用于布尔数据类型。
+
+=== CEL 语言参考
+
+CEL 是一种安全的、无副作用的表达式语言，旨在用于配置和策略用例。在 OpenTelemetry 拓扑映射的上下文中，CEL 用于：
+
+* 定义决定映射是否适用的条件
+* 从遥测属性计算变量
+* 动态构建标识符、名称和标签
+
+表达式在一个明确定义的、类型化的上下文中进行评估，该上下文来源于正在处理的 OpenTelemetry 信号（例如，resource、scope、span、metric 或 datapoint）。
+
+访问 https://github.com/google/cel-spec/blob/master/doc/langdef.md[CEL 的 langdef] 以获取详细参考。
+
+像 https://playcel.undistro.io/ 这样的在线 CEL 游乐场是快速检查表达式有效性的有用工具。
+
+== 常见模式和最佳实践
+
+* 用条件保护映射，以避免意外的基数问题
+* 始终以防御性方式处理缺失的属性
+* 保持标识符稳定且可预测
+* 对于复杂表达式，优先使用变量以提高可读性
+* 根据信号频率使用适当的 expireAfter 值。
+
+请参阅 xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[故障排除] 页面以获取有关故障排除 OTel 映射的指导。
+
+endif::ss-ff-stackpacks2_enabled[]

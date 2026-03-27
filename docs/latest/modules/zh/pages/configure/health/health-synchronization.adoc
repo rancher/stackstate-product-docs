@@ -1,0 +1,142 @@
+= 健康同步
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+本节描述了将来自不同监控系统的自定义健康数据同步到 SUSE Observability 的高级主题。
+这个主题主要针对希望与现有监控系统进行自定义集成的工程师。
+对于现成的监控器，您可以查看xref:/use/alerting/kubernetes-monitors.adoc[这里]。
+
+== 概述
+
+健康同步将来自外部监控系统的现有健康检查添加到 SUSE Observability 拓扑元素中。健康数据在外部监控系统中使用其自身的数据和规则进行计算，然后自动同步并附加到 SUSE Observability 中的相关拓扑元素。
+
+== 设置健康同步
+
+SUSE Observability 接收器 API 将自动接收和处理所有传入的健康数据。SUSE Observability 不需要额外配置来启用健康同步，然而，接收到的健康数据应符合预期的 JSON 格式。
+
+有关如何摄取健康数据的详细信息可以在以下页面找到：
+
+* xref:/configure/health/send-health-data/send-health-data.adoc[通过 SUSE Observability 接收器 API 摄取健康数据]
+
+== 健康同步管道
+
+健康同步框架的工作原理如下：
+
+* 健康数据被发送到 SUSE Observability，并通过接收器 API 进行摄取。
+* 与摄取的健康检查相关的 SUSE Observability 拓扑元素根据以下内容进行识别和绑定：
+ ** 在拓扑同步期间获得的拓扑标识符。
+ ** 来自摄取的xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[健康负载]的`topologyElementIdentifier`。
+* SUSE Observability 跟踪拓扑元素和健康检查的变化，以保持最新信息。
+
+image::health-sync-pipeline.svg[健康同步管道]
+
+=== 一致性模型
+
+SUSE Observability 健康同步依赖于不同的一致性模型，以确保来自外部监控系统的数据与 SUSE Observability 所接收和显示的数据相匹配。一致性模型在 `"health"` 属性中指定，或者在将健康数据发送到 SUSE Observability 时作为 SUSE Observability CLI 的一个参数。支持的模型有：`REPEAT_SNAPSHOTS` 和 `TRANSACTIONAL_INCREMENTS`。
+[tabs]
+====
+重复快照模型::
++
+--
+`REPEAT_SNAPSHOTS` 一致性模型适用于外部监控系统中所有检查的定期完整快照。SUSE Observability 跟踪每个接收快照中的检查，并决定是否需要在 SUSE Observability 中创建、更新或删除相关的外部检查状态。例如，如果某个检查状态在快照中不再存在。该模型提供了对将删除哪些外部检查的完全控制，因为所有决策都是从接收的快照中推断出来的。对于将出现在 SUSE Observability 中的外部检查，没有任何歧义。
+
+*在以下情况下使用此模型：*外部监控系统能够在特定时间窗口内记录哪些元素存在的状态，因此可以传递完整快照的内容。
+
+*JSON 负载：*xref:/configure/health/send-health-data/repeat_snapshots.adoc[重复快照健康负载] 接受特定属性以指定快照何时开始或停止。
+--
+
+事务增量模型::
++
+--
+`TRANSACTIONAL_INCREMENTS` 一致性模型旨在用于流式系统，其中仅将增量更改传达给 SUSE Observability。由于数据没有重复，因此通过确保整个管道中至少一次交付来维护数据一致性。为了检测是否有任何数据缺失，SUSE Observability 要求同时传达检查点和上一个检查点以及 `check_states`。该模型要求在整个管道中进行严格控制，以确保没有数据丢失。
+
+*在以下情况下使用此模型：*外部监控系统无法访问所有外部检查状态，而仅基于事件进行工作。
+
+*JSON 负载：*元数据 `repeat_interval` 和 `expire_interval` 对于 xref:/configure/health/send-health-data/transactional_increments.adoc[事务增量健康负载] 并不相关，因为数据没有预定义的周期性。
+
+--
+====
+
+=== 健康流和子流
+
+外部监控系统将健康数据发送到 SUSE Observability 接收器的健康流中。每个健康流至少有一个包含健康检查的子流。
+
+==== 健康流
+
+健康流唯一标识健康同步，并定义健康检查状态应一起处理的边界。
+
+==== 子流
+
+子流包含由 SUSE Observability 处理的健康检查数据。在处理来自分布式外部监控系统的健康数据时，可以配置多个子流，每个子流包含来自单个位置的健康快照。每个子流中的数据是半独立的，但对完整健康流的健康检查状态有贡献。如果单个位置负责报告健康流的健康检查状态，可以从xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[健康负载]中省略`sub_stream_id`。SUSE Observability 将假设所有外部健康检查属于一个默认的子流。
+
+=== 重复间隔
+
+健康同步按子流处理摄取的健康数据。在 xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[健康负载] 中指定的重复间隔是外部监控系统承诺不断发送完整快照，以保持 SUSE Observability 上数据的最新状态。这有助于 SUSE Observability 向用户展示健康同步的最新状态。
+
+=== 过期间隔
+
+过期间隔可用于配置健康同步中的子流，以删除不再由外部系统发送的数据。这在子流来源可能被退役、SUSE Observability 因此不再接收到数据的情况下非常有用。如果没有过期间隔，之前同步的数据将会永久保留。
+
+=== 检查状态
+
+健康检查状态由外部监控系统计算，并包含将其附加到拓扑元素所需的所有信息。为了能够将其具体化并附加到组件上，需要将健康状态归属给特定的监控器，在这种情况下是一个 <<_external_monitor,外部监控器>>。
+
+一旦附加到拓扑元素，健康检查状态将有助于该元素自身的健康状态。
+
+=== 外部监控器
+
+外部监控器允许将健康状态附加到组件，并在 SUSE Observability 高亮页面上显示修复提示。此资源需要通过 xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] 创建，或作为 stackpack 的一部分。这是一个外部监控器的示例：
+
+----
+    {
+      "_type": "ExternalMonitor",
+      "healthStreamUrn": "urn:health:kubernetes:external-health",
+      "description": "Monitored by external tool.",
+      "identifier": "urn:custom:external-monitor:heartbeat",
+      "name": "External Monitor Heartbeat",
+      "remediationHint": "",
+      "tags": [
+        "heartbeat"
+      ]
+    }
+----
+
+每个 `ExternalMonitor` 负载具有以下详细信息：
+
+* `_type`：SUSE Observability 需要知道这是一个监控器，因此值始终需要为 `ExternalMonitor`。
+* `healthStreamUrn`：此字段需要与 `urn` 作为 xref:/configure/health/send-health-data/repeat_snapshots.adoc#_json_property_health[健康负载] 一部分发送的匹配。
+* `description`：外部监控器的描述。
+* `identifier`：形式为 `urn:custom:external-monitor:....` 的标识符，在更新其配置时唯一标识外部监控器。
+* `name`：外部监控器的名称
+* `remediationHint`：用户在监控器失败时可以执行的操作的描述。格式为 markdown。
+* `tags`：为监控器添加标签，以帮助在您的 SUSE Observability 实例的监控器概览中组织它们，http://your-SUSE Observability-instance/#/monitors
+
+这是如何使用 xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] 创建 `External Monitor` 的示例。
+
+* 创建一个名为 `externalMonitor.yaml` 的新 YAML 文件，并将此 YAML 模板添加到其中以创建您自己的外部监控器。
+```
+nodes:
+* _type: ExternalMonitor
+healthStreamUrn: urn:health:sourceId:streamId
+description: Monitored by external tool.
+identifier: urn:custom:external-monitor:heartbeat
+name: External Monitor Heartbeat
+remediationHint: |-
+  To remedy this issue with the deployment {{ labels.deployment }}, consider taking the following steps:
+ .. Look at the logs of the pods created by the deployment
+tags:
+  *** heartbeat
+```
+* 使用 CLI 创建外部监控器。
+```bash
+sts settings apply -f externalMonitor.yaml
+✅ Applied 1 setting node(s).
+
+TYPE            | ID              | IDENTIFIER                            | NAME                    +
+ExternalMonitor | 150031117290020 | urn:custom:external-monitor:heartbeat | External Monitor Heartbeat
+```
+
+== 另请参见
+
+* xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[JSON健康负载]

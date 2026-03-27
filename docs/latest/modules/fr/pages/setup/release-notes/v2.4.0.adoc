@@ -1,0 +1,47 @@
+= v2.4.0 - 25/Aug/2025
+:revdate: 2025-08-21
+:page-revdate: {revdate}
+:description: SUSE Observability en mode auto-hébergé
+
+== Notes de mise à jour : SUSE Observability Helm Chart v2.4.0
+
+NOTE: Cette version comprend des changements préparatoires pour la prochaine version de RBAC.
+
+WARNING: Suite à la mise à jour vers Java 21, l'utilisation de l'API `StringTemplate` dans les fonctions de surveillance et autres scripts Groovy est obsolète. Si vous utilisez des scripts personnalisés, vérifiez leur utilisation et remplacez-les par `StsStringTemplate`. Ce dernier a la même API, mais un nom différent. Dans une prochaine version, la compatibilité ascendante avec `StringTemplate` sera supprimée.
+
+== Nouvelles fonctionnalités et améliorations
+
+* *Agent : Migration de l'API Dynatrace :* Les contrôles de topologie et de santé de Dynatrace ont été transférés de la v1 à la v2 de l'API Dynatrace.
+* *Sécurité renforcée pour la carte du gouvernail :* À partir de la version `v2.4.0`, tous les conteneurs de la charte SUSE Observability Helm (à l'exception du conteneur Elasticsearch privileged init) ont désormais des valeurs par défaut plus strictes pour `securityContext`. Cela améliore la sécurité prête à l'emploi et garantit la compatibilité avec les clusters utilisant des politiques d'admission à la sécurité des pods (PSA) très restrictives, telles que la configuration restreinte au Rancher.
+** *Déploiement sur des clusters PSA restrictifs :* Lors du déploiement sur des clusters avec une politique PSA restrictive, deux options d'installation sont maintenant supportées :
+** *Exemption de l'espace de nommage :* Exempte l'espace de noms du graphique ainsi que les autres espaces de noms requis par Rancher.
+** *Désactiver le conteneur d'initialisation privilégié :* Set `elasticsearch.sysctlInitContainer.enabled=false`. Notez que cela nécessite un ajustement manuel du paramètre `vm.max_map_count` sur tous les nœuds concernés.
+**  Les nouvelles valeurs par défaut sont les suivantes
+....
+`capabilities.drop: ["ALL"]`
+`seccompProfile.type: "RuntimeDefault"`
+`runAsNonRoot: true`
+`allowPrivilegeEscalation: false`
+....
+* *Mise à jour de Java Runtime vers Java 21 :* Le runtime pour StackGraph, StackState et la plateforme a été mis à jour de Java 11 à Java 21. Cette mise à jour introduit des règles d'encapsulation plus strictes qui peuvent avoir un impact sur les fonctions Groovy personnalisées que vous avez créées.
+** *Accès aux champs privés :* Dans les versions précédentes, il était possible d'accéder aux champs privés des objets dans les scripts Groovy. C'était déjà une mauvaise pratique, mais Java 21 la rend impossible. Si vous rencontrez ce problème, remplacez l'accès au champ privé par les appels getter/setter appropriés.
+** *StackPack `StringTemplate` Références :* Dans les scripts Groovy pour la fonctionnalité StackPack, les références à `StringTemplate` doivent être mises à jour en `StsStringTemplate`, car `StringTemplate` est maintenant une interface dans Java 21.
+
+* *Filtrage des notifications :* Les notifications peuvent désormais être filtrées en fonction des étiquettes de ressources. Pour chaque clé, au moins une valeur doit correspondre pour que le filtre s'applique.
+* *Renommage des clés de configuration de Helm :* La clé de configuration `stackstate.experimental` Helm a été renommée `stackstate.features`. L'ancienne clé est toujours prise en charge à des fins de rétrocompatibilité, mais elle sera supprimée dans une prochaine version. **Note de mise à niveau :** Si vous avez des valeurs personnalisées, renommez manuellement la clé. Si vous utilisez un fichier `sizing_values.yaml` généré, vous devez le régénérer à l'aide de l'option `--set 'basicConfig.generate=false'` pour mettre à jour la clé.
+* *Amélioration des performances :*
+** *Vues :* Les performances de récupération des vues volumineuses ont été améliorées.
+** *Autorisation :* Les performances d'autorisation ont été améliorées pour les utilisateurs qui appartiennent à de nombreux groupes (plus de 10).
+
+== Corrections de bugs
+
+* *Suppression de la fonctionnalité de la page des paramètres :* Les boutons "Test de connexion de la source de données" et "Réinitialiser la synchronisation" ont été supprimés de la page des paramètres. Le processus de synchronisation se réinitialise désormais automatiquement après une mise à jour de la configuration.
+* *Performance des nœuds de données Hadoop :* Correction d'un problème où les DataNodes mettaient beaucoup de temps à localiser le nouvel emplacement d'un bloc de données, ce qui pouvait entraîner des performances médiocres et des échecs de sauvegarde.
+* *Agrégation de la santé topologique :* Le nombre de composants signalés dans les moniteurs d'agrégation de l'état de la topologie est désormais limité afin d'éviter les problèmes de performance.
+* *Migration des autorisations :* Résolution d'un problème où les permissions n'étaient pas correctement migrées.
+
+=== Correction des bugs de l'agent
+
+* *La panique de l'agent de process :* L'agent de processus évite désormais de paniquer lorsque le trafic PostgreSQL est mal classé.
+* *OpenMetrics Check :* Correction d'un problème où la vérification de `openmetrics` n'arrivait pas à récupérer les données des pods.
+* *Enrichissement des pods Kubernetes :* Correction d'un problème avec l'enrichissement des pods sur les versions 1.33 et plus récentes de Kubernetes.

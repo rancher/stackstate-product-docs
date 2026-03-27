@@ -1,0 +1,125 @@
+= KeyCloak
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+SUSE Observability puede autenticar utilizando KeyCloak como proveedor de autenticación, necesitarás configurar tanto SUSE Observability como KeyCloak para que puedan comunicarse entre sí. Las siguientes secciones describen las configuraciones respectivas.
+
+== Flujo de autenticación
+
+Al utilizar Keycloak como proveedor de autenticación, SUSE Observability usará OIDC (OpenID Connect) para autenticar a los usuarios. El siguiente diagrama describe el flujo de autenticación.
+
+image::k8s/keycloak-flow.png[Flujo de autenticación de Keycloak]
+
+== Configurar KeyCloak
+
+Antes de que puedas configurar SUSE Observability para autenticar utilizando KeyCloak, necesitas añadir una nueva configuración de cliente al Servidor de Autenticación de KeyCloak. Los ajustes necesarios para el cliente son:
+
+* *ID de Cliente* - El ID del cliente que se está conectando, recomendamos nombrarlo `stackstate`
+* *Protocolo de Cliente* - Establecer en `openid-connect`
+* *Tipo de Acceso* - Establecer en `confidential`, para que se use un secreto para establecer la conexión entre KeyCloak y SUSE Observability
+* *Flujo Estándar Habilitado* - Establecer en `Enabled`
+* *Flujo Implícito Habilitado* - Establecer en `Disabled`
+* *URL Raíz* - La ubicación raíz de SUSE Observability (el mismo valor configurado como URL base de la configuración de SUSE Observability)
+* *URIs de redirección válidos* - Esto debería ser `/loginCallback/*`
+* *URL Base* - Esto debería apuntar a la ubicación raíz de SUSE Observability
+
+== Configurar SUSE Observability
+
+=== Kubernetes
+
+Para configurar SUSE Observability para autenticar utilizando KeyCloak, se deben añadir los detalles de KeyCloak y el mapeo de roles de usuario al archivo `authentication.yaml`. Por ejemplo:
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    keycloak:
+      url: "https://keycloak.acme.com/auth"
+      realm: acme
+      authenticationMethod: client_secret_basic
+      clientId: stackstate
+      secret: "8051a2e4-e367-4631-a0f5-98fc9cdc564d"
+      jwsAlgorithm: RS256
+      # scope is optional. By default `openid`, `profile` and `email` are requested
+      #_ scope: ["openid", "profile", "email"]
+      # jwtClaims:
+      #   usernameField: preferred_username
+      #   groupsField: roles
+
+    # map the roles from Keycloak to the
+    # 3 standard subjects in SUSE Observability (guest, powerUser and admin)
+    roles:
+      guest: ["keycloak-guest-role-for-stackstate"]
+      powerUser: ["keycloak-power-user-role-for-stackstate"]
+      admin: ["keycloak-admin-role-for-stackstate"]
+----
+
+[NOTE]
+====
+*Nota:*
+Por defecto, al autenticar a un usuario, la solicitud a KeyCloak especifica un alcance predeterminado de `openid profile email` si no se ha especificado un alcance personalizado en la configuración. Verifica el `Client scopes` en tu instancia de KeyCloak para asegurarte de que el alcance por defecto es correcto o si necesitas uno personalizado.
+====
+
+
+Sigue los pasos a continuación para configurar SUSE Observability para autenticar utilizando KeyCloak:
+
+. En `authentication.yaml` - añade los detalles del proveedor de autenticación de KeyCloak (consulta el ejemplo anterior). Los valores específicos de KeyCloak se pueden obtener de la configuración del cliente en KeyCloak:
+ ** *url* - La URI base para la instancia de KeyCloak
+ ** *realm* - El dominio de KeyCloak al que conectarse
+ ** *authenticationMethod* - Establecer en `client_secret_basic`, siendo actualmente el único valor soportado.
+ ** *clientId* - El ID del cliente de KeyCloak tal como está configurado en KeyCloak
+ ** *secret* - El secreto asociado al cliente de KeyCloak, que se utiliza para autenticar a este cliente en KeyCloak
+ ** *redirectUri* - Optional: La URI donde se puede alcanzar el punto de retorno de inicio de sesión de SUSE Observability. Poblado por defecto utilizando el `stackstate.baseUrl`, pero puede ser sobrescrito (debe ser una URL completamente cualificada que apunte a la vía `/loginCallback`)
+ ** *jwsAlgorithm* - Establecer en `RS256`, siendo actualmente el único valor soportado.
+ ** *jwtClaims* - Opcional: Los roles o el nombre de usuario se pueden recuperar de un atributo diferente al comportamiento por defecto de Keycloak
+  *** *usernameField* - Optional: El campo en el perfil de usuario OIDC que debe utilizarse como nombre de usuario. Por defecto, esto será el `preferred_username`.
+  *** *groupsField* - Opcional: SUSE Observability siempre, y por defecto solo, utilizará el `roles` que proporciona Keycloak. Pero también puede añadir roles del campo especificado aquí. Esto es principalmente útil cuando Keycloak está mapeando roles/grupos de un sistema de terceros.
+. En `authentication.yaml` - mapea los roles de usuario de KeyCloak a los sujetos correctos de SUSE Observability utilizando la configuración `roles.guest`, `roles.powerUser` o `roles.admin` (consulta el ejemplo anterior). Para más detalles, consulta los xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[roles predeterminados de SUSE Observability]. También se pueden crear más roles de SUSE Observability, consulta la xref:/setup/security/rbac/README.adoc[documentación de RBAC].
+. Almacena el archivo `authentication.yaml` junto con el archivo `values.yaml` de las instrucciones de instalación de SUSE Observability.
+. Ejecuta una actualización de Helm para aplicar los cambios:
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*Nota:*
+
+* La primera ejecución del comando de actualizar versión de Helm resultará en el reinicio de pods, lo que puede causar una breve interrupción de la disponibilidad.
+* Incluye `authentication.yaml` en cada ejecución de `helm upgrade`.
+* La configuración de autenticación se almacena como un secreto de Kubernetes.
+====
+
+
+=== Usando un secreto externo
+
+Cuando los secretos de keycloak deben provenir de un secreto externo, sigue xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[estos pasos] pero completa los siguientes datos:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  keycloak_client_id: <base64 of client id>
+  keycloak_secret: <base64 of secret>
+----
+
+== Consulte también
+
+* xref:/setup/security/authentication/authentication_options.adoc[Opciones de autenticación]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permisos para los roles predefinidos de SUSE Observability]
+* xref:/setup/security/rbac/rbac_roles.adoc[Crear roles RBAC]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[Secretos Externos]

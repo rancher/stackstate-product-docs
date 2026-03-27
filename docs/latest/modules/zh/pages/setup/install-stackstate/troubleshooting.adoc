@@ -1,0 +1,51 @@
+= 查错
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 快速故障排除指南
+
+以下是针对SUSE Observability启动过程问题的快速故障排除指南：
+
+. 检查安装是否成功完成，并且版本是否列出：
++
+[,text]
+----
+helm list --namespace suse-observability
+----
+
+. 检查SUSE Observability名称空间中的所有pod是否正在运行：
++
+[,text]
+----
+kubectl get pods
+----
++
+在第一次部署中，可能会有几个pod中的容器重启几次，因为它们在等待其他pod启动并处于`ready`状态。这可能是由于调度和 Docker 镜像拉取延迟造成的。
++
+处于`pending`状态的pod通常表示存在问题：
+
+ ** 由于集群资源不足，pod无法调度。如果集群自动扩展器处于活动状态，它通常能够自动解决此问题，否则需要手动干预以向集群添加更多节点。
+ ** pod无法调度，虽然有适合的节点，但这些节点有`taints`，而pod无法容忍。为了解决这个问题，可以添加没有污点的更多节点，但SUSE Observability也可以xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_override_default_configuration[配置]以容忍某些污点并在有污点的节点上运行。
+ ** pod正在等待持久卷（PVs）被挂载。一个原因可能是SUSE Observability Helm图表没有指定`storageClassName`，而是依赖于集群具有默认存储类。当集群没有默认值时，需要通过SUSE Observability的Helm值xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[指定存储类]。
+
++
+对于状态为`ImagePullBackOff`的pod，还要检查确切的错误消息，常见原因包括：
+
+ ** 用于拉取镜像的用户名/密码不正确
+ ** 连接到 Docker 注册表失败，这可能是由于身份验证问题或连通性问题（防火墙、隔离的安装）。
+ ** 覆盖的 Docker 镜像注册表 URL 中的拼写错误
+
++
+要找出`Pending`、`ImagePullBackOff`或`CrashLoopBackOff`状态的更详细原因，请使用此命令：
++
+[,text]
+----
+kubectl describe pod <pod-name>
+----
++
+输出的最后包含一个`event`部分，通常包含问题。每个容器还有一个`State`部分，提供有关容器终止的更多详细信息。
+
+. 作为优质客户，请通过 https://scc.suse.com/ 联系 SUSE Observability 支持，以获取在本地群集设置 SUSE Observability 的帮助。使用 xref:/setup/install-stackstate/support-package-logs.adoc[支持包（日志）] 收集有关您实例的信息，以便支持团队使用。
+. 如果问题与性能相关，请运行xref:/setup/install-stackstate/support-package-performance.adoc[支持包（性能）]以主动调查性能。
+. 如果上述步骤未能解决问题，您可以参考xref:/setup/install-stackstate/advanced-troubleshooting.adoc[高级故障排除指南]。
