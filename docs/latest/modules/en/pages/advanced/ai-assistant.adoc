@@ -1,0 +1,342 @@
+= AI Assistant
+:revdate: 2026-03-23
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+AI Assistant is disabled by default in self-hosted {stackstate-product-name}. When you enable it, the Helm chart turns on the AI Assistant feature in the UI and deploys two backend components:
+
+* the AI Assistant UI, which is already deployed but hidden behind the feature flag
+* the AI Assistant backend service
+* the MCP (Model Context Protocol) server used by the AI Assistant backend
+
+The feature is controlled by the Helm value `ai.assistant.enabled`.
+
+[WARNING]
+====
+Using AI Assistant generates costs because it invokes external AI models. Larger investigations can take several minutes and may generate significant costs.
+====
+
+== Enable AI Assistant
+
+Set the feature flag in your Helm values:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+----
+
+After enabling the flag, the chart exposes the AI Assistant UI and deploys the `suse-observability-ai-assistant` StatefulSet, the `suse-observability-mcp` Deployment, and the related Services and ServiceAccounts.
+
+Most predefined roles already have access to AI Assistant. To grant users with custom roles access, follow the steps in <<access-ai-assistant,Access AI Assistant>>.
+
+== Configure AI model provider
+
+Set `ai.assistant.provider` in your Helm values to choose which model provider AI Assistant uses. The default value is `bedrock`.
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: bedrock
+----
+
+To use Anthropic directly instead of AWS Bedrock, change the provider value to `anthropic` and add the Anthropic API key configuration described in the `Anthropic` tab below.
+
+[tabs]
+====
+AWS Bedrock::
++
+--
+
+AWS Bedrock is the default model provider for AI Assistant.
+
+[discrete]
+= Enable Anthropic models in AWS Bedrock
+
+[IMPORTANT]
+=====
+Before the first use of AI Assistant, make sure Anthropic Claude models are enabled in AWS Bedrock for the AWS account and region used by the AI Assistant backend. If model access is not enabled, AI Assistant will not be able to invoke the required Bedrock models even if the IAM role and ServiceAccount are configured correctly. Use the same AWS region that you configure for AI Assistant. If `ai.assistant.bedrock.awsRegion` is not set, the chart default is `eu-west-1`.
+=====
+
+. Open the AWS Bedrock console in the correct account and region.
+. Open the `Model catalog`. If Anthropic models are not enabled yet, AWS shows a prompt to enable access.
++
+image::ai-assistant/setup-aws/enable_anthropic_hint.png[Enable Anthropic model access in AWS Bedrock]
+
+. Start the access request flow for Anthropic Claude models and enable them for your account.
++
+image::ai-assistant/setup-aws/enable_anthropic_popup.png[Anthropic model access request in AWS Bedrock]
+
+. After access is granted, verify that Anthropic Claude models are available in Bedrock.
++
+image::ai-assistant/setup-aws/playground.png[Anthropic Claude models available in the AWS Bedrock playground]
+
+[NOTE]
+=====
+It is recommended to open the Bedrock playground for `Claude Sonnet 4.6` and `Claude Opus 4.6` and send a simple prompt such as `hello` to confirm that model access works correctly before using AI Assistant.
+=====
+
+[NOTE]
+=====
+The exact AWS console screens can differ slightly between regions and AWS accounts, but the required outcome is the same: Anthropic Claude models must be enabled in Bedrock before AI Assistant is used.
+
+After model access is enabled in AWS Bedrock, it can take a few minutes before the models become usable in AI Assistant.
+=====
+
+[discrete]
+= Create the IAM policy and role
+
+[discrete]
+== IAM policy permissions
+
+Grant the AI Assistant role permission to invoke the Bedrock models used by the service. The current AI Assistant defaults use Anthropic Claude models through Bedrock, so the minimum required actions are:
+
+* `bedrock:InvokeModel`
+* `bedrock:InvokeModelWithResponseStream`
+
+[NOTE]
+=====
+Even though the current implementation uses Claude models, we recommend allowing these actions on all Bedrock models with `"Resource": ["*"]`. This helps avoid IAM policy updates when a future {stackstate-product-name} release changes the default model set.
+=====
+
+Recommended policy:
+
+[,json]
+----
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowAiAssistantBedrockInference",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}
+
+----
+
+If you prefer a more restrictive policy, you can scope access to specific model ARNs, but you must review that policy on every upgrade.
+
+[discrete]
+== IAM role trust policy
+
+Create an IAM role that trusts the Kubernetes ServiceAccount used by the AI Assistant backend:
+
+[,json]
+----
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE:aud": "sts.amazonaws.com",
+          "oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE:sub": "system:serviceaccount:suse-observability:suse-observability-ai-assistant"
+        }
+      }
+    }
+  ]
+}
+----
+
+Replace the AWS account ID, OIDC provider, AWS region, and Kubernetes namespace with your own values.
+
+[discrete]
+= Configure the ServiceAccount for AWS Bedrock
+
+Only the AI Assistant backend needs AWS credentials for Bedrock. The MCP server does not call Bedrock.
+
+On Amazon EKS, the recommended approach is IAM Roles for Service Accounts (IRSA). Add the IAM role annotation to the AI Assistant ServiceAccount:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: bedrock
+    bedrock:
+      awsRegion: eu-west-1
+
+stackstate:
+  components:
+    aiAssistant:
+      serviceAccount:
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/suse-observability-ai-assistant
+----
+
+This annotation is applied to the `suse-observability-ai-assistant` ServiceAccount created by the chart.
+
+--
+Anthropic::
++
+--
+
+AI Assistant can also call Anthropic directly by setting `ai.assistant.provider=anthropic`.
+
+[discrete]
+= Configure Anthropic with a Helm value
+
+Set the provider to `anthropic` and provide the API key in your Helm values:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: anthropic
+    anthropic:
+      apiKey: <your-anthropic-api-key>
+----
+
+If you set `ai.assistant.anthropic.apiKey`, the chart uses that API key for the AI Assistant backend.
+
+[discrete]
+= Configure Anthropic with an existing Secret
+
+If you already manage the Anthropic API key in an existing Kubernetes Secret, reference that Secret instead of storing the key directly in the Helm values:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: anthropic
+    anthropic:
+      fromExternalSecret:
+        name: anthropic-api-key
+        key: ANTHROPIC_API_KEY
+----
+
+If you omit `ai.assistant.anthropic.fromExternalSecret.key`, the chart uses `ANTHROPIC_API_KEY` by default.
+
+[NOTE]
+=====
+When `ai.assistant.anthropic.fromExternalSecret.name` is set, the referenced Secret must already exist in the same namespace as the Helm release before you run `helm install` or `helm upgrade`.
+=====
+
+[NOTE]
+=====
+Only the AI Assistant backend needs the Anthropic API key. The MCP server does not call Anthropic.
+=====
+
+--
+====
+
+[#access-ai-assistant]
+== Access AI Assistant
+
+Most predefined roles already include the `execute-ai` permission required to use AI Assistant. In the current Helm chart permission definitions, `stackstate-admin`, `stackstate-power-user`, `stackstate-k8s-troubleshooter`, and `stackstate-k8s-admin` can use AI Assistant by default.
+
+To grant AI Assistant access to users with custom roles, add the `execute-ai` system permission to their role.
+
+Grant it with the `sts` CLI:
+
+[,sh]
+----
+sts rbac grant --subject ai-users --permission execute-ai
+----
+
+Verify it with:
+
+[,sh]
+----
+sts rbac describe-permissions --subject ai-users
+----
+
+If you manage access through Rancher RBAC, the permission maps to resource `ai` with verb `execute` in the `instance.observability.cattle.io` API group.
+
+== Configure MCP and AI Assistant
+
+Most AI Assistant settings should stay at their chart defaults. In particular, it is recommended not to change internal connectivity settings, such as listen addresses, service ports, or the built-in environment variables unless you have explicit guidance for your deployment.
+
+In practice, the most important settings are:
+
+* `ai.assistant.provider` to choose `bedrock` or `anthropic`
+* `ai.assistant.bedrock.awsRegion` for AWS Bedrock region selection
+* `ai.assistant.anthropic.apiKey` or `ai.assistant.anthropic.fromExternalSecret.*` for Anthropic API key management
+* `stackstate.components.mcp.replicaCount` to scale the MCP server
+* `stackstate.components.mcp.resources` to size the MCP server
+* `stackstate.components.aiAssistant.resources` to size the AI Assistant backend
+* `stackstate.components.aiAssistant.serviceAccount.annotations` to attach an AWS IAM role for Bedrock access
+
+=== MCP configuration
+
+The MCP server is enabled automatically together with AI Assistant. The main setting to tune are:
+
+* `stackstate.components.mcp.replicaCount` - increase it when you need more MCP capacity
+* `stackstate.components.mcp.resources` - to control CPU and memory allocation
+
+=== AI Assistant backend configuration
+
+For the AI Assistant backend, the most important settings are:
+
+* `stackstate.components.aiAssistant.resources` - to control CPU and memory allocation
+* `ai.assistant.provider` - to choose whether the backend uses AWS Bedrock or Anthropic directly
+* `ai.assistant.bedrock.awsRegion` - to set the AWS region when using AWS Bedrock
+* `stackstate.components.aiAssistant.serviceAccount.annotations` - to attach the IAM role required for AWS Bedrock
+* `ai.assistant.anthropic.apiKey` or `ai.assistant.anthropic.fromExternalSecret.*` - to provide the Anthropic API key when using Anthropic directly
+
+The persistence settings (`stackstate.components.aiAssistant.persistence.size` and `stackstate.components.aiAssistant.persistence.storageClass`) can also be adjusted if you want a different PVC size or storage class for the SQLite database.
+
+Example:
+
+[,yaml]
+----
+ai:
+  assistant:
+    enabled: true
+    provider: bedrock
+    bedrock:
+      awsRegion: eu-west-1
+
+stackstate:
+  components:
+    mcp:
+      replicaCount: 2
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "512Mi"
+    aiAssistant:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "1Gi"
+      serviceAccount:
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/suse-observability-ai-assistant
+      persistence:
+        size: 5Gi
+----
+
+This example focuses on the settings most often changed in production: model provider selection, MCP scaling, CPU and memory sizing, the IAM role annotation for AWS Bedrock, and optional AI Assistant persistence sizing.
+
+== Related information
+
+For more details on related configuration patterns, see:
+
+* xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc[Override default configuration] for adding Helm values and extra environment variables
+* xref:/setup/custom-integrations/overview.adoc[Custom Integrations Overview] for another example of enabling a feature through Helm values
+* xref:/setup/security/rbac/rbac_permissions.adoc[Permissions] for the complete RBAC permission reference
+* xref:/setup/security/rbac/rbac_roles.adoc[Roles] for predefined and custom role configuration
+* xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] for Rancher-managed roles and custom RoleTemplates

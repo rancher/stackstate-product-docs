@@ -1,0 +1,192 @@
+= Generic OIDC Provider via Keycloak
+:revdate: 2026-03-04
+:page-revdate: {revdate}
+:description: SUSE Cloud Observability
+
+== Overview
+
+This guide describes how to configure any OIDC-compliant identity provider as an SSO provider in Keycloak for your SUSE Cloud Observability tenant.
+
+The authentication flow is:
+
+----
+User -> Keycloak (identity broker) -> External OIDC Provider
+----
+
+Keycloak delegates authentication to the external OIDC provider and maps claims to Keycloak roles. SUSE Cloud Observability then receives those roles from Keycloak through its standard integration.
+
+Use this guide when your OIDC provider is not covered by the provider-specific guides:
+
+* xref:/suse-cloud-observability/keycloak-sso/microsoft-entra-id.adoc[Microsoft Entra ID]
+* xref:/suse-cloud-observability/keycloak-sso/google.adoc[Google]
+
+== Prerequisites
+
+* A SUSE Cloud Observability tenant with Advanced Keycloak management mode enabled -- see xref:/suse-cloud-observability/user-management.adoc[User Management].
+* An OIDC-compliant identity provider with a discovery endpoint (`+.well-known/openid-configuration+`).
+* Administrative access to register a client (application) in your OIDC provider.
+* The Keycloak realm name and base URL (for example, `+https://keycloak.acme.com+` and realm `acme`).
+
+== Step 1: Register a client in your OIDC provider
+
+Register a new client (or application) in your OIDC provider with the following settings:
+
+. Set the *Redirect URI* to the Keycloak broker endpoint. You can find this URL in the Keycloak Admin Console by navigating to *Identity Providers* > *Add provider* > *OpenID Connect v1.0* -- the *Redirect URI* is shown at the top of the configuration page. It follows the pattern:
++
+----
+https://<keycloak-host>/realms/<realm>/broker/<alias>/endpoint
+----
++
+Replace `<alias>` with the identity provider alias you will configure in Keycloak (for example, `my-oidc-provider`).
+. Request at least the scopes `openid`, `email`, and `profile`.
+. Use the *Authorization Code* flow (also called Authorization Code Grant).
+. Note the *Client ID*, *Client Secret*, and *Discovery endpoint URL*.
+
+== Step 2: Configure the identity provider in Keycloak
+
+. Sign in to the Keycloak Admin Console and select your realm.
+. Navigate to *Identity Providers* > *Add provider* > *OpenID Connect v1.0*.
+. Configure the following settings:
++
+[cols="1,2"]
+|===
+| Setting | Value
+
+| *Alias*
+| An identifier for this provider, for example `my-oidc-provider`. This value is used in the redirect URI.
+
+| *Display Name*
+| The name shown on the Keycloak login page.
+
+| *Discovery endpoint*
+| The `+.well-known/openid-configuration+` URL of your OIDC provider.
+
+| *Client ID*
+| The client ID from Step 1.
+
+| *Client Secret*
+| The client secret from Step 1.
+
+| *Client Authentication*
+| Select the method supported by your provider. Common values are `Client secret sent as post` or `Client secret sent as basic auth`.
+
+| *Default Scopes*
+| `openid email profile` (adjust based on what your provider supports).
+
+| *Sync Mode*
+| `force` to always update user attributes from the provider, or `inherit` to use the realm default.
+|===
+. Click *Save*.
+. Verify the provider appears on the Keycloak login page by opening your realm's login URL in a browser.
+
+For more details, see the https://www.keycloak.org/docs/latest/server_admin/#_identity_broker_oidc[Keycloak documentation on OpenID Connect v1.0 identity providers].
+
+== Step 3: Configure mappers
+
+Mappers transform claims from the external OIDC provider into Keycloak user attributes or roles.
+
+=== Username mapper
+
+To control how usernames are set for federated users:
+
+. In the Keycloak Admin Console, navigate to *Identity Providers* > *<your-alias>* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Username Template Importer`.
+. Set *Template* to the claim you want to use, for example `$\{CLAIM.email}` or `$\{CLAIM.preferred_username}`.
+. Click *Save*.
+
+=== Group-to-role mapper (if provider supports groups)
+
+If your OIDC provider includes a group or role claim in its tokens:
+
+. Navigate to *Identity Providers* > *<your-alias>* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Claim to Role`.
+. Set *Claim* to the name of the groups or roles claim (for example, `groups` or `roles`).
+. Set *Claim Value* to the specific group or role value.
+. Under *Role*, select the Keycloak role to assign.
+. Click *Save*.
+
+Repeat this for each group-to-role mapping you need.
+
+=== Alternative: Hardcoded role
+
+If your OIDC provider doesn't include group claims, you can assign a default role to all federated users:
+
+. Navigate to *Identity Providers* > *<your-alias>* > *Mappers* > *Add mapper*.
+. Set *Mapper type* to `Hardcoded Role`.
+. Select the Keycloak role to assign.
+. Click *Save*.
+
+You can also manually assign roles to individual users after their first login in the Keycloak Admin Console under *Users* > *<user>* > *Role Mappings*.
+
+== Advanced configuration
+
+=== First Login Flow
+
+Keycloak's *First Login Flow* controls what happens when a user authenticates through an external provider for the first time. The default flow prompts the user to review their profile.
+
+To change this behavior:
+
+. Navigate to *Identity Providers* > *<your-alias>*.
+. Under *First Login Flow*, select an alternative flow or create a custom one.
+
+Common options:
+
+* `first broker login` (default) -- Review profile and link accounts.
+* A custom flow that automatically creates accounts without prompting.
+
+=== Account linking
+
+If users may already have Keycloak accounts (for example, from a previous authentication method), enable account linking:
+
+. In the *First Login Flow*, ensure the *Confirm Link Existing Account* and *Verify Existing Account by Email* steps are enabled.
+. This allows users to link their external identity to their existing Keycloak account.
+
+=== Manual endpoint configuration
+
+If your OIDC provider doesn't support a discovery endpoint, you can manually configure the endpoints:
+
+. When adding the identity provider, leave the *Discovery endpoint* empty.
+. Manually set the following fields:
++
+[cols="1,2"]
+|===
+| Setting | Description
+
+| *Authorization URL*
+| The provider's authorization endpoint.
+
+| *Token URL*
+| The provider's token endpoint.
+
+| *User Info URL*
+| The provider's user info endpoint (optional).
+
+| *JWKS URL*
+| The URL to the provider's JSON Web Key Set.
+
+| *Issuer*
+| The expected issuer value in tokens.
+|===
+
+== Step 4: Verify the role mapping chain
+
+The complete mapping chain is:
+
+----
+OIDC Provider group/role -> Keycloak role -> SUSE Cloud Observability role
+----
+
+. *Provider groups to Keycloak roles* -- Configured in Step 3 using claim-to-role mappers or hardcoded roles.
+. *Keycloak roles to SUSE Cloud Observability roles* -- Roles map through the predefined Keycloak groups (`stackstate-k8s-troubleshooter`, `stackstate-k8s-admin`). No additional SUSE Cloud Observability configuration is needed -- the platform automatically maps Keycloak roles associated with these groups to the corresponding SUSE Cloud Observability roles.
+
+To verify the full chain:
+
+. Log in to SUSE Cloud Observability using a test user from the external OIDC provider.
+. Confirm that the user is assigned the expected SUSE Cloud Observability role.
+. If the user doesn't have the correct role, check the Keycloak user's role assignments and group memberships.
+
+== See also
+
+* xref:/suse-cloud-observability/user-management.adoc[User Management]
+* xref:/suse-cloud-observability/keycloak-sso/microsoft-entra-id.adoc[Microsoft Entra ID via Keycloak]
+* xref:/suse-cloud-observability/keycloak-sso/google.adoc[Google via Keycloak]
