@@ -19,7 +19,7 @@ Most backups are enabled with a single Helm value `global.backup.enabled`. Setti
 The following data can be automatically backed up:
 
 * *Settings* (StackPacks, monitors, views, tokens) - always enabled:
-** When `global.backup.enabled` is `false`: backups are stored via the S3 Proxy to a small local Persistent Volume
+** When `global.backup.enabled` is `false`: backups are stored via the S3 Proxy to a K8s Persistent Volume
 ** When `global.backup.enabled` is `true`: backups are stored via the S3 Proxy on your configured storage backend
 * *Topology data and Settings* stored in StackGraph - enabled when `global.backup.enabled` is `true`
 * *Metrics* stored in {stackstate-product-name}'s Victoria Metrics instance(s) - enabled when `global.backup.enabled` is `true`
@@ -28,7 +28,7 @@ The following data can be automatically backed up:
 
 === Storage options
 
-Backups use an [S3 Proxy](https://github.com/gaul/s3proxy) as as an S3-compatible gateway to your storage backend. S3 Proxy is automatically deployed by the Helm chart.
+Backups use [S3 Proxy](https://github.com/gaul/s3proxy) as an S3-compatible gateway to your storage backend. S3 Proxy is automatically deployed by the Helm chart.
 
 It can be configured to store the backups in three locations:
 
@@ -105,7 +105,7 @@ clickhouse:
 
 Replace the following values:
 
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy system. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy system.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
  ** YOUR_ACCESS_KEY should contain 5 to 20 alphanumerical characters.
  ** YOUR_SECRET_KEY should contain 8 to 40 alphanumerical characters.
 * `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` are the AWS credentials for the IAM user that has access to the S3 buckets where the backups will be stored. See below for the permission policy that needs to be attached to that user.
@@ -243,7 +243,7 @@ backup:
 
 Replace the following values:
 
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy system. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy system.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 * `AZURE_STORAGE_ACCOUNT_NAME` - the https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[Azure storage account name (learn.microsoft.com)]
 * `AZURE_STORAGE_ACCOUNT_KEY` - the https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[Azure storage account key (learn.microsoft.com)] where the backups should be stored.
 
@@ -296,7 +296,7 @@ clickhouse:
 ----
 
 Replace the following values:
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy system. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy system.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 * `CONTAINER` with your Azure Blob Storage container name. The backups for different datastores will be organized using the configured `s3Prefix` values. The same `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY` values from the previous section apply here.
 
 === Kubernetes Persistent Volume
@@ -336,7 +336,7 @@ backup:
 
 Replace the following values:
 
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy system. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy system.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 
 == Configuration and topology data (StackGraph)
 
@@ -395,7 +395,7 @@ Backup retention depends on the `global.backup.enabled` setting:
 * By default, settings backups are kept for 365 days
 * Configure retention using `backup.configuration.scheduled.backupRetentionTimeDelta` - specified in the format of GNU date `--date` argument. The default is `365 days ago`
 
-**When `global.backup.enabled` is `false`** (backups stored to a local PV):
+**When `global.backup.enabled` is `false`** (backups stored to a dedicated PV):
 
 * By default, the last 10 backup files are kept on the Persistent Volume
 * Configure the maximum number of files using `backup.configuration.maxLocalFiles` (default: `10`)
