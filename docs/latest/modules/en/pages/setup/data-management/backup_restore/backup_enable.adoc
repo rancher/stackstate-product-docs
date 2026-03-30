@@ -5,7 +5,7 @@
 
 [NOTE]
 ====
-This page applies to {stackstate-product-name} v2.7.0 or newer.
+This page applies to {stackstate-product-name} {release-version} or newer. If you are upgrading from a version prior to {release-version}, see xref:/setup/data-management/backup_restore/migration_to_s3proxy.adoc[Migrating to S3Proxy] for important information about changes in configuration of the backup and restore solution.
 ====
 
 == Overview
@@ -19,8 +19,8 @@ Most backups are enabled with a single Helm value `global.backup.enabled`. Setti
 The following data can be automatically backed up:
 
 * *Settings* (StackPacks, monitors, views, tokens) - always enabled:
-** When `global.backup.enabled` is `true`: backups are stored via MinIO to your configured storage backend
-** When `global.backup.enabled` is `false`: backups are stored to a dedicated Kubernetes Persistent Volume, bypassing MinIO
+** When `global.backup.enabled` is `false`: backups are stored via the S3 Proxy to a K8s Persistent Volume
+** When `global.backup.enabled` is `true`: backups are stored via the S3 Proxy on your configured storage backend
 * *Topology data and Settings* stored in StackGraph - enabled when `global.backup.enabled` is `true`
 * *Metrics* stored in {stackstate-product-name}'s Victoria Metrics instance(s) - enabled when `global.backup.enabled` is `true`
 * *Telemetry data* stored in {stackstate-product-name}'s Elasticsearch instance - enabled when `global.backup.enabled` is `true`
@@ -28,9 +28,9 @@ The following data can be automatically backed up:
 
 === Storage options
 
-Backups use https://min.io/[MinIO (min.io)] as an S3-compatible gateway to your storage backend. MinIO is automatically deployed by the Helm chart when backups are enabled.
+Backups use [S3 Proxy](https://github.com/gaul/s3proxy) as an S3-compatible gateway to your storage backend. S3 Proxy is automatically deployed by the Helm chart.
 
-The built-in MinIO instance can be configured to store the backups in three locations:
+It can be configured to store the backups in three locations:
 
 * xref:/setup/data-management/backup_restore/backup_enable.adoc[AWS S3]
 * xref:/setup/data-management/backup_restore/backup_enable.adoc[Azure Blob Storage]
@@ -62,7 +62,30 @@ To enable scheduled backups to separate AWS S3 buckets (one per datastore), add 
 global:
   backup:
     enabled: true
+  s3proxy:
+    credentials:
+      # Credentials used internally in the cluster to access the backup storage (S3Proxy).
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
 backup:
+  storage:
+    backend:
+      s3:
+        enabled: true
+        # Specify AWS region (can also be set via environment variable instead)
+        region: "eu-west-1"
+        # Option 1: Use explicit credentials
+        accessKey: AWS_ACCESS_KEY
+        secretKey: AWS_SECRET_KEY
+
+        # Option 2: Use IAM role / IRSA
+        # Leave accessKey and secretKey empty
+
+
+        # Option 3: Use credentials from external secret:
+        fromExternalSecret: "my-aws-credentials" # Kubernetes secret containing backendAccessKey and backendSecretKey
+        # Optional: Custom S3-compatible endpoint (e.g., MinIO)
+        # endpoint: "https://minio.example.com"
   stackGraph:
     bucketName: AWS_STACKGRAPH_BUCKET
   elasticsearch:
@@ -78,18 +101,11 @@ victoria-metrics-1:
 clickhouse:
   backup:
     bucketName: AWS_CLICKHOUSE_BUCKET
-minio:
-  accessKey: YOUR_ACCESS_KEY
-  secretKey: YOUR_SECRET_KEY
-  s3gateway:
-    enabled: true
-    accessKey: AWS_ACCESS_KEY
-    secretKey: AWS_SECRET_KEY
 ----
 
 Replace the following values:
 
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the MinIO system. These credentials are set on the MinIO system and used by the automatic backup jobs and the restore jobs. They're also required if you want to manually access the MinIO system.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
  ** YOUR_ACCESS_KEY should contain 5 to 20 alphanumerical characters.
  ** YOUR_SECRET_KEY should contain 8 to 40 alphanumerical characters.
 * `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` are the AWS credentials for the IAM user that has access to the S3 buckets where the backups will be stored. See below for the permission policy that needs to be attached to that user.
@@ -109,7 +125,20 @@ Instead of using separate buckets for each datastore, you can use a single S3 bu
 global:
   backup:
     enabled: true
+  s3proxy:
+    credentials:
+      # Credentials used internally in the cluster to access the backup storage (S3Proxy).
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
 backup:
+  storage:
+    backend:
+      s3:
+        enabled: true
+        region: "eu-west-1"
+        # For other authentication options and custom endpoint, see the previous example
+        accessKey: AWS_ACCESS_KEY
+        secretKey: AWS_SECRET_KEY
   elasticsearch:
     bucketName: BUCKET
     s3Prefix: elasticsearch
@@ -131,18 +160,11 @@ clickhouse:
   backup:
     bucketName: BUCKET
     s3Prefix: clickhouse
-minio:
-  accessKey: YOUR_ACCESS_KEY
-  secretKey: YOUR_SECRET_KEY
-  s3gateway:
-    enabled: true
-    accessKey: AWS_ACCESS_KEY
-    secretKey: AWS_SECRET_KEY
 ----
 
 Replace `BUCKET` with your S3 bucket name. The backups for different datastores are organized using the configured `s3Prefix` values. The same `YOUR_ACCESS_KEY`, `YOUR_SECRET_KEY`, `AWS_ACCESS_KEY`, and `AWS_SECRET_KEY` values from the previous section apply here.
 
-=== AWS S3 Permissions
+==== AWS S3 Permissions
 
 The IAM user identified by `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` must be configured with the following permission policy to access the S3 buckets:
 
@@ -152,7 +174,7 @@ The IAM user identified by `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` must be configu
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "AllowListMinioBackupBuckets",
+            "Sid": "AllowListBackupBuckets",
             "Effect": "Allow",
             "Action": [
                 "s3:ListBucket",
@@ -167,7 +189,7 @@ The IAM user identified by `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` must be configu
             ]
         },
         {
-            "Sid": "AllowWriteMinioBackupBuckets",
+            "Sid": "AllowWriteBackupBuckets",
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
@@ -197,15 +219,31 @@ To enable backups to separate Azure Blob Storage containers (one per datastore),
 global:
   backup:
     enabled: true
-minio:
-  accessKey: AZURE_STORAGE_ACCOUNT_NAME
-  secretKey: AZURE_STORAGE_ACCOUNT_KEY
-  azuregateway:
-    enabled: true
+  s3proxy:
+    credentials:
+      # Credentials used internally in the cluster to access the backup storage (S3Proxy).
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+
+backup:
+  storage:
+    backend:
+      azure:
+        enabled: true
+        accountName: "mystorageaccount"
+        # Option 1: Use explicit credentials
+        accountKey: "your-storage-account-key"
+
+        # Option 2: Use managed identity
+        # Leave accountKey empty
+
+        # Option 3: Use credentials from external secret:
+        fromExternalSecret: "my-azure-credentials" # Kubernetes secret containing azureAccountName and azureAccountKey
 ----
 
 Replace the following values:
 
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 * `AZURE_STORAGE_ACCOUNT_NAME` - the https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[Azure storage account name (learn.microsoft.com)]
 * `AZURE_STORAGE_ACCOUNT_KEY` - the https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[Azure storage account key (learn.microsoft.com)] where the backups should be stored.
 
@@ -220,7 +258,20 @@ Instead of using separate containers for each datastore, you can use a single Az
 global:
   backup:
     enabled: true
+  s3proxy:
+    credentials:
+      # Credentials used internally in the cluster to access the backup storage (S3Proxy).
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+
 backup:
+  storage:
+    backend:
+      azure:
+        enabled: true
+        accountName: "mystorageaccount"
+        # For other authentication options, see the previous example
+        accountKey: "your-storage-account-key"
   elasticsearch:
     bucketName: CONTAINER
     s3Prefix: elasticsearch
@@ -242,14 +293,11 @@ clickhouse:
   backup:
     bucketName: CONTAINER
     s3Prefix: clickhouse
-minio:
-  accessKey: AZURE_STORAGE_ACCOUNT_NAME
-  secretKey: AZURE_STORAGE_ACCOUNT_KEY
-  azuregateway:
-    enabled: true
 ----
 
-Replace `CONTAINER` with your Azure Blob Storage container name. The backups for different datastores will be organized using the configured `s3Prefix` values. The same `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY` values from the previous section apply here.
+Replace the following values:
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
+* `CONTAINER` with your Azure Blob Storage container name. The backups for different datastores will be organized using the configured `s3Prefix` values. The same `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY` values from the previous section apply here.
 
 === Kubernetes Persistent Volume
 
@@ -266,23 +314,29 @@ Using Kubernetes Persistent Volumes for backups has significant limitations:
 
 ==== Basic configuration
 
-To enable backups to cluster-local storage, enable MinIO by adding the following YAML fragment to the Helm `values.yaml` file used to install {stackstate-product-name}:
+To enable backups to cluster-local storage, enable global backups with PVC storage by adding the following YAML fragment to the Helm `values.yaml` file used to install {stackstate-product-name}:
 
 [,yaml]
 ----
 global:
   backup:
     enabled: true
-minio:
-  accessKey: YOUR_ACCESS_KEY
-  secretKey: YOUR_SECRET_KEY
-  persistence:
-    enabled: true
+  s3proxy:
+    credentials:
+      # Credentials used internally in the cluster to access the backup storage (S3Proxy).
+      accessKey: YOUR_ACCESS_KEY
+      secretKey: YOUR_SECRET_KEY
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true
+        size: 500Gi  # Size for main backup storage, size depends on the expected combined backups size
 ----
 
 Replace the following values:
 
-* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` - the credentials that will be used to secure the MinIO system. The automatic backup jobs and the restore jobs will use them. They're also required to manually access the MinIO storage. `YOUR_ACCESS_KEY` should contain 5 to 20 alphanumerical characters and `YOUR_SECRET_KEY` should contain 8 to 40 alphanumerical characters.
+* `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 
 == Configuration and topology data (StackGraph)
 
@@ -322,8 +376,8 @@ Settings backups are lightweight (typically only several megabytes) and quick to
 ====
 *Settings backups are always enabled*, regardless of the `global.backup.enabled` value:
 
-* When `global.backup.enabled` is `true`: Settings backups are stored via MinIO to your configured storage backend (AWS S3, Azure Blob Storage, or Kubernetes Persistent Volume)
-* When `global.backup.enabled` is `false`: Settings backups are stored to a dedicated Kubernetes Persistent Volume, bypassing MinIO
+* When `global.backup.enabled` is `true`: Settings backups are stored, via the S3 Proxy, to your configured storage backend (AWS S3, Azure Blob Storage, or Kubernetes Persistent Volume)
+* When `global.backup.enabled` is `false`: Settings backups are stored, via the S3 Proxy, to a dedicated Kubernetes Persistent Volume
 ====
 
 === Backup schedule
@@ -336,16 +390,16 @@ The backup schedule can be configured using the Helm value `backup.configuration
 
 Backup retention depends on the `global.backup.enabled` setting:
 
-**When `global.backup.enabled` is `true`** (backups stored via MinIO):
+**When `global.backup.enabled` is `true`** (backups stored via S3 Proxy):
 
 * By default, settings backups are kept for 365 days
 * Configure retention using `backup.configuration.scheduled.backupRetentionTimeDelta` - specified in the format of GNU date `--date` argument. The default is `365 days ago`
 
-**When `global.backup.enabled` is `false`** (backups stored to dedicated PV):
+**When `global.backup.enabled` is `false`** (backups stored to a dedicated PV):
 
 * By default, the last 10 backup files are kept on the Persistent Volume
 * Configure the maximum number of files using `backup.configuration.maxLocalFiles` (default: `10`)
-* Configure the PV size using `backup.configuration.scheduled.pvc.size` (default: `1Gi`)
+* Configure the PV size using `backup.configuration.scheduled.pvc.size` (default: `2Gi`)
 
 Example configuration for dedicated PV storage:
 
@@ -356,7 +410,7 @@ backup:
     maxLocalFiles: 10
     scheduled:
       pvc:
-        size: '1Gi'
+        size: '2Gi'
 ----
 
 === Disable scheduled backups
