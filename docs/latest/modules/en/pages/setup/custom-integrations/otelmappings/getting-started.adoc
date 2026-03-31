@@ -150,32 +150,30 @@ input:
     action: "CREATE"
 vars:
   - name: "pid"
-    value: "${string(int(resource.attributes['process.pid']))}"
+    value: "string(int(resource.attributes['process.pid']))"
   - name: "hostname"
-    value: "${resource.attributes['host.name']}"
+    value: "resource.attributes['host.name']"
   - name: "executableName"
     value: >-
-      ${
-        'process.executable.name' in resource.attributes ?
-         resource.attributes['process.executable.name'] :
-          'process.command' in resource.attributes ?
-           resource.attributes['process.command'] :
-            'process.command_args' in resource.attributes ?
-             resource.attributes['process.command_args'] :
-                resource.attributes['process.executable.path']
-      }
+      'process.executable.name' in resource.attributes ?
+       resource.attributes['process.executable.name'] :
+        'process.command' in resource.attributes ?
+         resource.attributes['process.command'] :
+          'process.command_args' in resource.attributes ?
+           resource.attributes['process.command_args'] :
+              resource.attributes['process.executable.path']
 output:
-  identifier: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
-  name: "${vars.hostname}/${vars.executableName}:${vars.pid}"
-  typeName: "process"
-  typeIdentifier: "urn:stackpack:open-telemetry:shared:component-type:process"
-  layerName: "Applications"
-  domainName: "Open Telemetry"
+  identifier: "'urn:opentelemetry:process/' + vars.hostname + ':' + vars.pid"
+  name: "vars.hostname + '/' + vars.executableName + ':' + vars.pid"
+  typeName: "'process'"
+  typeIdentifier: "'urn:stackpack:open-telemetry:shared:component-type:process'"
+  layerName: "'Applications'"
+  domainName: "'Open Telemetry'"
   required:
     tags:
-      - source: "process-component"
+      - source: "'process-component'"
         target: "custom"
-      - source: "${resource.attributes}"
+      - source: "resource.attributes"
         pattern: "process.(.*)"
         target: "process.${1}"
 expireAfter: 900000
@@ -217,24 +215,24 @@ input:
     action: "CREATE"
 vars:
   - name: "namespace"
-    value: "${'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ? resource.attributes['service.namespace'] : 'default'}"
+    value: >-
+      'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ?
+      resource.attributes['service.namespace'] : 'default'
   - name: "service"
-    value: "${resource.attributes['service.name']}"
+    value: "resource.attributes['service.name']"
   - name: "instanceId"
     value: >-
-      ${
-        'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
-        resource.attributes['service.instance.id'] :
-        resource.attributes['service.name']
-      }
+      'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
+      resource.attributes['service.instance.id'] :
+      resource.attributes['service.name']
   - name: "hostname"
-    value: "${resource.attributes['host.name']}"
+    value: "resource.attributes['host.name']"
   - name: "pid"
-    value: "${string(int(resource.attributes['process.pid']))}"
+    value: "string(int(resource.attributes['process.pid']))"
 output:
-  sourceId: "urn:opentelemetry:namespace/${vars.namespace}:service/${vars.service}:serviceInstance/${vars.instanceId}"
-  targetId: "urn:opentelemetry:process/${vars.hostname}:${vars.pid}"
-  typeName: "executes"
+  sourceId: "'urn:opentelemetry:namespace/' + vars.namespace + ':service/' + vars.service + ':serviceInstance/' + vars.instanceId"
+  targetId: "'urn:opentelemetry:process/' + vars.hostname + ':' + vars.pid"
+  typeName: "'executes'"
 expireAfter: 900000
 ----
 
