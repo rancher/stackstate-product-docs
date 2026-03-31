@@ -219,11 +219,11 @@ input:
   signal:
     - "TRACES"
   resource:
-    condition: "${'service.name' in resource.attributes}"
+    condition: "'service.name' in resource.attributes"
     # action omitted since the default is `CONTINUE`
     scope:
       action: "CREATE" # input block describes that it expects to filter until this level only
-      condition: "${scope.name.contains('http') && resource.attributes['service.name'] == 'cart-svc'}" # it's allowed to access resource-level fields at scope-level
+      condition: "scope.name.contains('http') && resource.attributes['service.name'] == 'cart-svc'" # it's allowed to access resource-level fields at scope-level
 ----
 
 **Actions**
@@ -249,13 +249,13 @@ input:
   signal:
     - "TRACES"
   resource:
-    condition: "${'service.name' in resource.attributes}"
+    condition: "'service.name' in resource.attributes"
     # action omitted since the default is `CONTINUE`
     scope:
       # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
       span:
         action: "CREATE"
-        condition: "${span.attributes['http.method'] == 'POST'}"
+        condition: "span.attributes['http.method'] == 'POST'"
 ----
 
 **METRICS**
@@ -295,7 +295,7 @@ Example:
 ----
 vars:
 - name: "service"
-  value: "${resource.attributes['service.name']}"
+  value: "resource.attributes['service.name']"
 ----
 
 Variables are resolved before evaluating output expressions.
@@ -309,7 +309,7 @@ Output fields:
 * Use CEL expressions to dynamically generate values.
 * May reference any fields that are available at the deepest input-level matched by the input filters. For example, if the input selection has the `CREATE` action at the span-level, resource, scope and span fields can be used.
 
-If the value for a field doesn't need to be dynamically generated, a string literal can be set where the schema specifies a `<cel-string>` expression to be declared.
+If the value for a field doesn't need to be dynamically generated, a CEL string literal can be used where the schema specifies a `<cel-string>` expression. Since expression values are YAML strings containing CEL, use single quotes for CEL string literals inside double-quoted YAML values. For example: `typeName: "'my-type'"` (the outer double quotes are YAML, the inner single quotes make it a CEL string literal).
 
 === Required vs. Optional Subsections
 
@@ -333,14 +333,14 @@ Two forms are supported:
 
 [,yaml]
 ----
-- source: "value"
+- source: "'value'"
   target: "key"
 ----
 Result: `key:value`
 
 [,yaml]
 ----
-- source: "${resource.attributes['service.name']}"
+- source: "resource.attributes['service.name']"
   target: "service.name"
 ----
 Given: `resource.attributes { 'service.name': 'cart-svc' }`
@@ -356,7 +356,7 @@ The source for a direct mapping needs to be a:
 
 [,yaml]
 ----
-- source: "${resource.attributes}"
+- source: "resource.attributes"
   pattern: "telemetry.sdk\.(.*)"
   target: "telemetry.sdk.${1}"
 ----
@@ -374,7 +374,7 @@ Example with multiple capture groups:
 
 [,yaml]
 ----
-- source: "${resource.attributes}"
+- source: "resource.attributes"
   pattern: "^(os|host|cloud|azure|gcp)\.(.*)"
   target: "${1}.${2}"
 ----
@@ -383,61 +383,66 @@ In regex-based mappings, capture groups are substituted into the target.
 
 == CEL expression (`<cel-*>`) explanation:
 
+All expression fields use standard CEL syntax. Expressions are not wrapped in `${...}` — write plain CEL directly.
+
 * `<cel-string>` - needs to return a string; can be one of:
-** string literal (e.g., "hello")
-** string expression, wrapped in `${...}` (e.g., "${resource.attributes['service.name']}")
-** string interpolation (e.g. "urn:opentelemetry:namespace/$\{resource.attributes['namespace']}:service/$\{resource.attributes['service.name']}") - note: for string interpolation, the entire expression is not wrapped in `$\{...}`
-* `cel-boolean` - needs to return a boolean; can be one of:
-** boolean literal (e.g., "true")
-** boolean expression (e.g., "'namespace' in resource.attributes") - note: boolean expressions are not wrapped in `${...}`
-* `cel-map` - needs to return a map; can be one of:
-** map literal (e.g., "${{'a': 1, 'b': 'two'}}")
-** map expression (e.g., "${resource.attributes}")
-* `cel-expression` - returns "any" type, can be one of:
+** string literal (e.g., `'hello'`)
+** string expression (e.g., `resource.attributes['service.name']`)
+** string concatenation using the `+` operator (e.g., `'urn:opentelemetry:namespace/' + resource.attributes['namespace'] + ':service/' + resource.attributes['service.name']`)
+* `<cel-boolean>` - needs to return a boolean; can be one of:
+** boolean literal (e.g., `true`)
+** boolean expression (e.g., `'namespace' in resource.attributes`)
+* `<cel-map>` - needs to return a map; can be one of:
+** map literal (e.g., `{'a': 1, 'b': 'two'}`)
+** map expression (e.g., `resource.attributes`)
+* `<cel-expression>` - returns "any" type, can be one of:
 ** string expression
 ** boolean expression
-** map expression (e.g., "${resource.attributes}" - returns the attribute map)
-** list expression (e.g., "${resource.attributes['process.command_args']}" - returns a list)
+** map expression (e.g., `resource.attributes` - returns the attribute map)
+** list expression (e.g., `resource.attributes['process.command_args']` - returns a list)
 
-=== Interpolation
+=== String concatenation
 
-String interpolation allows you to embed expressions within string literals. While not directly supported by the CEL specification, the OTel mapping configs provide interpolation syntax of the form `prefix-$\{expression1}/suffix-$\{expression2}`, which gets rewritten internally as string concatenation using the `+` operator (e.g., `"prefix-" + expression1 + "/suffix-" + expression2`).
+Use the `+` operator to build strings from multiple parts. For example:
 
-Understanding this rewriting behavior is important for two reasons:
-
-1. *Nested interpolation is not supported*: Since string expressions are demarcated with `${...}`, you cannot nest interpolation expressions. However, you can write concatenation directly using the `+` operator. For example:
-+
 [source]
 ----
-${
-  'service.instance.id' in resource.attributes ?
-    resource.attributes['service.name'] + " - " + resource.attributes['service.instance.id'] :
-    resource.attributes['service.name'] + " - instance"
-}
+'urn:opentelemetry:namespace/' + vars.namespace + ':service/' + vars.service
 ----
 
-2. *Type casting is required for non-string values*: CEL is strongly typed and does not automatically convert types during concatenation. When interpolating values of different types, you must explicitly cast non-string types to strings.
-+
+For conditional string construction, use the ternary operator:
+
+[source]
+----
+'service.instance.id' in resource.attributes ?
+  resource.attributes['service.name'] + ' - ' + resource.attributes['service.instance.id'] :
+  resource.attributes['service.name'] + ' - instance'
+----
+
+=== Type casting for non-string values
+
+CEL is strongly typed and does not automatically convert types during concatenation. When concatenating values of different types, you must explicitly cast non-string types to strings.
+
 For example, if `process.pid` is an integer (e.g., `1`), this expression will fail:
-+
+
 [source]
 ----
-${resource.attributes['service.name']}/${resource.attributes['process.pid']}
+resource.attributes['service.name'] + '/' + resource.attributes['process.pid']
 ----
-+
+
 The correct form requires casting the dynamic value to a concrete type first, then converting it to a string:
-+
+
 [source]
 ----
-${resource.attributes['service.name']}/${string(int(resource.attributes['process.pid']))}
+resource.attributes['service.name'] + '/' + string(int(resource.attributes['process.pid']))
 ----
-+
+
 The double casting (`string(int(...))`) is necessary because:
-+
+
 * `resource.attributes['process.pid']` returns a dynamic (`dyn`) type
 * `int()` casts the dynamic value to a concrete integer type
 * `string()` converts the integer to a string for concatenation
-+
+
 For other types, use similar patterns: `string(double(...))` for floats, `string(bool(...))` for booleans.
 
 === CEL language reference
