@@ -25,7 +25,7 @@ Multiple telemetry records may resolve to the same component identifier; in that
 _type: "OtelComponentMapping"
 name: string
 input:
-  signal: ["TRACES" | "METRICS"]
+  signal: ["TRACES" | "METRICS" | "LOGS"]
   resource:
     condition: <cel-boolean>        # default: true
     action: CONTINUE                # default
@@ -33,6 +33,9 @@ input:
       condition: <cel-boolean>      # default: true
       action: CONTINUE              # default
       span:                         # TRACES only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+     log:                           # LOGS only
         condition: <cel-boolean>    # default: true
         action: CONTINUE            # default
       metric:                       # METRICS only
@@ -63,6 +66,8 @@ output:
       - source: <cel-string>
         pattern: regex
         target: string
+    configuration: <cel-expression> # Optional
+    status:        <cel-expression> # Optional
   optional:                         # Optional (besides being optional on the schema, optional means that if any expression under `optional` fails, the mapping will continue, but without the failed expression/field)
     version: <cel-string>           # Optional
     additionalIdentifiers:          # Optional
@@ -73,6 +78,8 @@ output:
       - source: <cel-map>
         pattern: regex
         target: string
+    configuration: <cel-expression> # Optional
+    status:        <cel-expression> # Optional
 expireAfter: duration-ms
 ----
 
@@ -91,7 +98,7 @@ Relations are materialised when source and target components exist.
 _type: "OtelRelationMapping"
 name: string
 input:
-  signal: ["TRACES" | "METRICS"]
+  signal: ["TRACES" | "METRICS" | "LOGS"]
   resource:
     condition: <cel-boolean>        # default: true
     action: CONTINUE                # default
@@ -99,6 +106,9 @@ input:
       condition: <cel-boolean>      # default: true
       action: CONTINUE              # default
       span:                         # TRACES only
+        condition: <cel-boolean>    # default: true
+        action: CONTINUE            # default
+     log:                           # LOGS only
         condition: <cel-boolean>    # default: true
         action: CONTINUE            # default
       metric:                       # METRICS only
@@ -194,6 +204,26 @@ metric.name == 'traces_service_graph_request_total'
 datapoint.attributes['connection_type'] == 'database'
 ----
 
+**LOGS**
+
+Provides access to:
+
+* resource.attributes
+* scope.name, scope.version, scope.attributes
+* log.eventName, log.attributes, log.body
+
+The `log.body` field contains the complete log record payload and can be used with `pick()` and `omit()` functions for field selection.
+
+Examples:
+
+[source]
+----
+log.attributes['k8s.resource.api_group'] == 'some_resource.k8s.io'
+# Filter log body to extract only status fields
+${pick(log.body, ['status', 'conditions'])}
+# Extract configuration, excluding status
+${omit(log.body, ['status'])}
+----
 
 === Conditions and actions
 
@@ -458,6 +488,77 @@ Expressions are evaluated against a well-defined, typed context derived from the
 Visit https://github.com/google/cel-spec/blob/master/doc/langdef.md[CEL's langdef] for a thorough reference.
 
 An online CEL playground like https://playcel.undistro.io/ is a helpful tool to do quick expression validity checks.
+
+==== Custom CEL functions for field selection
+
+The following custom functions are available for selecting or filtering fields from maps:
+
+**`pick(map, ['key1', 'key2', ...])`**
+
+Returns a new map containing only the specified keys from the input map.
+
+Usage: Extract a subset of fields (e.g., for status information)
+
+Example:
+[,yaml]
+----
+status: ${pick(log.body, ['status', 'conditions', 'lastUpdate'])}
+----
+
+Given:
+[source]
+----
+log.body: {
+  'apiVersion': 'v1',
+  'kind': 'Pod',
+  'spec': {...},
+  'status': {...},
+  'conditions': [...],
+  'lastUpdate': '2026-03-30T10:00:00Z'
+}
+----
+
+Result: `{ 'status': {...}, 'conditions': [...], 'lastUpdate': '2026-03-30T10:00:00Z' }`
+
+**`omit(map, ['key1', 'key2', ...])`**
+
+Returns a new map excluding the specified keys from the input map.
+
+Usage: Extract all fields except specific ones (e.g., for configuration, excluding status)
+
+Example:
+[,yaml]
+----
+configuration: ${omit(log.body, ['status', 'metadata'])}
+----
+
+Given:
+[source]
+----
+log.body: {
+  'apiVersion': 'v1',
+  'kind': 'Pod',
+  'metadata': {...},
+  'spec': {...},
+  'status': {...}
+}
+----
+
+Result: `{ 'apiVersion': 'v1', 'kind': 'Pod', 'spec': {...} }`
+
+**Use in output fields**
+
+These functions are particularly useful for populating component configuration and status fields:
+
+[,yaml]
+----
+output:
+  required:
+    configuration: ${omit(log.body, ['status'])}    # Everything except status
+    status: ${pick(log.body, ['status'])}           # Only status field
+----
+
+This pattern separates component configuration (spec) from operational state (status).
 
 == Common patterns and best practices
 
