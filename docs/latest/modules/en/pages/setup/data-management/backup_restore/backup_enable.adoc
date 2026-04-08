@@ -1,5 +1,5 @@
 = Enable backups
-:revdate: 2025-07-10
+:revdate: 2026-04-08
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
@@ -427,18 +427,10 @@ backup:
 
 == Metrics (Victoria Metrics)
 
-Victoria Metrics creates backups by taking a snapshot of the current metrics data and storing only the changes since the last backup (incremental approach).
+Victoria Metrics uses a two-tier smart backup strategy:
 
-[WARNING]
-====
-*Backup versioning limitation*
-
-Victoria Metrics backups replace the previous backup each time a new backup runs. This means you only have access to *the most recent backup*, not a history of multiple backup versions.
-
-**Important**: If a backup fails or the data becomes corrupted, your previous backup data may be lost. Only the latest successful backup is available for restore.
-
-**Exception**: If the Victoria Metrics storage volume is emptied or reset (e.g., the `/storage` directory is mounted empty or deleted), the system will detect this and automatically create a new backup series. In this case, both the old backup (before the reset) and the new backup will be preserved and available for restore.
-====
+* *Hourly incremental* — takes a snapshot and uploads only changed blocks to a fixed `latest` path in the backup storage.
+* *Daily snapshot* — performs a server-side copy from `latest` to a timestamped folder (`YYYYMMDDHHmmss`), creating a point-in-time restore point.
 
 [NOTE]
 ====
@@ -449,25 +441,56 @@ High Available deployments use two instances of Victoria Metrics (`victoria-metr
 
 === Backup schedule
 
-The Victoria Metrics backups are created every 1h:
+Victoria Metrics backups run on two schedules:
 
-* `victoria-metrics-0` - 25 minutes past the hour
-* `victoria-metrics-1` - 35 minutes past the hour
+* *Hourly incremental backups:*
+** `victoria-metrics-0` — 25 minutes past the hour
+** `victoria-metrics-1` — 35 minutes past the hour
+
+* *Daily snapshot backups:*
+** `victoria-metrics-0` — at 00:55 daily
+** `victoria-metrics-1` — at 01:05 daily
+
+The backup schedules can be configured using the Helm values `victoria-metrics-0.backup.scheduled.hourly` and `victoria-metrics-0.backup.scheduled.daily` (and the corresponding `victoria-metrics-1` values).
+
+=== Backup retention
+
+Daily snapshot backups are retained using a two-tier retention policy:
+
+1. The most recent daily backups are kept unconditionally (default: 7, configured via `keepLastDaily`).
+2. From older backups, one backup per 7-day period is kept (default: up to 4 weekly backups, configured via `keepLastWeekly`).
+3. Everything else is deleted automatically.
+
+The retention can be configured using the following Helm values:
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    keepLastDaily: 7   # Number of most recent daily backups to retain
+    keepLastWeekly: 4  # Number of weekly backups to retain (beyond the daily window)
+victoria-metrics-1:
+  backup:
+    keepLastDaily: 7
+    keepLastWeekly: 4
+----
 
 === Disable scheduled backups
 
-To disable scheduled Victoria Metrics backups, set the backup schedule for both instances to a date far in the past:
+To disable scheduled Victoria Metrics backups, set the backup schedules for both instances to a date far in the past:
 
 [,yaml]
 ----
 victoria-metrics-0:
   backup:
     scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
 victoria-metrics-1:
   backup:
     scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
 ----
 
 == OpenTelemetry (ClickHouse)

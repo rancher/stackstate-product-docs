@@ -1,5 +1,5 @@
 = Kubernetes backup (Legacy)
-:revdate: 2025-07-10
+:revdate: 2026-04-08
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
@@ -228,21 +228,10 @@ backup:
 
 == Metrics (Victoria Metrics)
 
-[WARNING]
-====
-Victoria Metrics use incremental backups without versioning of a bucket, it means that the new backup *replaces completely the previous one*.
+Victoria Metrics uses a two-tier smart backup strategy:
 
-In case you run into one of the following situations:
-
-* mount an empty volume to `/storage` directory of Victoria Metrics instances
-* delete the `/storage` directory or files inside from Victoria Metrics instances
-
-The next (empty) backup created will be labeled with a new version and the previous one, before the volume was emptied, will be preserved.
-Both backups will be from that moment on <<_list_victoria_metrics_backups,listed as available for restore>>.
-====
-
-
-Metrics (Victoria Metrics) use instant snapshots to store data in incremental backups. Many instances of Victoria Metrics can store backups to the same bucket, each of them will be stored in separated directory. All files located in the directory should be treated as a single whole and can only be moved, copied or deleted as a whole.
+* *Hourly incremental* — takes a snapshot and uploads only changed blocks to a fixed `latest` path in the backup storage.
+* *Daily snapshot* — performs a server-side copy from `latest` to a timestamped folder (`YYYYMMDDHHmmss`), creating a point-in-time restore point.
 
 [NOTE]
 ====
@@ -254,27 +243,56 @@ The following code snippets/commands are provided for the first instance of Vict
 
 === Backup schedule
 
-By default, the Victoria Metrics backups are created every 1h:
+Victoria Metrics backups run on two schedules:
 
-* `victoria-metrics-0` - 25 minutes past the hour
-* `victoria-metrics-1` - 35 minutes past the hour
+* *Hourly incremental backups:*
+** `victoria-metrics-0` — 25 minutes past the hour
+** `victoria-metrics-1` — 35 minutes past the hour
 
-The backup schedule can be configured using the Helm value `victoria-metrics-0.backup.scheduled.schedule` according https://github.com/aptible/supercronic/tree/master/cronexpr[cronexpr format]
+* *Daily snapshot backups:*
+** `victoria-metrics-0` — at 00:55 daily
+** `victoria-metrics-1` — at 01:05 daily
+
+The backup schedules can be configured using the Helm values `victoria-metrics-0.backup.scheduled.hourly` and `victoria-metrics-0.backup.scheduled.daily` according https://github.com/aptible/supercronic/tree/master/cronexpr[cronexpr format]
+
+=== Backup retention
+
+Daily snapshot backups are retained using a two-tier retention policy:
+
+1. The most recent daily backups are kept unconditionally (default: 7, configured via `keepLastDaily`).
+2. From older backups, one backup per 7-day period is kept (default: up to 4 weekly backups, configured via `keepLastWeekly`).
+3. Everything else is deleted automatically.
+
+The retention can be configured using the following Helm values:
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    keepLastDaily: 7   # Number of most recent daily backups to retain
+    keepLastWeekly: 4  # Number of weekly backups to retain (beyond the daily window)
+victoria-metrics-1:
+  backup:
+    keepLastDaily: 7
+    keepLastWeekly: 4
+----
 
 === Disable scheduled backups
 
-To disable scheduled Victoria Metrics backups, set the backup schedule for both instances to a date far in the past:
+To disable scheduled Victoria Metrics backups, set the backup schedules for both instances to a date far in the past:
 
 [,yaml]
 ----
 victoria-metrics-0:
   backup:
     scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
 victoria-metrics-1:
   backup:
     scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
 ----
 
 == OpenTelemetry (ClickHouse)
