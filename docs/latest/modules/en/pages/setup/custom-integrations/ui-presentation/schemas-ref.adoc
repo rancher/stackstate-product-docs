@@ -96,6 +96,12 @@ presentation:
         stql: string                  # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
         presentationIdentifier: string # Optional - references a ComponentPresentation by identifier
           ...
+
+    provisioning:
+      externalComponentSelector: cel:boolean  # Optional predicate to select the external component with provisioning details
+      showConfiguration: cel:boolean          # Optional - should provisioning configuration be accessible
+      showStatus: cel:boolean                 # Optional - should provisioning status be accessible
+
   filters:                    # Optional overview filters
     - filterId: string
       displayName:            # Optional - name in the menu
@@ -208,8 +214,8 @@ fields:
     order: 85.0
     projection:
       _type: ComponentLinkProjection
-      name: "${tags.service.namespace}"
-      identifier: "urn:opentelemetry:namespace/${tags.service.namespace}"
+      name: "tags['service.namespace']"
+      identifier: "'urn:opentelemetry:namespace/' + tags['service.namespace']"
 ----
 
 A more specific presentation can override field definitions of a more generic one, e.g. for reordering or suppression.  A field provided by the generic presentation can be hidden by including a field with the same `fieldId`, but without a `projection`.
@@ -220,6 +226,17 @@ To maintain a consistent UI, we use the following conventions:
 Generic fields:: (e.g., name, health) should use high order numbers (e.g., 80-100) to appear at the top by default.
 Specialized fields:: should use lower order numbers to appear after generic ones.
 Overrides:: A specialized presentation can hide a generic section (like health) or move it by overriding the field and providing a different order (e.g., a negative value to push it further down).
+
+==== Provisioning
+
+The "Show Configuration", "Show Last Change" and "Show Status" buttons reveal provisioning data.  Such data is received in "External Components" - one or more sources of data.
+[,yaml]
+----
+    provisioning:
+      externalComponentSelector: "matches(external.identifier, '^urn:open-telemetry:.*')"
+      showConfiguration: true
+      showStatus: true
+----
 
 === Related resources
 
@@ -327,6 +344,21 @@ CEL expressions are evaluated in an environment representing the component.  The
 |healthState            | string              | One of the supported health states (CLEAR, DEVIATING, CRITICAL, UNKNOWN)
 |lastUpdateTimestamp    | uint                | Timestamp of last update, in milliseconds since epoch
 |===
+
+==== CEL provisioning context
+
+When selecting an external component to provide configuration and status details, the `external` variable is available
+
+[cols="2,1,2"]
+|===
+|Variable               | Type                | Description
+
+|external.identifier    | string              | An identifier unique to the external component
+|external.syncIdentifier| string              | The identifier of the component mapping
+|external.tags          | string              | Tags contributed by the external component
+|external.configuration | string              | Configuration of the (external) component
+|===
+
 
 === PromQL interpolation
 
