@@ -89,6 +89,12 @@ presentation:
         order: number         # Order in the about section - higher numbers come first
         projection:           # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
           _type: string
+    relatedResources:
+      - resourceId: string            # Stable identity key for merging
+        title: string                 # Section heading in the UI
+        order: number                 # Display order - higher numbers come first
+        stql: string                  # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
+        presentationIdentifier: string # Optional - references a ComponentPresentation by identifier
           ...
 
     provisioning:
@@ -231,6 +237,47 @@ The "Show Configuration", "Show Last Change" and "Show Status" buttons reveal pr
       showConfiguration: true
       showStatus: true
 ----
+
+=== Related resources
+
+Related resources are sections on a component's highlight page that show other components related to the one being viewed (for example, "This service instance has 5 related pods").  Each section renders as an overview table.
+
+A related resource references another `ComponentPresentation` by identifier, reusing its overview spec (columns, name) for rendering.  The `stql` field scopes which components appear in the section, and the backend intersects it with the referenced presentation's binding query — so you don't need to redundantly include the type filter.
+
+[,yaml]
+----
+highlight:
+  relatedResources:
+    - resourceId: "related-pods"
+      title: "Related Pods"
+      stql: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
+      order: 100
+      presentationIdentifier: "urn:stackpack:otel:component-presentation:pod"
+    - resourceId: "related-endpoints"
+      title: "Related Endpoints"
+      stql: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
+      order: 200
+      presentationIdentifier: "urn:stackpack:otel:component-presentation:endpoint"
+----
+
+==== STQL templates
+
+The `stql` field is a template string that supports `${CEL_EXPRESSION}` placeholders.  Each placeholder is a CEL expression evaluated against the current component's data — the same <<CEL context>> variables are available.  All expressions must evaluate to a string.  Refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL reference] for the available query syntax.
+
+==== Merging
+
+Related resources follow the same merge semantics as highlight fields:
+
+* All matching presentations contribute related resources.
+* Same `resourceId` with higher specificity wins (override).
+* Different `resourceId` values from different presentations are both included (append).
+* The `order` field controls display order.
+
+A more specific presentation can override or suppress related resource definitions of a more generic one.  A related resource provided by the generic presentation can be hidden by including a related resource with the same `resourceId`, but without `stql` and `presentationIdentifier`.
+
+==== Constraints
+
+* `presentationIdentifier` must reference a presentation within the same stackpack.
 
 === Filters
 
