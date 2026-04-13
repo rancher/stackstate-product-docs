@@ -1,0 +1,51 @@
+= Moniteurs de seuils dynamiques
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+Pour les métriques qui varient considérablement dans le temps et diffèrent d'un service à l'autre, un moniteur de seuil dynamique fournit une détection d'anomalies simple et performante.  Il utilise des données d'il y a 1, 2 ou 3 semaines en plus du passé récent comme contexte pour comparer les données actuelles.
+
+Les données de la "fenêtre de vérification" sont comparées à celles fournies par le contexte historique en utilisant le test d'Anderson-Darling.  Cela impose très peu d'hypothèses sur la distribution des données.  Le test est particulièrement sensible aux valeurs aberrantes aux extrémités supérieure et inférieure de la distribution.  La métrique peut être lisse, présenter des pics ou avoir quelques "niveaux" – comme les valeurs de données sont comparées directement, sans ajustement de modèle, le moniteur de seuil dynamique est très robuste.
+
+Pour les métriques qui varient de manière fluide dans le temps (par exemple, sur une échelle de temps de cinq minutes), le nombre effectif de points de données est inférieur au nombre brut.  Le DT compense cela afin que le même moniteur puisse être utilisé pour une large gamme de métriques sans avoir besoin d'ajuster ses paramètres.
+
+Il y a quelques paramètres qui peuvent être définis pour la fonction de moniteur :
+
+* `falsePositiveRate` : dire `!!float 1e-8` - la sensibilité du moniteur au comportement déviant.  Une valeur plus basse supprime davantage de faux positifs, mais peut également conduire à des faux négatifs (anomalies non remarquées).
+* `checkWindowMinutes` : dire `10` minutes - la fenêtre de vérification doit être équilibrée entre une alerte rapide (petites valeurs) et des anomalies correctement identifiées (grandes valeurs).  Une poignée de points de données fonctionne bien en pratique.
+* `historicWindowMinutes` : par exemple `120` (2 heures) – encadré autour de l'heure actuelle, puis une ou plusieurs semaines auparavant – donc d'une heure avant l'heure actuelle à une heure après.  Les deux heures précédant également la fenêtre de vérification sont utilisées.  Le moniteur de seuil dynamique compare la distribution de ces données historiques avec les points de données dans la fenêtre de vérification.
+* `historySizeWeeks` : dire `2` - le nombre de semaines dont les données sont prises pour le contexte historique.  Peut être `1`, `2` ou `3`.
+* `removeTrend` : pour les métriques qui ont un comportement de tendance (par exemple, le nombre de requêtes), de sorte que la valeur absolue diffère d'une semaine à l'autre, cette tendance (la valeur moyenne) peut être prise en compte.
+* `includePreviousDay` : typiquement `false` - pour les métriques qui n'ont pas de modèle hebdomadaire mais seulement un modèle quotidien, cela permet d'utiliser des données plus récentes.
+
+== Exemple de moniteur de seuil dynamique
+
+Un moniteur implémenté en utilisant la fonction de seuil dynamique ressemble à :
+
+----
+  - _type: "Monitor"
+    name: "<name of the monitor>"
+    identifier: "urn:stackpack:<stackpack-name>:monitor:<identifier for the monitor>"
+    status: "DISABLED"
+    description: "<description>"
+    function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+    arguments:
+      telemetryQuery:
+        query: "<metric to bind to component>"
+        unit: s
+        aliasTemplate: "<name for the metric>"
+      topologyQuery: <topology query for the components to bind to>
+      falsePositiveRate: <floating point number, e.g. !!float 1e-8>
+      checkWindowMinutes: <integer, e.g. 10>
+      historicWindowMinutes: <integer, e.g. 120>
+      historySizeWeeks: <integer: 1, 2 or 3>
+      includePreviousDay: <boolean>
+      removeTrend: <boolean>
+    intervalSeconds: 60
+    remediationHint: "<how to remediate deviating states>"
+----
+
+Le moniteur peut être implémenté en utilisant le guide à xref:use/alerting/k8s-dynamic-threshold-monitors.adoc[Ajouter un moniteur de seuil aux composants en utilisant la CLI]

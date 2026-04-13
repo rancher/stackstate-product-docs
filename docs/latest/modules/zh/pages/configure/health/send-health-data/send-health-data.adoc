@@ -1,0 +1,52 @@
+= 通过HTTP发送健康数据
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+SUSE Observability可以通过HTTP或xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]从您自己的数据源同步健康信息。
+
+== SUSE Observability接收器API
+
+SUSE Observability接收器API接受拓扑、指标、事件和健康数据，采用通用的JSON对象。接收器API的默认位置是`<STACKSTATE_RECEIVER_API_ADDRESS>`，使用`<STACKSTATE_BASE_URL>`和<``STACKSTATE_RECEIVER_API_KEY>``构建。
+
+在Kubernetes或OpenShift上部署的SUSE Observability`<STACKSTATE_RECEIVER_API_ADDRESS>`是：
+
+[,text]
+----
+https://<STACKSTATE_BASE_URL>/receiver/stsAgent/intake?api_key=<STACKSTATE_RECEIVER_API_KEY>
+----
+
+在SUSE Observability安装期间设置`<STACKSTATE_BASE_URL>`和`<STACKSTATE_RECEIVER_API_KEY>`，详细信息请参见xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_values_yaml[Kubernetes安装 - 配置参数]。
+
+== JSON
+
+=== 通用JSON对象
+
+拓扑、遥测和健康数据通过HTTP POST发送到接收器API。所有消息使用一个通用的JSON对象。
+
+[,javascript]
+----
+{
+  "collection_timestamp": 1548855554, // the epoch timestamp for the collection
+  "events": {}, // used to send events data
+  "internalHostname": "localdocker.test", // the host sending this data
+  "metrics": [], // used to send metrics data
+  "service_checks": [],
+  "topologies": [], // used to send topology data
+  "health": // used for sending health data
+}
+----
+
+=== JSON健康负载
+
+SUSE Observability接受基于所选xref:/configure/health/health-synchronization.adoc#_consistency_models[一致性模型]的健康数据。每个模型可以发送的消息在以下页面中描述：
+
+* xref:/configure/health/send-health-data/repeat_snapshots.adoc[重复快照JSON]
+* xref:/configure/health/send-health-data/transactional_increments.adoc[事务增量JSON]
+
+== 另请参见
+
+* xref:/setup/cli/cli-sts.adoc[安装SUSE Observability CLI]

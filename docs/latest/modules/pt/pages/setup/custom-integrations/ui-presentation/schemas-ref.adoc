@@ -1,0 +1,160 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Esquema de Apresentação de Componentes
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: Esquema de Apresentação de Componentes
+
+[IMPORTANT]
+====
+*Status:* Em desenvolvimento ativo.
+
+*disponibilidade:* Por trás da feature flag StackPacks 2.0. Consulte xref:/setup/custom-integrations/overview.adoc[Visão Geral de Integrações Personalizadas] sobre como habilitar o recurso.
+
+Esta documentação descreve a intenção de design atual e a superfície de configuração de alto nível.
+
+Nota: o comportamento e as capacidades ainda não foram implementados.
+
+Como este recurso está em desenvolvimento ativo, o comportamento, os esquemas e as capacidades podem mudar à medida que o modelo evolui.
+====
+
+== Visão Geral
+
+Esta página documenta o esquema de configuração utilizado pelo modelo de Apresentação da UI.
+Destina-se a servir como referência para autores que definem o comportamento de apresentação da UI.
+
+Todos os esquemas descritos aqui fazem parte do *StackPacks 2.0* e estão em desenvolvimento ativo.
+
+== Páginas da UI populadas por `ComponentPresentation`
+
+Veja as capturas de tela a seguir para ter uma ideia de quais páginas e elementos da UI nas respectivas páginas a configuração `ComponentPresentation` se refere.
+
+=== Página de Visão do Tipo de Componente
+
+No esquema de referência abaixo, veja a seção `overview`.
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_overview_page.png[Página de visão geral]
+
+=== Página de Destaque do Componente
+
+No esquema de referência abaixo, veja a seção `highlight`.
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_highlight_page.png[Página de destaque]
+
+== Apresentação do Componente
+
+Um `ComponentPresentation` define como os componentes correspondentes são apresentados na UI para um determinado modo e contexto.
+
+[,yaml]
+----
+_type: ComponentPresentation
+identifier: urn:...:component-presentation:<presentation-name>
+mode: ["observability" | "security" | "all"]
+
+binding:
+  _type: ComponentPresentationQueryBinding
+  query: string                       # Primitive STQL query used to match components
+
+rank:
+  specificity: number                 # Higher values indicate more specific definitions
+
+presentation:
+  icon: string                        # Optional icon (base64-encoded)
+  name:                               # Optional naming configuration
+    plural: string
+    singular: string
+    title: string
+
+  mainMenu:                           # Optional main menu entry
+    group: string                     # Name of an existing MainMenuGroup
+    rank: number                      # Optional override within the group
+
+  overview:                           # Optional overview page configuration
+    columns:
+      - _type: string                 # ViewTypeTableCol*
+
+  highlight:                          # Optional highlight page configuration
+    summary:
+      ...
+    fields:
+      - _type: string                 # ComponentTypeField
+        fieldId: string
+        label:
+          title: string
+          helpBubbleText: string      # Optional
+        valueExtractor:
+          _type: string
+        display:
+          _type: string
+    about:
+      _type: ComponentTypeAbout
+      fields:
+        - string
+
+  filter:                             # Optional overview filters
+    - _type: FilterField
+      name: string
+      tagField: string
+----
+
+== Identificador
+
+Os identificadores devem seguir o formato de identificador {stackstate-product-name} (ou seja, `urn:...`). Consulte a documentação de xref:/configure/topology/identifiers.adoc[identificadores] para mais informações.
+
+== Vinculação
+
+A vinculação determina a quais componentes um `ComponentPresentation` se aplica.
+
+As vinculações são avaliadas em relação aos dados do componente e devem ser simples e eficientes, pois são usadas durante a avaliação da UI.
+
+Tipo de `binding` atualmente suportado:
+
+* `ComponentPresentationQueryBinding`: uma consulta STQL (consulte o xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] para mais informações)
+
+== Classificação
+
+A seção `rank` controla como múltiplas definições de `ComponentPresentation` correspondentes são combinadas.
+
+Valores de especificidade mais altos indicam definições mais especializadas e têm precedência sobre valores mais baixos ao compor o comportamento de apresentação.
+
+== Seções de apresentação
+
+Todos os campos sob `presentation` são opcionais. Uma `ComponentPresentation` pode definir apenas um subconjunto de aspectos de apresentação.
+
+As seções de apresentação são compostas quando múltiplas definições se aplicam ao mesmo componente.
+
+=== Ícone e nome
+
+Define a iconografia e a nomenclatura usadas em toda a interface do usuário.
+
+=== Menu principal
+
+Controla se os componentes correspondentes aparecem no menu principal.
+
+O grupo de menu referenciado deve ser definido separadamente usando `MainMenuGroup`.
+
+=== Visão Geral
+
+Define as colunas mostradas nas tabelas de visão geral.
+
+As colunas podem substituir ou estender colunas definidas por outras apresentações correspondentes.
+
+=== Realçar
+
+Define campos e seções mostrados nas páginas de destaque.
+
+==== Resumo
+
+==== Campos
+
+==== Sobre
+
+Define campos mostrados no painel Sobre na página de destaque do componente.
+
+=== Filter
+
+Define filtros mostrados para páginas de visão geral.
+
+Filtros são mostrados quando dados correspondentes existem para os componentes vinculados.
+
+endif::ss-ff-stackpacks2_enabled[]

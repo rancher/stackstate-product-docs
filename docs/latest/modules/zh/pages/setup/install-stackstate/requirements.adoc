@@ -1,0 +1,151 @@
+= 要求
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+关于<<_client_browser,SUSE Observability客户端（浏览器）>>的要求可以在页面底部找到。
+
+=== 与 Rancher 和 Kubernetes 的兼容性
+在这里查看兼容性页面xref:setup/install-stackstate/Compatibility Self Hosted.adoc[Rancher/Kubernetes兼容性]
+
+=== 资源要求
+
+SUSE Observability提供不同的安装选项。可以在高可用性（HA）或单实例（非HA）设置中安装SUSE Observability。非HA设置仅推荐用于测试目的。对于生产环境，建议在HA设置中安装SUSE Observability。对于标准的生产部署，SUSE Observability Helm图表将在冗余设置中部署多个服务，每个服务有3个实例。
+
+在下面的表格中，您可以找到不同安装选项的资源要求。对于HA设置，您可以根据被观察环境的大小找到不同的安装控制文件。
+在此大小表中，观察到的节点被视为4个vCPU和16GB内存，我们的`default node size`。
+如果您观察的集群中的节点更大，它们可以计为多个`default nodes`，因此一个12vCPU和48GB的节点在选择控制文件时计为3个`default nodes`。
+
+|===
+|  | 试用 | 10个非HA | 20个非HA | 50个非HA | 100个非HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *CPU 请求*
+| 7.0
+| 7.0
+| 9.3
+| 14.0
+| 23.6
+| 49.6
+| 61.6
+| 85.1
+| 212.1
+
+| *CPU 限制*
+| 15.1
+| 15.1
+| 19.4
+| 28.8
+| 47.9
+| 105.2
+| 128.3
+| 176.2
+| 281
+
+| *内存请求*
+| 22.7Gi
+| 22.7Gi
+| 26.5Gi
+| 30.9Gi
+| 47.0Gi
+| 127.0Gi
+| 142.1Gi
+| 166.4Gi
+| 263.9Gi
+
+| *内存限制*
+| 23.3Gi
+| 23.3Gi
+| 27.2Gi
+| 31.0Gi
+| 47.2Gi
+| 131.8Gi
+| 146.7Gi
+| 171.2Gi
+| 321.7Gi
+|===
+
+[NOTE]
+====
+所示的控制文件要求代表运行SUSE Observability服务器所需的总资源量。
+为了确保SUSE Observability服务器的所有不同服务能够分配：
+
+* 对于非HA安装，推荐的节点大小为4VCPU，8GB。
+* 对于HA安装，最多500个节点的最小推荐节点大小为8VCPU，16GB。
+* 对于4000个节点的HA安装，最小推荐节点大小为16VCPU，32GB。
+====
+
+
+这些只是SUSE Observability在不同安装选项中可以消耗的资源的上下限。实际的资源使用将取决于所使用的功能、配置的资源限制和动态使用模式，例如部署或DaemonSet扩展。对于我们的自托管客户，我们建议从默认要求开始，并监控SUSE Observability组件的资源使用情况。
+
+[NOTE]
+====
+最低要求不包括额外的CPU/内存容量，以确保应用程序的平滑滚动更新。
+====
+
+
+要安装SUSE Observability，请遵循以下提供的安装说明：
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes]
+* xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc[OpenShift]
+
+=== 存储
+
+SUSE Observability为需要存储数据的服务使用持久卷声明。集群的默认存储类将用于所有服务，除非通过命令行或`values.yaml`文件中指定的值进行覆盖。所有服务都带有预配置的卷大小，应该足以让您开始，但可以根据需要使用变量进行自定义。
+
+[NOTE]
+====
+对于生产环境，不建议使用NFS进行存储配置，因为存在数据损坏的潜在风险。
+====
+
+
+对于我们的不同安装控制文件，以下是默认的存储要求：
+
+|===
+|  | 试用 | 10个非HA | 20个非HA | 50个非HA | 100个非HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *保留（天）*
+| 3
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+
+| *存储要求*
+| 163GB
+| 358GB
+| 401GB
+| 508GB
+| 562GB
+| 2.8TB
+| 2.9TB
+| 3.9TB
+| 7.5TB
+|===
+
+[NOTE]
+====
+所呈现的存储估算考虑了NONHA的默认保留时间为14天，HA安装为1个月。对于短期测试实例，存储大小可以进一步减少。
+====
+
+
+有关使用的默认值的更多详细信息，请参见页面 xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[配置存储]。
+
+=== 名称空间资源限制
+
+不建议设置 ResourceQuota，因为这可能会干扰资源请求。SUSE Observability 所需的资源将根据使用的功能、配置的资源限制和动态使用模式（例如 Deployment 或 DaemonSet 扩展）而有所不同。
+
+如果必须为您的实现设置 ResourceQuota，则命名空间资源限制应设置为匹配节点 xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[大小要求]。
+
+== 客户端（浏览器）
+
+要使用 SUSE Observability GUI，您必须使用以下网页浏览器之一：
+
+* Chrome
+* Firefox

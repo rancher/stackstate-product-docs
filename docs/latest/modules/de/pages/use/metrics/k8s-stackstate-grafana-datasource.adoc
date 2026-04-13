@@ -1,0 +1,86 @@
+= SUSE Observability als Grafana Datenquelle
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: Verwenden Sie SUSE Observability als Grafana Datenquelle
+
+SUSE Observability kann als Datenquelle für Grafana verwendet werden. Dies ermöglicht die Verwendung von Grafana als Visualisierungstool für Ihre SUSE Observability-Daten. Dies ist nützlich, wenn Sie bereits einige Dashboards haben, die Sie weiterhin verwenden möchten. Da SUSE Observability eine Prometheus-kompatible API bereitstellt, können Sie die https://grafana.com/docs/grafana/latest/datasources/prometheus[Prometheus-Datenquelle] in Grafana verwenden, um eine Verbindung zu SUSE Observability herzustellen. Dies macht SUSE Observability auch mit anderen Prometheus-kompatiblen Lösungen nutzbar.
+
+== Voraussetzungen
+
+Bevor Sie SUSE Observability als Datenquelle in Grafana hinzufügen können, müssen Sie ein ServiceToken einrichten, um sich bei SUSE Observability zu authentifizieren. SUSE Observability empfiehlt, eine dedizierte Rolle mit Berechtigungen für diesen Zweck zu erstellen.
+
+Sie können dies über die SUSE Observability CLI tun:
+
+[,sh]
+----
+> sts rbac create-subject --subject grafana
+✅ Created subject 'grafana'
+> sts rbac grant --subject grafana --permission get-metrics
+✅ Granted permission 'get-metrics' on 'system' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | system
+----
+
+Dies wird eine neue Rolle in SUSE Observability mit dem Namen `grafana` erstellen und ihr die `get-metrics` Berechtigung gewähren. Sie können dann ein Service-Token für diese Rolle erstellen:
+
+[,sh]
+----
+> sts service-token create --name grafana --roles grafana
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+Erfahren Sie mehr über xref:/setup/security/authentication/service_tokens.adoc[die Verwaltung von ServiceTokens].
+
+Das zurückgegebene ServiceToken kann verwendet werden, um sich bei SUSE Observability zu authentifizieren. Sie können jetzt SUSE Observability als Datenquelle in Grafana hinzufügen.
+
+== Erstellen Sie eine neue SUSE Observability Datenquelle in Grafana
+
+Mit dem erstellten ServiceToken können Sie jetzt SUSE Observability als Datenquelle in Grafana hinzufügen. Gehen Sie dazu zur Grafana-Benutzeroberfläche und navigieren Sie zur Seite zur Konfiguration der Datenquelle. Klicken Sie auf die `Add data source`-Schaltfläche und wählen Sie `Prometheus` aus der Liste der Datenquellen aus.
+
+image::k8s/k8s-grafana-new-datasource.png[Neue Grafana-Datenquelle]
+
+Geben Sie auf der Seite zur Konfiguration der Datenquelle die folgenden Konfigurationsdetails ein:
+
+* *Name*: SUSE Observability
+* *URL*: `https://<tenant-name>.app.stackstate.io/prometheus`
+* *Benutzerdefinierte HTTP-Header*
+ ** *Header*: `X-API-Key`
+ ** *Wert*: `<service-token>`
+
+image::k8s/k8s-grafana-datasource.png[Grafana-Datenquellenkonfiguration]
+
+Klicken Sie auf die `Save & Test`-Schaltfläche, um die Datenquelle zu speichern. Wenn die Konfiguration korrekt ist, sollten Sie eine grüne `Data source is working`-Nachricht sehen.
+
+== Zugriff auf Metriken einschränken
+
+Wenn Sie xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] verwenden, ist es möglich, den Zugriff auf Metriken auf Cluster- oder Namespace-Ebene zu gewähren.
+
+Um den Zugriff auf alle Metriken eines Clusters zu gewähren:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:YOUR_CLUSTER:__any__
+✅ Granted permission 'get-metrics' on 'k8s:YOUR_CLUSTER:__any__' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----
+
+Um den Zugriff auf alle Metriken eines Namespace zu gewähren:
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+✅ Granted permission 'get-metrics' on 'k8s:OTHER_CLUSTER:SINGLE_NAMESPACE' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+----
+
+Überprüfen Sie alle Berechtigungen, die dem Subjekt gewährt wurden:
+[,sh]
+----
+> sts rbac describe-permissions --subject grafana
+Got subject from the following subject sources: Observability
+
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:YOUR_NAMESPACE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----

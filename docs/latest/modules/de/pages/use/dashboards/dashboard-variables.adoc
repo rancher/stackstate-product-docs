@@ -1,0 +1,118 @@
+= Dashboard-Variablen
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-11-24
+:page-revdate: {revdate}
+:description: Verwenden Sie Variablen, um dynamische Dashboards zu erstellen.
+
+Durch die Konfiguration von Variablen für ein Dashboard können Sie Dashboards mit dynamischen Widgets erstellen. Variablen ermöglichen die Wiederverwendung einer einzigen Dashboard-Definition für verschiedene Anwendungsfälle. 
+
+== Dashboard-Variablen anzeigen
+Verwenden Sie in der oberen Navigationsleiste das Dropdown-Menü neben der Schaltfläche "Speichern...", und klicken Sie auf "Dashboard-Variablen bearbeiten".
+
+image::dashboards/open-variables-drawer.png[Alle angehefteten Elemente hinzufügen]
+
+=== Integrierte Variablen
+Es gibt Variablen, die in {stackstate-product-name} integriert sind. Die Namen dieser Variablen sind reserviert, und Sie können Ihren eigenen Variablen nicht die gleichen Namen geben.
+
+Um alle integrierten Variablen anzuzeigen, klicken Sie auf das Akkordeon mit dem Titel "SUSE Observability PromQL-Variablen".
+
+== Eine neue Variable hinzufügen
+
+. Öffnen Sie die Schublade "Dashboard-Variablen bearbeiten". 
+. Klicken Sie auf die Schaltfläche "Variable hinzufügen", um eine zweite Schublade zu öffnen, in der Sie die neue Variable konfigurieren können.
+
+image::dashboards/variable-drawer-example.png[Ein Beispiel für eine Variable]
+
+Die Konfigurationsfelder für eine Variable sind wie folgt:
+
+|===
+| Feldname | Beschreibung
+
+| Name
+| Der Name-Identifikator der Variablen. Dies ist der Name, den Sie <<using-variables, in kompatiblen Feldern verwenden können>>.
+
+| Anzeigetext
+| Ein freundlicher Name für die Variable, der im Dashboard angezeigt wird, wenn <<selecting-variables, die Variable>> ausgewählt wird. Dies hilft Ihnen, die Variable zu identifizieren.
+
+| Beschreibung
+| Eine Beschreibung, um den Zweck der Variable zu verstehen. Diese Beschreibung wird in der Schublade "Dashboard-Variablen bearbeiten" angezeigt.
+
+| Typ
+| Der Typ der Variable.
+|===
+
+== Variablentypen
+=== Textvariable
+
+Eine Textvariable enthält einfachen Text. Sie können einen Anfangswert festlegen und die Variable schreibgeschützt machen.
+
+=== Listenvariable
+
+Eine Listenvariable hat mögliche Werte, die durch das Feld "Quelle" definiert sind. Jeder Quelltyp bietet zusätzliche Felder, die es Ihnen ermöglichen, die möglichen Werte für die Variable einzugrenzen.
+
+|===
+| Quelltyp | Quellenfelder
+
+| Namen der Metrikbezeichner
+| Geben Sie null oder mehr Serienauswähler ein, um zu verfeinern, welche Metrikbezeichner vorhanden sind.
+
+| Werte der Metrikbezeichner
+| Geben Sie einen Metrikbezeichner ein und null oder mehr Serienauswähler, um zu verfeinern, welche Werte der Metrikbezeichner vorhanden sind.
+
+| Metric PromQL
+| Geben Sie eine benutzerdefinierte PromQL-Abfrage und einen Labelnamen ein. Die resultierenden möglichen Werte sind die Werte für den angegebenen Labelnamen.
+
+| Statische Liste
+| Geben Sie ein oder mehrere Label- und Wertpaare ein, um eine statische Liste möglicher Werte zu erstellen.
+|===
+
+Wenn Sie den Quellentyp und die zugehörigen Felder ändern, aktualisiert sich die Vorschau auf der rechten Seite der Schublade mit den neuen möglichen Werten.
+
+
+==== Allgemeine Einstellungen für Listenvariablen
+
+Alle Quellen für Listenvariablen haben auch die folgenden allgemeinen Einstellungen:
+
+|===
+| Feldname | Beschreibung
+
+| Sortieren
+| Sortieren Sie die Werte in der Liste. Zum Beispiel alphabetisch oder numerisch.
+
+| Mehrere Werte zulassen
+| Erlauben Sie den Benutzern, mehr als einen Wert gleichzeitig auszuwählen.
+
+| "Alles einbeziehen" aktivieren
+| Fügt der Liste, die der Benutzer sieht, ein Element hinzu, mit dem alle Werte ausgewählt werden können. Sie können optional einen benutzerdefinierten Wert für dieses Element angeben oder ihn automatisch generieren lassen. 
+|===
+
+== Variablen verwenden [[using-variables]]
+Sobald eine Variable definiert ist, kann sie verwendet werden, um verschiedene Felder im Dashboard auszufüllen:
+
+* Andere Variablen
+* Widget-Name und -Beschreibung
+* Widget-Linkfelder: URL, Name und Tooltip
+* Widget-Abfragefelder: PromQL-Ausdruck, Alias und minimaler Schritt
+* Editor des Markdown-Widgets
+
+Um eine Variable in einem kompatiblen Feld zu verwenden, verwenden Sie den Variablennamen, der in `${}` eingeschlossen ist (zum Beispiel `$\{my_variable}`). Der Wert der Variable wird interpoliert.
+
+=== Wie Variablen interpoliert werden
+Textvariablen werden als der String interpoliert, der im Textfeld der Variable geschrieben ist.
+
+Ähnlich werden Listenvariablen, die keine Mehrfachwerte oder "Alles einbeziehen" zulassen, als der Wert des ausgewählten Elements aus der Liste interpoliert.
+
+Listenvariablen, die Mehrfachwerte zulassen, werden als regulärer Ausdrucks-Erfassungsgruppe der ausgewählten Werte interpoliert (zum Beispiel `(value_1|value_2)`), unabhängig davon, ob eine oder mehrere Optionen ausgewählt sind.
+
+Listenvariablen, die die Option "Alles einbeziehen" aktiviert haben und für diese Variable ausgewählt sind, werden entweder interpoliert als:
+* Der benutzerdefinierte Wert, wenn definiert, oder
+* Eine generierte reguläre Ausdrucks-Erfassungsgruppe aller möglichen Werte (zum Beispiel `(value_1|value_2|value_3)`)
+
+Sie können den PromQL-Regulärausdrucks-Matcher `=~` verwenden, wenn Sie Variablen konsumieren, die als reguläre Ausdrucks-Erfassungsgruppen interpoliert werden.
+
+== Auswahl von Variablen [[selecting-variables]]
+Variablen werden oben im Dashboard aufgelistet, neben der Zeitraum-Auswahl. Nur die ersten wenigen Variablen werden angezeigt. Um den Rest der Variablen zu sehen, verwenden Sie das Dropdown-Menü "Mehr".
+
+Klicken Sie auf eine Variable, um ihren Selektor zu öffnen und die Werte auszuwählen, die Sie im Dashboard anzeigen möchten.
+
+Wenn Sie verschiedene Werte auswählen, reagieren die Widgets, die die Variable verwenden, auf die Änderungen.

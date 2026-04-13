@@ -1,0 +1,57 @@
+= エクスポーター設定
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+すべてのSDKは、言語に関係なく、Open Telemetryのhttps://opentelemetry.io/docs/concepts/glossary/#_service[サービス名]とエクスポーターエンドポイント（すなわち、テレメトリが送信される場所）を定義するために同じ設定を使用します。
+
+これらは、計測済みアプリケーションの環境変数を設定することで構成できます。
+
+Kubernetesでは、ワークロードのマニフェストにこれらの環境変数を設定します（`<the-service-name>`をアプリケーションサービスの名前に置き換えてください）：
+
+[,yaml]
+----
+...
+spec:
+  containers:
+  - env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317
+    - name: OTEL_SERVICE_NAME
+      value: <the-service-name>
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+...
+----
+
+例に指定されたエンドポイントは、コレクターがxref:/setup/otel/collector.adoc[インストールガイド]のデフォルトを使用してインストールされたと仮定しています。ポート`4317`を使用し、OTLPプロトコルの`gRPC`バージョンを使用します。一部の計測はHTTPのみをサポートしており、その場合はポート`4318`を使用してください。
+
+サービス名は、すでに存在するKubernetesラベルから導出することもできます。例えば、次のようになります：
+
+[,yaml]
+----
+spec:
+  containers:
+  - env:
+    - name: OTEL_SERVICE_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.labels['app.kubernetes.io/component']
+----
+
+== gRPC vs HTTP
+
+OTLP、オープンテレメトリプロトコルは、HTTP上でgRPCとprotobufをサポートしています。一部のSDKは、HTTP経由のJSONもサポートしています。前のセクションでは、エクスポーター・プロトコルが`gRPC`に設定されており、通常は最良のパフォーマンスを提供し、多くのSDKのデフォルトとなっています。ただし、場合によっては問題が発生することがあります。
+
+* 一部のファイアウォールはgRPCを処理するように設定されていません。
+* （リバース）プロキシやロードバランサーは、追加の設定なしではgRPCをサポートしない場合があります。
+* gRPCの長期間接続は、負荷分散時に問題を引き起こす可能性があります。
+
+gRPCの代わりにHTTPに切り替えるには、プロトコルを`http`に変更し、ポート`4318`を使用します。
+
+要約すると、gRPCに問題が発生した場合はHTTPを使用してください。
+
+* `grpc`プロトコルはポート`4317`を使用します。
+* `http`プロトコルはポート`4318`を使用します。

@@ -1,0 +1,326 @@
+= Fügen Sie benutzerdefinierte Diagramme zu Komponenten hinzu
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+SUSE Observability bietet bereits viele Metrikdiagramme standardmäßig für die meisten Arten von Komponenten, die Kubernetes-Ressourcen darstellen. Zusätzliche Metrikdiagramme können jederzeit zu einem Satz von Komponenten hinzugefügt werden, wenn dies erforderlich ist. Beim Hinzufügen von Metriken zu Komponenten gibt es 2 Optionen:
+
+. Die Metriken werden bereits von SUSE Observability erfasst, sind jedoch standardmäßig nicht auf einer Komponente visualisiert.
+. Die Metriken werden von SUSE Observability noch nicht erfasst und sind daher noch nicht verfügbar.
+
+Für Option 1 geben die folgenden Schritte Anweisungen, wie Sie eine Metrikbindung erstellen, die SUSE Observability konfiguriert, um eine bestimmte Metrik zu einem bestimmten Satz von Komponenten hinzuzufügen.
+
+Im Falle von Option 2 stellen Sie zunächst sicher, dass die Metriken in SUSE Observability verfügbar sind, indem Sie sie über das xref:/use/metrics/k8s-prometheus-remote-write.adoc[Prometheus Remote Write-Protokoll] an SUSE Observability senden. Erst danach fahren Sie fort, indem Sie Diagramme für die Metriken zu den Komponenten hinzufügen.
+
+== Schritte
+
+Schritte zur Erstellung einer Metrikbindung:
+
+. <<_write_the_outline_of_the_metric_binding,Skizzieren Sie die Metrikbindung>>
+. <<_write_the_topology_query,Schreiben Sie die Topologieabfrage (STQL), um die Komponenten auszuwählen>>
+. <<_write_the_promql_query,Schreiben Sie die PromQL-Abfrage für die gewünschte Metrik>>
+. <<_bind_the_correct_time_series_to_each_component,Ordnen Sie jede Zeitreihe der richtigen Komponente zu>>
+. <<_create_or_update_the_metric_binding_in_suse_observability,Erstellen oder aktualisieren Sie die Metrikbindung in SUSE Observability>>
+
+Als Beispiel werden die Schritte eine Metrikbindung für die `Replica counts` von Kubernetes-Implementierungen hinzufügen. Dies ist nur ein Beispiel, diese Metrikbindung existiert bereits standardmäßig in SUSE Observability.
+
+== Skizzieren Sie die Metrikbindung
+
+Erstellen Sie eine neue YAML-Datei mit dem Namen `metric-bindings.yaml` und fügen Sie diese YAML-Vorlage hinzu, um Ihre eigene Metrikbindung zu erstellen. Öffnen Sie sie in Ihrem bevorzugten Code-Editor, um sie während dieses Leitfadens zu ändern. Am Ende wird die SUSE Observability CLI verwendet, um die Metrikbindungen in SUSE Observability zu erstellen und zu aktualisieren.
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit:
+  name:
+  description:
+  priority:
+  identifier: urn:custom:metric-binding:...
+  queries:
+    - expression:
+      alias:
+  scope:
+  layout:
+    metricPerspective:
+      tab:
+      section:
+      weight:
+    componentSummary:
+      weight:
+----
+
+Die Felder in dieser Vorlage sind:
+
+* `_type`: SUSE Observability muss wissen, dass dies eine Metrikbindung ist, daher muss der Wert immer `MetricBinding` sein.
+* `chartType`: SUSE Observability unterstützt verschiedene Diagrammtypen (`line`, `bar` usw.), derzeit wird nur `line` unterstützt.
+* `enabled`: Setzen Sie auf `false`, um die Metrikbindung beizubehalten, sie jedoch nicht den Benutzern anzuzeigen.
+* `tags`: Wird verwendet, um Metriken in der Benutzeroberfläche zu organisieren, kann mit `{}` leer gelassen werden.
+* `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, wird verwendet, um die Y-Achse des Diagramms darzustellen. Siehe das xref:/develop/reference/k8sTs-chart-units.adoc[unterstützte Units]-Referenzdokument für alle Units.
+* `name`: Der Name für die Metrikbindung.
+* `description`: Optionale Beschreibung, die beim Überfahren des Namens angezeigt wird.
+* `priority`: [Veraltet] Eines von `HIGH`, `MEDIUM` oder `LOW`. Hauptsortierreihenfolge für Metriken auf einer Komponente (in der Reihenfolge, in der sie hier erwähnt werden), die sekundäre Sortierreihenfolge ist die `name`.
+* `identifier`: Eine URN (universeller Ressourcenbezeichner), die als eindeutiger Bezeichner der Metrikbindung verwendet wird. Sie muss mit `urn:custom:metric-binding:` beginnen, der Rest ist im freien Format, solange er unter allen Metrikbindungen einzigartig ist.
+* `queries`: Eine Liste von Abfragen, die im Diagramm für die Metrikbindung angezeigt werden sollen (siehe auch die folgenden Abschnitte).
+* `scope`: Der Topologie-Bereich der Metrikbindung, eine Topologie-Abfrage, die die Komponenten auswählt, auf denen diese Metrikbindung angezeigt wird.
+* `layout`: Wie man Diagramme in verschiedenen Perspektivansichten gruppiert, z.B. auf xref:/use/views/k8s-metrics-perspective.adoc[Metrics perspective].
+
+Füllen Sie zuerst alle bereits bekannten Teile aus (mit den Bereitstellungsreplikatzahlen als Beispiel).
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression:
+    alias:
+scope:
+----
+
+Die Abfragen und der Abschnitt zum Umfang werden in den nächsten Schritten ausgefüllt. Beachten Sie, dass die verwendete Unit `short` ist, die einfach einen numerischen Wert darstellt. Falls Sie sich noch nicht sicher sind, welche Unit für die Metrik verwendet werden soll, können Sie es offen lassen und die richtige Unit beim Schreiben der PromQL-Abfrage entscheiden.
+
+== Schreiben Sie die Topologie-Abfrage.
+
+Verwenden Sie die Explore-Ansicht der xref:/use/views/k8s-topology-perspective.adoc[Topologie-Perspektive], http://your-instance/#/views/explore, und wählen Sie die Komponenten aus, die die neue Metrik anzeigen sollen. Sowohl die grundlegenden als auch die erweiterten Ansichten können zur Auswahl verwendet werden. Die häufigsten Felder, um die Topologie für Metrikbindungen auszuwählen, sind `type` für den Komponententyp und `label` zum Auswählen aller Labels. Zum Beispiel für die Implementierungen:
+
+----
+type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Der Typfilter wählt alle Implementierungen aus, während der Labelfilter nur Komponenten auswählt, die vom Kubernetes-Stackpack erstellt wurden (Labelname ist `stackpack` und Labelwert ist `kubernetes`). Letzteres kann ebenfalls weggelassen werden, um dasselbe Ergebnis zu erzielen.
+
+Wechseln Sie in den erweiterten Modus, um die resultierende Topologie-Abfrage zu kopieren und in das Feld `scope` der Metrikbindung einzufügen.
+
+[NOTE]
+====
+Metrikbindungen unterstützen nur die Abfragefilter, Abfragefunktionen wie `withNeighborsOf` werden nicht unterstützt und können nicht verwendet werden.
+====
+
+
+== Schreiben Sie die PromQL-Abfrage.
+
+Gehen Sie zu dem xref:/use/metrics/k8sTs-explore-metrics.adoc[Metrik-Explorer] Ihrer SUSE Observability-Instanz, http://your-instance/#/metrics, und verwenden Sie ihn, um die Metrik von Interesse abzufragen. Der Explorer hat eine automatische Vervollständigung für Metriken, Labels, Labelwerte, aber auch für PromQL-Funktionen und Operatoren, um Ihnen zu helfen. Beginnen Sie mit einem kurzen Zeitraum von beispielsweise einer Stunde, um die besten Ergebnisse zu erzielen.
+
+Für die Gesamtzahl der Replikate verwenden Sie die Metrik `kubernetes_state_deployment_replicas`. Um die für diese Metrik angezeigten Diagramme repräsentativ für die Zeitreihendaten zu machen, erweitern Sie die Abfrage, um eine Aggregation mit dem Parameter `${__interval}` durchzuführen:
+
+----
+max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+----
+
+In diesem speziellen Fall verwenden Sie `max_over_time`, um sicherzustellen, dass das Diagramm immer die höchste Anzahl von Replikaten zu jedem Zeitpunkt anzeigt. Für längere Zeiträume bedeutet dies, dass ein kurzer Rückgang der Replikate nicht angezeigt wird; um die niedrigste Anzahl von Replikaten zu betonen, verwenden Sie stattdessen `min_over_time`.
+
+Kopieren Sie die Abfrage in die `expression`-Eigenschaft des ersten Eintrags im `queries`-Feld der Metrikbindung. Verwenden Sie `Total replicas` als Alias. Dies ist der Name, der in der Diagrammlegende angezeigt wird.
+
+[NOTE]
+====
+In SUSE Observability bestimmt die Größe des Metrikdiagramms automatisch die Granularität der im Diagramm angezeigten Metrik. PromQL-Abfragen können angepasst werden, um dieses Verhalten optimal zu nutzen und ein repräsentatives Diagramm für die Metrik zu erhalten. xref:/use/metrics/k8s-writing-promql-for-charts.adoc[Das Schreiben von PromQL für Diagramme] erklärt dies im Detail.
+====
+
+
+== Binden Sie die korrekten Zeitreihen an jede Komponente.
+
+Die Metrikbindung mit allen ausgefüllten Feldern:
+
+----
+_type: MetricBinding
+chartType: line
+enabled: true
+tags: {}
+unit: short
+name: Replica counts
+priority: MEDIUM
+identifier: urn:custom:metric-binding:my-deployment-replica-counts
+queries:
+  - expression: max_over_time(kubernetes_state_deployment_replicas[${__interval}])
+    alias: Total replicas
+scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Die Erstellung in SUSE Observability und die Anzeige des "Replica count"-Diagramms auf einer Bereitstellungskomponente ergibt ein unerwartetes Ergebnis. Das Diagramm zeigt die Replikatzahlen für alle Bereitstellungen. Logischerweise würde man nur 1 Zeitreihe erwarten: die Replikatzahl für diese spezifische Bereitstellung.
+
+image::k8s/k8s-replica-counts-without-binding.png[Das falsche Diagramm für eine einzelne Bereitstellung, it shows the replica count for all deployments]
+
+Um dies zu beheben, machen Sie die PromQL-Abfrage spezifisch für eine Komponente, indem Sie Informationen von der Komponente verwenden. Filtern Sie nach genügend Metrik-Labels, um nur die spezifische Zeitreihe für die Komponente auszuwählen. Dies ist das "Binding" der korrekten Zeitreihen an die Komponente. Für jeden, der Erfahrung in der Erstellung von Grafana-Dashboards hat, ist dies ähnlich wie ein Dashboard mit Parametern, die in Abfragen auf dem Dashboard verwendet werden. Lassen Sie uns die Abfrage in der Metrikbindung wie folgt ändern:
+
+----
+max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+----
+
+image::k8s/k8s-replica-counts-with-binding.png[Nach dem Hinzufügen der parametrisierten Filter sieht das resultierende Diagramm wie erwartet aus, only 1 time series for this component]
+
+Die PromQL-Abfrage filtert jetzt nach 3 Labels, `cluster_name`, `namespace` und `deployment`. Anstelle der Angabe eines tatsächlichen Wertes für diese Labels wird eine Variablenreferenz auf die Felder der Komponente verwendet. In diesem Fall werden die Labels `cluster-name` und `namespace` verwendet, die mit `${tags.cluster-name}` und `${tags.namespace}` referenziert werden. Darüber hinaus wird der Komponentenname mit `${name}` referenziert.
+
+Unterstützte Variablenreferenzen sind:
+
+* Jedes Komponentenlabel, unter Verwendung von `${tags.<label-name>}`
+* Der Komponentenname, unter Verwendung von `${name}`
+
+image::k8s/k8s-carts-highlights.png[Highlights der Komponenten, die die Labels und den Komponentennamen zeigen (beide in Rot hervorgehoben)]
+
+[NOTE]
+====
+Der Clustername, der Namespace und eine Kombination aus dem Komponententyp und -namen sind normalerweise ausreichend, um die Metriken für eine bestimmte Komponente aus Kubernetes auszuwählen. Diese Labels oder ähnliche Labels sind normalerweise auf den meisten Metriken und Komponenten verfügbar.
+====
+
+
+== Erstellen oder aktualisieren Sie die Metrikbindung in SUSE Observability.
+
+Verwenden Sie die SUSE Observability CLI, um die Metrikbindung in SUSE Observability zu erstellen. Stellen Sie sicher, dass das `metric-bindings.yaml` gespeichert ist und so aussieht:
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Verwenden Sie die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI], um die Metrikbindung zu erstellen:
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+Überprüfen Sie die Ergebnisse in SUSE Observability, indem Sie die Metrikperspektive für eine Implementierung öffnen. Wenn Sie mit dem Ergebnis nicht zufrieden sind, aktualisieren Sie einfach die Metrikbindung in der YAML-Datei und führen Sie den Befehl erneut aus, um sie zu aktualisieren. Die Liste der Knoten unterstützt das Hinzufügen vieler Metrikbindungen. Fügen Sie einfach einen weiteren Eintrag für die Metrikbindung zum YAML-Array hinzu, indem Sie die gleichen Schritte wie zuvor verwenden.
+
+[CAUTION]
+====
+Der Bezeichner wird als der eindeutige Schlüssel einer Metrikbindung verwendet. Ändern des Bezeichners erstellt eine neue Metrikbindung, anstatt die vorhandene zu aktualisieren.
+====
+
+
+Der `sts settings` Befehl hat mehr Optionen, zum Beispiel kann er alle Metrikbindungen auflisten:
+
+[,bash]
+----
+sts settings list --type MetricBinding
+----
+
+Um schließlich eine Metrikbindung zu löschen, verwenden Sie
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+Die `<id>` in diesem Befehl ist nicht der Bezeichner, sondern die Zahl in der `Id` Spalte der `sts settings list` Ausgabe.
+
+[NOTE]
+====
+Die empfohlene Arbeitsweise besteht darin, Metrikbindungen (und alle anderen benutzerdefinierten Ressourcen, die in SUSE Observability erstellt wurden) als YAML-Dateien in einem Git-Repository zu speichern. Von dort aus können Änderungen manuell angewendet oder vollständig automatisiert werden, indem die SUSE Observability CLI in einem CI/CD-System wie GitHub Actions oder GitLab-Pipelines verwendet wird.
+====
+
+
+== Weitere Optionen
+
+=== Mehr als 1 Zeitreihe in einem Diagramm
+
+[NOTE]
+====
+Es gibt nur 1 Unit für eine Metrikbindung (sie wird auf der y-Achse des Diagramms dargestellt). Daher sollten Sie nur Abfragen kombinieren, die Zeitreihen mit derselben Unit in 1 Metrikbindung erzeugen. Manchmal kann es möglich sein, die Unit zu konvertieren. Zum Beispiel kann die CPU-Nutzung in Milli-Kernen oder Kernen gemeldet werden; Milli-Kerne können in Kerne umgewandelt werden, indem man mit 1000 multipliziert, wie hier `(<original-query>) * 1000`.
+====
+
+
+Es gibt 2 Möglichkeiten, mehr als 1 Zeitreihe in einer einzigen Metrikbindung und damit in einem einzigen Diagramm zu erhalten:
+
+. Schreiben Sie eine PromQL-Abfrage, die mehrere Zeitreihen für eine einzelne Komponente zurückgibt.
+. Fügen Sie der Metrikbindung weitere PromQL-Abfragen hinzu.
+
+Für die erste Option wird ein Beispiel im xref:/use/metrics/k8s-add-charts.adoc#_using_metric_labels_in_aliases[nächsten Abschnitt] gegeben. Die zweite Option kann nützlich sein, um verwandte Metriken zu vergleichen. Einige typische Anwendungsfälle:
+
+* Vergleich der Gesamtanzahl der Replikate mit den gewünschten und verfügbaren Replikaten.
+* Ressourcennutzung: Limits, Anfragen und Nutzung in einem einzigen Diagramm.
+
+Um weitere Abfragen zu einer Metrikbindung hinzuzufügen, wiederholen Sie einfach xref:/use/metrics/k8s-add-charts.adoc#_steps[Schritte] 3. und 4. und fügen Sie die Abfrage als zusätzlichen Eintrag in die Liste der Abfragen ein. Für die Replikatzahlen der Implementierung gibt es mehrere verwandte Metriken, die im selben Diagramm enthalten sein können:
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:custom:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+    - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Available - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: max_over_time(kubernetes_state_deployment_replicas_unavailable{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Unavailable - ${cluster_name} - ${namespace} - ${deployment}
+    - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+      alias: Desired - ${cluster_name} - ${namespace} - ${deployment}
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+image::k8s/k8s-replica-counts-multiple-timeseries.png[Metrikbindung mit mehreren Metriken]
+
+=== Verwendung von Metriklabels in Aliase
+
+Wenn eine einzelne Abfrage mehrere Zeitreihen pro Komponente zurückgibt, wird dies als mehrere Zeilen im Diagramm angezeigt. Aber in der Legende verwenden sie alle denselben Alias. Um den Unterschied zwischen den verschiedenen Zeitreihen sehen zu können, kann der Alias Verweise auf die Metriklabels mithilfe der `${label}`-Syntax enthalten. Hier ist beispielsweise eine Metrikbindung für die Metrik "Container-Neustarts" auf einem Pod; beachten Sie, dass ein Pod mehrere Container haben kann:
+
+----
+type: MetricBinding
+chartType: line
+enabled: true
+id: -1
+identifier: urn:custom:metric-binding:my-pod-restart-count
+name: Container restarts
+priority: MEDIUM
+queries:
+- alias: Restarts - ${container}
+  expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"})
+scope: (label = "stackpack:kubernetes" and type = "pod")
+unit: short
+----
+
+Beachten Sie, dass das `alias` auf das `container`-Label der Metrik verweist. Stellen Sie sicher, dass das Label im Abfrageergebnis vorhanden ist; wenn das Label fehlt, wird das `${container}` als Literaltext gerendert, um bei der Fehlersuche zu helfen.
+
+=== Layouts
+
+Jede Komponente kann mit verschiedenen Technologien oder Protokollen wie k8s, Netzwerken, Laufzeitumgebungen (z. B. JVM), Protokollen (HTTP, AMQP) usw. verbunden sein.
+Folglich können für jede Komponente eine Vielzahl unterschiedlicher Metriken angezeigt werden. Zur besseren Lesbarkeit kann SUSE Observability diese Diagramme in Registerkarten und Abschnitte organisieren.
+Um ein Diagramm (`MetricBinding`) innerhalb einer bestimmten Registerkarte oder eines bestimmten Abschnitts anzuzeigen, müssen Sie die Layout-Eigenschaft konfigurieren.
+Jede MetricsBinding ohne angegebenes Layout wird in einer Registerkarte und einem Abschnitt mit dem Namen `Other` angezeigt.
+
+Hier ist ein Beispiel für eine Konfiguration:
+
+----
+layout:
+  metricPerspective:
+    tab: Kubernetes Pod
+    section: Performance
+    weight: 2
+  componentSummary:
+    weight: 2
+----
+
+Felder:
+
+* `layout.metricPerspective` - Definiert die Metriken, die auf `Metrics Perspective` angezeigt werden sollen. Metriken werden in Registerkarten und dann in Abschnitte gruppiert.
+* `layout.metricPerspective.tab` - Registerkartenname. Registerkarten werden alphabetisch sortiert.
+* `layout.metricPerspective.section` - Abschnittsname. Abschnitte werden alphabetisch sortiert.
+* `layout.metricPerspective.weight` - Metriken innerhalb eines Abschnitts werden primär nach Gewicht (aufsteigend) und sekundär nach Namen (alphabetisch) sortiert.
+* `layout.componentSummary` - Gibt die Metriken an, die in der `Components details`-Seitenleiste bei der Auswahl der Komponente angezeigt werden sollen. Diagramme erscheinen nur, wenn diese Eigenschaft definiert ist.
+* `layout.componentSummary.weight` - Dies stellt das Gewicht des Diagramms dar. Diagramme werden nach Gewicht in aufsteigender Reihenfolge sortiert und anschließend werden die ersten 3 Diagramme angezeigt.

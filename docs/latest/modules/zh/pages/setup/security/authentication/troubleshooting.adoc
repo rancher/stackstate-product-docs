@@ -1,0 +1,41 @@
+= 故障排除身份验证和授权
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+当身份验证或授权失败时，通常是由于提供者与 SUSE Observability 的配置不匹配。为了简化故障排除，可以在 SUSE Observability 上专门为身份验证和授权启用调试日志记录。
+
+[CAUTION]
+====
+故障排除完成后，请尽快禁用调试日志记录，因为调试日志记录很可能包含机密和/或个人信息。
+====
+
+
+要启用调试日志记录，请将以下 yaml 片段复制/粘贴到 `debug-auth.yaml` 文件中。
+
+[,yaml]
+----
+stackstate:
+  components:
+    server:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+    api:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+----
+
+现在运行您之前使用的 `helm upgrade` 命令，但包括这个额外的 yaml 文件（即 `helm upgrade .... --values debug-auth.yaml`）以启用调试日志记录。不会有 pod 重启，日志配置更改将在大约 30 秒后自动加载。
+
+要禁用调试日志记录，请再次运行 `helm upgrade ....` 命令，但省略 `--values debug-auth.yaml`。30 秒后，更新的日志配置将被加载，调试日志记录将停止。
+
+
+== 故障排除权限问题
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[检查用户主体]（用户和角色），并根据所使用的身份验证模型验证配置。
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[检查主体权限]，并根据所使用的授权模型验证配置。

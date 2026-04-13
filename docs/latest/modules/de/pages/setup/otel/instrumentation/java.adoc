@@ -1,0 +1,49 @@
+= Java-Anwendungen
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Das Java SDK unterstützt die Instrumentierung von Anwendungen auf der JVM. Infolgedessen unterstützt es nicht nur Java, sondern auch andere JVM-Sprachen wie Kotlin und Scala.
+
+== Automatische Instrumentierung
+
+Die automatische Instrumentierung für Java verwendet ein Java-Agenten-JAR, das an jede Java 8+-Anwendung angehängt werden kann. Es injiziert dynamisch Bytecode, um Telemetriedaten von vielen https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md[beliebten Bibliotheken und Frameworks] zu erfassen, einschließlich mehrerer Kotlin- und Scala-Bibliotheken. Es kann verwendet werden, um Telemetriedaten am "`edges`" einer App oder eines Dienstes zu erfassen, wie z. B. eingehende Anfragen, ausgehende HTTP-Aufrufe, Datenbankaufrufe usw.
+
+Die automatische Instrumentierung erfordert keine Änderungen an der Anwendung. Um es einzurichten, folgen Sie diesen Schritten:
+
+. Laden Sie https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar[opentelemetry-javaagent.jar] von https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases[Releases] des opentelemetry-java-instrumentation-Repositorys herunter und fügen Sie die JAR-Datei in das Docker-Image Ihrer Anwendung ein. Die JAR-Datei enthält den Agenten und die Instrumentierungsbibliotheken.
+. Aktualisieren Sie den Befehl, der Ihre Anwendung startet, um den Java-Agenten zu laden, entweder durch Aktualisierung des Docker-Image-Einstiegspunkts oder des Befehls oder durch Aktualisierung des `command` im Kubernetes-Manifest für Ihre Anwendung. Fügen Sie `-javaagent:/path/to/opentelemetry-javaagent.jar` hinzu:
++
+[,bash]
+----
+java -javaagent:/path/to/opentelemetry-javaagent.jar -jar myapp.jar
+----
+
+. Stellen Sie Ihre Anwendung mit den zusätzlichen Umgebungsvariablen xref:/setup/otel/instrumentation/sdk-exporter-config.adoc[zum Konfigurieren des Dienstnamens und des Exporter-Endpunkts] bereit, unterstützte Protokolle sind gRPC und Protobuf über HTTP.
+. Überprüfen Sie, ob SUSE Observability Traces und/oder Metriken empfängt, indem Sie nach den Metriken/Traces im Metriken-/Trace-Explorer für Ihren Dienstnamen suchen.
+
+Für weitere Details konsultieren Sie bitte die https://opentelemetry.io/docs/languages/java/automatic/[Open Telemetry-Dokumentation].
+
+== Manuelle Instrumentierung
+
+Die manuelle Instrumentierung kann verwendet werden, wenn Sie Metriken, Traces oder Protokolle aus Teilen des Codes benötigen, die nicht von der automatischen Instrumentierung unterstützt werden. Zum Beispiel nicht unterstützte Bibliotheken, interner Code oder geschäftsbezogene Metriken.
+
+Um diese Daten zu erfassen, müssen Sie Ihre Anwendung ändern.
+
+. Fügen Sie das Open Telemetry SDK als Abhängigkeit hinzu.
+. Fügen Sie Ihrer Anwendung Code hinzu, um Metriken, Spans oder Protokolle nach Bedarf zu erfassen.
+
+Es gibt eine ausführliche Dokumentation dazu auf den https://opentelemetry.io/docs/languages/java/instrumentation/[Dokumentationsseiten des Open Telemetry Java SDK].
+
+Stellen Sie sicher, dass Sie den OTLP-Exporter verwenden (dies ist der Standard) und https://opentelemetry.io/docs/languages/java/instrumentation/#_autoconfiguration[Auto-Konfiguration]. Beim Bereitstellen der Anwendung werden der Dienstname und der Exporter xref:/setup/otel/instrumentation/sdk-exporter-config.adoc[über Umgebungsvariablen] konfiguriert.
+
+== Metriken in SUSE Observability
+
+ifdef::ss-ff-stackpacks2_enabled[]
+Für einige Java-Metriken, zum Beispiel Metriken des Garbage Collectors, hat SUSE Observability Diagramme zu den entsprechenden Komponenten definiert. Für Kubernetes sind die Diagramme auf den Pods verfügbar. Es ist möglich, xref:/setup/custom-integrations/metric-bindings/index.adoc[Diagramme für weitere Metriken] hinzuzufügen, dies funktioniert für Metriken aus automatischer Instrumentierung, aber auch für anwendungsspezifische Metriken aus manueller Instrumentierung.
+endif::[]
+
+ifndef::ss-ff-stackpacks2_enabled[]
+Für einige Java-Metriken, zum Beispiel Metriken des Garbage Collectors, hat SUSE Observability Diagramme zu den entsprechenden Komponenten definiert. Für Kubernetes sind die Diagramme auf den Pods verfügbar. Es ist möglich, xref:/use/metrics/k8s-add-charts.adoc[Diagramme für weitere Metriken] hinzuzufügen, dies funktioniert für Metriken aus automatischer Instrumentierung, aber auch für anwendungsspezifische Metriken aus manueller Instrumentierung.
+endif::[]

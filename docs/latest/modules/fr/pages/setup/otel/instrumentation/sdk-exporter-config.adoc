@@ -1,0 +1,92 @@
+= Configuration des exportateurs SDK
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Pour envoyer des données à SUSE Observability, les SDK utilisés pour instrumenter votre application utilisent un exportateur intégré. Une configuration prête pour la production utilise <<_with_a_collector_production_setup,un collecteur>> proche de vos applications instrumentées pour envoyer les données à SUSE Observability, mais il est également possible que l'application instrumentée <<_without_a_collector,envoie directement>> les données de télémétrie à SUSE Observability.
+
+== Avec un collecteur (configuration de production)
+
+=== Configuration de l'exportateur SDK pour Kubernetes
+
+Tous les SDK, quelle que soit la langue, utilisent la même configuration de base pour définir le https://opentelemetry.io/docs/concepts/glossary/#_service[nom du service]  Open Telemetry et le point de terminaison de l'exportateur (c'est-à-dire où la télémétrie est envoyée).
+
+Ceci peut être configuré en définissant des variables d'environnement pour votre application instrumentée.
+
+Dans Kubernetes, définissez ces variables d'environnement dans le manifeste de votre charge de travail (remplacez `<the-service-name>` par un nom pour votre service d'application) :
+
+[,yaml]
+----
+...
+spec:
+  containers:
+  - env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317
+    - name: OTEL_SERVICE_NAME
+      value: <the-service-name>
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+...
+----
+
+Le point de terminaison spécifié dans l'exemple suppose que le collecteur a été installé en utilisant les valeurs par défaut du xref:/setup/otel/collector.adoc[guide d'installation]. Il utilise le port `4317` qui utilise la version `gRPC` du protocole OTLP. Certaines instrumentations ne prennent en charge que HTTP, dans ce cas, utilisez le port `4318`.
+
+Le nom du service peut également être dérivé des étiquettes Kubernetes qui peuvent déjà être présentes. Par exemple comme ceci :
+
+[,yaml]
+----
+spec:
+  containers:
+  - env:
+    - name: OTEL_SERVICE_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.labels['app.kubernetes.io/component']
+----
+
+=== Configuration de l'exportateur SDK pour d'autres installations
+
+Pour configurer le SDK, définissez ces variables d'environnement pour votre application :
+
+[,bash]
+----
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://<the-host-for-the-collector>:4317"
+export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
+export OTEL_SERVICE_NAME="<the-service-name>"
+export OTEL_RESOURCE_ATTRIBUTES='service.namespace=<the-namespace>'
+----
+
+L'exemple utilise le port `4317` qui utilise la version `gRPC` du protocole OTLP. Certaines instrumentations ne prennent en charge que HTTP, qui utilise le port `4318` avec le protocole défini sur `http`. Utilisez la documentation du SDK pour votre langue afin de vérifier quel protocole le SDK prend en charge. Les `OTEL_EXPORTER_OLTP_ENDPOINT` et `OTEL_EXPORTER_OTLP_PROTOCOL` peuvent être omis, ils ont des valeurs par défaut qui envoient des données au point de terminaison préféré sur l'hôte local.
+
+Le `OTEL_RESOURCE_ATTRIBUTES` est optionnel et, en plus de définir un espace de noms de service, peut être utilisé pour définir d'autres attributs de ressources dans une liste séparée par des virgules.
+
+=== gRPC vs HTTP
+
+OTLP, le protocole Open Telemetry, prend en charge gRPC et protobuf sur HTTP. Dans la section précédente, le protocole d'exportation est défini sur `gRPC`, ce qui donne généralement les meilleures performances. En plus du fait que le SDK ne prend pas en charge gRPC, il peut y avoir d'autres raisons de préférer HTTP :
+
+* Certaines passerelles de périmètre de sécurité ne sont pas configurées pour gérer gRPC
+* (reverse) les proxies et les équilibreurs de charge peuvent ne pas prendre en charge gRPC sans configuration supplémentaire
+* Les connexions à long terme de gRPC peuvent poser des problèmes lors de l'équilibrage de la charge.
+
+Pour passer à HTTP au lieu de gRPC, changez le protocole en `http` _et_ utilisez le port `4318`.
+
+Pour résumer, vous pouvez essayer d'utiliser HTTP si gRPC ne fonctionne pas pour vous :
+
+* Le protocole `grpc` utilise le port `4317` sur le collecteur
+* Le protocole `http` utilise le port `4318` sur le collecteur
+
+== Sans collecteur
+
+Dans de petites configurations de test, il peut être pratique d'envoyer directement des données de votre application instrumentée à SUSE Observability. La seule différence par rapport à la configuration du collecteur documentée ci-dessus est d'utiliser une valeur différente pour `OTEL_EXPORTER_OTLP_ENDPOINT` :
+
+* Pour gRPC, utilisez le point de terminaison OTLP pour SUSE Observability, voir la xref:/setup/otel/otlp-apis.adoc[page des API OTLP].
+* Pour HTTP, utilisez le point de terminaison OTLP sur HTTP pour SUSE Observability, voir la xref:/setup/otel/otlp-apis.adoc[page des API OTLP].
+
+[NOTE]
+====
+Remplacez à la fois l'URL du collecteur *et* le port par les points de terminaison de SUSE Observability. Selon votre installation de SUSE Observability, les ports seront différents.
+====
+

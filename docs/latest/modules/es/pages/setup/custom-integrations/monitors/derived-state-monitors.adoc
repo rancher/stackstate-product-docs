@@ -1,0 +1,42 @@
+= Monitores de estado derivados
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+En escenarios de observabilidad donde los componentes lógicos (de negocio) carecen de monitores directos pero se ven afectados por problemas en sus dependencias técnicas, puedes utilizar la función de monitor de estado derivado para derivar un estado de los componentes técnicos conectados para el componente lógico.
+Este monitor recorre las dependencias de los componentes y selecciona el estado de salud más crítico basado en observaciones directas (por ejemplo, de métricas), ignorando cualquier estado ya derivado. Aplicará el estado derivado a todos los componentes seleccionados a través del parámetro `componentTypes`.
+Durante el recorrido, solo se consideran los componentes con estados de salud observados (no derivados) para la derivación de salud. Los componentes con estados derivados se omiten en la evaluación, pero aún se recorren para alcanzar dependencias más profundas -- por ejemplo, componentes lógicos que dependen de otros componentes lógicos.
+
+== Ejemplo de monitor de estado de salud derivado
+
+Un monitor implementado utilizando la función `derived-state-monitor` se ve como:
+
+----
+  - _type: "Monitor"
+    name: "Aggregated health state of a Deployment, StatefulSet, ReplicaSet and DaemonSet"
+    tags:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - derived
+      - propagated
+    identifier: "urn:stackpack:my-stackpack:monitor:my-aggregated-health-monitor"
+    status: "DISABLED"
+    description: "Description"
+    function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+    arguments:
+      componentTypes: "deployment, replicaset, statefulset, daemonset"
+    intervalSeconds: 30
+    remediationHint: "Investigate component [{{ causeComponentName }}](/#/components/{{ causeComponentUrnForUrl }}) as is causing the workload to be unhealthy."
+----
+
+* La función tiene un único argumento `componentTypes` donde puedes expresar los diferentes tipos de componentes como una única cadena de valores separados por `,`
+* La función ofrece tres valores para usar en la guía de remediación
+ ** `componentName` siendo el nombre del componente lógico.
+ ** `causeComponentName` siendo el nombre del componente del que se propaga el estado y su `causeComponentUrnForUrl` para poder crear un enlace.
+
+El monitor puede implementarse utilizando la guía en xref:use/alerting/k8s-dynamic-threshold-monitors.adoc[Añadir un monitor de umbral a los componentes utilizando la CLI]

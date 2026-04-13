@@ -1,0 +1,588 @@
+= 迁移到全局配置模式
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:description: {stackstate-product-name} 自托管
+:page-toclevels: 3
+
+== 概述
+
+本指南解释了如何从使用 `suse-observability-values` 图表的传统两步安装迁移到使用 `global.suseObservability` 配置的简化单图表安装。
+
+[NOTE]
+====
+`global.suseObservability` 配置方法从版本 `2.8.0` 开始可用，现在是推荐的安装方法。传统的 `suse-observability-values` 图表方法已被弃用，但将继续适用于现有安装。
+====
+
+=== 传统安装（已弃用）
+
+旧的安装方法需要两个步骤：
+
+. 使用 `suse-observability-values` 图表生成值文件
+. 使用生成的值安装 `suse-observability` 图表
+
+[,text]
+----
+# Step 1: Generate values
+helm template suse-observability-values suse-observability/suse-observability-values \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="150-ha" \
+  --set adminPassword="your-password" \
+  --set pullSecret.username="registry-user" \
+  --set pullSecret.password="registry-pass" \
+  > generated-values.yaml
+
+# Step 2: Install with generated values
+helm install suse-observability suse-observability/suse-observability \
+  -f generated-values.yaml \
+  -n suse-observability
+----
+
+=== 新安装（推荐）
+
+新方法使用一个包含 `global.suseObservability` 配置的值文件：
+
+[,text]
+----
+helm install suse-observability suse-observability/suse-observability \
+  -f values.yaml \
+  -n suse-observability
+----
+
+== 安装前转换
+
+如果您为传统的 `suse-observability-values` 图表准备了参数但尚未安装，您可以直接转换为新方法，而无需创建中间值文件。
+
+=== 直接参数转换
+
+通过映射参数将您的 `helm template` 命令转换为 `helm upgrade --install` 命令：
+
+[cols="1,1"]
+|===
+| 旧参数 | 新参数
+
+| `--set license="..."`
+| `--set global.suseObservability.license="..."`
+
+| `--set baseUrl="..."`
+| `--set global.suseObservability.baseUrl="..."`
+
+| `--set sizing.profile="..."`
+| `--set global.suseObservability.sizing.profile="..."`
+
+| `--set receiverApiKey="..."`
+| `--set global.suseObservability.receiverApiKey="..."`
+
+| `--set adminPassword="..."`
+| `--set global.suseObservability.adminPassword="..."`
+
+| `--set imageRegistry="..."`
+| `--set global.imageRegistry="..."`
+
+| `--set pullSecret.username="..."`
+| `--set global.suseObservability.pullSecret.username="..."`
+
+| `--set pullSecret.password="..."`
+| `--set global.suseObservability.pullSecret.password="..."`
+|===
+
+=== 示例：前后对比
+
+[NOTE]
+====
+在运行 helm 命令之前，请确保您拥有最新的图表版本：
+
+[,bash]
+----
+helm repo update
+----
+====
+
+.传统命令（请勿使用）
+[,bash]
+----
+export VALUES_DIR=.
+helm template \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="10-nonha" \
+  --set receiverApiKey="YOUR-API-KEY" \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+
+# Then: helm install with generated files...
+----
+
+.新命令（推荐）
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+  --set global.suseObservability.baseUrl="https://observability.example.com" \
+  --set global.suseObservability.sizing.profile="10-nonha" \
+  --set global.suseObservability.receiverApiKey="YOUR-API-KEY" \
+  --set global.suseObservability.adminPassword='your-password' \
+  suse-observability suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* 在新方法中，`adminPassword` 必须是 bcrypt 哈希。请参见<<bcrypt-hash>>以了解如何生成一个。
+* 对于隔离环境或自定义注册表，请参见xref:/k8s-suse-rancher-prime-air-gapped.adoc[在隔离模式下安装{stackstate-product-name}]以获取包括`imageRegistry`和`pullSecret`设置在内的额外配置。
+====
+
+=== 改用值文件
+
+如果您更喜欢使用值文件，请创建`values.yaml`，并按照<<_step_3_create_new_values_file>>中显示的配置，确保您拥有最新的图表和`helm repo update`，然后运行：
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability suse-observability/suse-observability
+----
+
+== 在迁移之前
+
+在从旧版安装方法执行迁移时，请注意以下事项：
+
+[CAUTION]
+====
+本迁移指南适用于当前使用 `suse-observability-values` 图表方法的用户。如果您是从StackState 6.0升级，请改为遵循xref:/setup/upgrade-stackstate/migrate-from-6.adoc[从StackState迁移指南]。
+====
+
+[NOTE]
+====
+* 迁移是通过标准的Helm升级命令执行的
+* 您现有的数据和配置将被保留
+* 迁移可以在维护窗口期间进行
+* 可以使用标准的Helm回滚程序进行回滚
+====
+
+== 迁移步骤
+
+=== 第 1 步：备份当前配置
+
+在开始迁移之前，请保存您现有的Helm值和任何自定义设置：
+
+[,text]
+----
+# Save current Helm values
+helm get values suse-observability -n suse-observability > backup-values.yaml
+
+# Save your original suse-observability-values input (if available)
+# This is typically your values file used with helm template
+
+# Backup important resources
+kubectl get secrets -n suse-observability -o yaml > backup-secrets.yaml
+----
+
+=== 第 2 步：识别您当前的配置
+
+查看您现有的配置以识别以下设置：
+
+* *大小控制文件*：检查您在suse-observability-values输入中的`sizing.profile`
+* *许可证密钥*：您的 {stackstate-product-name} 许可证
+* *基础 URL*：{stackstate-product-name} 可访问的 URL
+* *管理员口令*：管理员口令（您也可以使用该口令的 bcrypt 哈希值，值为 `adminPasswordBcrypt`）
+* *拉取密钥凭证*：注册用户名和密码（如果使用）
+* *自定义亲和性设置*：任何节点亲和性或 Pod 反亲和性自定义
+
+您可以从当前安装中提取其中一些：
+
+[,text]
+----
+# Check current values
+helm get values suse-observability -n suse-observability
+
+# The sizing profile is visible in resource configurations
+# Look for patterns like replica counts, resource limits, etc.
+----
+
+=== 理解自动生成值与自定义值
+
+当您运行 `helm get values` 时，您可能会看到数百行配置。然而，这些大多数是由大小控制文件 *自动生成* 的，并且 *不* 需要在您的迁移值文件中手动保留。
+
+==== 大小控制文件自动提供的内容
+
+当您设置 `global.suseObservability.sizing.profile` 时，图表会自动配置：
+
+* 所有组件的资源请求和限制（Elasticsearch、Kafka、ClickHouse、服务器、接收器等）
+* 有状态服务的副本数
+* 持久卷的存储大小
+* HBase 部署模式（非 HA 的单一模式，HA 的分布式模式）
+* 服务器和接收器拆分配置
+* Victoria Metrics HA 设置
+* 环境变量 (`extraEnv`) 包括 `CONFIG_FORCE_*` 性能调优设置
+
+==== 您需要保留的内容
+
+仅保留 *真正自定义* 的值 - 您添加或修改的配置，超出大小控制文件提供的内容：
+
+[cols="1,1"]
+|===
+| 保留（自定义） | 不保留（自动生成）
+
+| 核心设置（许可证、baseUrl、adminPassword、receiverApiKey）
+| 资源限制和请求
+
+| Ingress 配置（主机、TLS、注释）
+| 副本数量
+
+| 您添加的自定义环境变量
+| 存储大小
+
+| 身份验证设置（LDAP、OIDC）
+| `CONFIG_FORCE_*` 环境变量
+
+| 自定义 `allowedOrigins`
+| Kafka/Zookeeper 复制因子
+
+| OpenTelemetry 收集器自定义 Ingress
+| HBase 部署模式
+|===
+
+==== 示例：最小迁移值文件
+
+您的迁移值文件应比 `helm get values` 的输出结果 *小得多：
+
+[,yaml]
+----
+global:
+  suseObservability:
+    license: "YOUR-LICENSE"
+    baseUrl: "https://your-url.example.com"
+    sizing:
+      profile: "10-nonha"  # This handles all resource configuration!
+    adminPassword: "your-password"
+    receiverApiKey: "your-api-key"
+
+# Only include truly custom configurations below
+ingress:
+  enabled: true
+  ingressClassName: your-ingress-class
+  annotations:
+    # your custom annotations
+  hosts:
+  - host: your-url.example.com
+  tls:
+  - hosts:
+    - your-url.example.com
+    secretName: your-tls-secret
+----
+
+[TIP]
+====
+如果您不确定某个值是自定义的还是自动生成的，请将其与大小控制文件的默认值进行比较。像 `elasticsearch.resources`, `kafka.resources`, `stackstate.components.server.resources` 和 `CONFIG_FORCE_*` 这样的环境变量都是由大小控制文件生成的，可以安全省略。
+====
+
+=== 第三步：创建新的值文件
+
+使用`global.suseObservability`结构创建新的`values.yaml`：
+
+[,yaml]
+----
+global:
+  suseObservability:
+    # Required: Your license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Affinity configuration
+    # These settings apply to all infrastructure components (Elasticsearch,
+    # Kafka, ClickHouse, etc.) automatically - no need to configure per-component
+    affinity:
+      # Node affinity for all components
+      nodeAffinity: null
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+
+  # For air-gapped or custom registry configurations, see:
+  # xref:/k8s-suse-rancher-prime-air-gapped.adoc[Air-Gapped Installation Guide]
+----
+
+=== 第四步：配置映射参考
+
+使用此表将您的旧配置映射到新格式：
+
+[cols="1,1"]
+|===
+| 旧配置（suse-observability-values） | 新配置（global.suseObservability）
+
+| `license`
+| `global.suseObservability.license`
+
+| `baseUrl`
+| `global.suseObservability.baseUrl`
+
+| `sizing.profile`
+| `global.suseObservability.sizing.profile`
+
+| `adminPassword`
+| `global.suseObservability.adminPassword`
+
+| `receiverApiKey`
+| `global.suseObservability.receiverApiKey`
+
+| `affinity.nodeAffinity`
+| `global.suseObservability.affinity.nodeAffinity`
+
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+| `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+
+| `affinity.podAntiAffinity.topologyKey`
+| `global.suseObservability.affinity.podAntiAffinity.topologyKey`
+
+| `rancherUrl`
+| `stackstate.allowedOrigins`（手动配置）
+
+| `imageRegistry`（仅限隔离环境）
+| `global.imageRegistry`
+
+| `pullSecret.username`（仅限隔离环境）
+| `global.suseObservability.pullSecret.username`
+
+| `pullSecret.password`（仅限隔离环境）
+| `global.suseObservability.pullSecret.password`
+|===
+
+[NOTE]
+====
+对于需要`imageRegistry`和`pullSecret`配置的隔离环境或自定义注册表，请参见xref:/k8s-suse-rancher-prime-air-gapped.adoc[在隔离模式下安装{stackstate-product-name}]。
+====
+
+=== 第五步：处理自定义覆盖
+
+如果您在生成的值文件中有自定义覆盖，仍然可以使用它们。新的全局模式提供了合理的默认值，可以按组件进行覆盖：
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    adminPassword: "your-password"
+    # Global affinity - applied to all components by default
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+# Custom per-component overrides still work - they take precedence over global defaults
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 16Gi  # Override default from sizing profile
+        limits:
+          memory: 20Gi
+
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 500Gi  # Override default storage size
+  # Override affinity for Elasticsearch specifically
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-type
+            operator: In
+            values:
+            - storage-optimized
+----
+
+=== 第六步：执行升级
+
+首先，确保您拥有最新的图表版本：
+
+[,text]
+----
+helm repo update
+----
+
+然后执行升级：
+
+[,text]
+----
+# Dry-run first to see what will change
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml \
+  --dry-run
+
+# If everything looks good, perform the actual upgrade
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml
+----
+
+=== 第七步：验证升级
+
+[,text]
+----
+# Check all pods are running
+kubectl get pods -n suse-observability
+
+# Check for any errors in events
+kubectl get events -n suse-observability --sort-by='.lastTimestamp' | tail -20
+
+# Verify the Helm release
+helm status suse-observability -n suse-observability
+
+# Check the applied values
+helm get values suse-observability -n suse-observability
+----
+
+[[bcrypt-hash]]
+== Admin 口令
+
+对于传统方法，`adminPassword` 作为纯文本提供给 suse-observability-values 图表，该图表将其哈希为 bcrypt 哈希。在新方法中，您可以将纯文本 `adminPassword` 提供给 suse-observability 图表，或直接使用 `adminPasswordBcrypt` 将 bcrypt 哈希提供给 suse-observability 图表。
+
+如果您需要生成新的 bcrypt 哈希：
+
+[,bash]
+----
+htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+----
+
+== 查错
+
+=== Pods 卡在待定状态
+
+这通常表示与反亲和性规则的调度问题。对于节点有限的集群，请使用软反亲和性：
+
+[,yaml]
+----
+global:
+  suseObservability:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: false  # Use soft anti-affinity
+----
+
+=== 资源与之前的安装不同
+
+大小控制文件可能已更新资源建议。为了保留您之前的设置，请添加显式覆盖：
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+
+# Override with your previous resource values
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 8Gi  # Your previous value
+----
+
+=== 配置样式冲突
+
+请勿混合旧的和新的配置样式。使用以下任一：
+
+* `global.suseObservability.*`（新样式），或
+* `stackstate.license.key`、`stackstate.baseUrl` 等（旧样式）
+
+[,text]
+----
+# Check for conflicting values
+helm get values suse-observability -n suse-observability | grep -E "license|baseUrl"
+----
+
+=== 如有需要，请回滚
+
+[,text]
+----
+# List release history
+helm history suse-observability -n suse-observability
+
+# Rollback to previous revision
+helm rollback suse-observability <revision-number> -n suse-observability
+----
+
+== 关键差异
+
+[cols="1,1,1"]
+|===
+| 屏幕纵横 | 遗留（suse-observability-values） | 新（global.suseObservability）
+
+| 安装步骤
+| 2（模板 + 安装）
+| 1（安装）
+
+| 值文件管理
+| 已生成，必须存储
+| 单一真实来源
+
+| 控制文件更新
+| 需要手动再生
+| 自动与图表升级
+
+| 拉取密钥
+| 单独子图表
+| 内置，自动配置
+
+| Victoria Metrics HA
+| 手动 `enabled: true/false`
+| 按控制文件自动配置
+
+| 亲和配置
+| 按组件生成（每个服务的单独设置）
+| 集中式全局设置（如有需要仍可按组件覆盖）
+|===
+
+[NOTE]
+====
+全局亲和配置为所有基础设施组件提供默认设置。如有需要，您仍然可以通过设置组件级亲和值来覆盖特定组件（如Elasticsearch或Kafka）的亲和性。组件级设置优先于全局默认值。
+====
+
+== 清理
+
+成功迁移后，您可以：
+
+. 删除生成的值文件（它们不再需要）
+. 更新您的部署脚本以使用新的单步安装
+. 在您的CI/CD管道中删除对 `suse-observability-values` 图表的任何引用
+
+== 另请参见
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes安装指南]
+* xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc[升级步骤 {stackstate-product-name}]
+* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[特定版本的升级说明]

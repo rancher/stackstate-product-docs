@@ -1,0 +1,224 @@
+= Jetons de service
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+En utilisant des jetons de service, il est possible de s'authentifier à SUSE Observability sans avoir de compte utilisateur associé. C'est utile dans les situations où vous souhaitez utiliser SUSE Observability depuis des services sans interface graphique, comme un serveur CI. Dans un tel scénario, vous ne souhaitez généralement pas provisionner un compte utilisateur dans votre fournisseur d'identité.
+
+== Gérer les jetons de service
+
+Les jetons de service peuvent être gérés via le xref:/setup/cli/cli-sts.adoc[`sts` CLI]. Les commandes suivantes sont disponibles :
+
+[,sh]
+----
+> sts service-token --help
+Manage service tokens.
+
+Usage:
+  sts service-token [command]
+
+Available Commands:
+  create      Create a service token
+  delete      Delete a service token
+  list        List service tokens
+
+Use "sts service-token [command] --help" for more information about a command.
+----
+
+Il est également possible de <<_set_up_a_bootstrap_service_token,configurer un jeton de service de démarrage>> lors de l'installation de {stackstate-product-name}.
+
+=== Créer des jetons de service
+
+[NOTE]
+====
+Les Open Telemetry et Kubernetes StackPacks vous permettent de créer un sujet et un jeton de service avec tous les droits requis configurés.
+====
+
+Pour créer un jeton de service pour {stackstate-product-name}, vous pouvez utiliser le `sts` CLI.
+
+[,sh]
+----
+sts service-token create
+----
+
+[NOTE]
+====
+Notez que le jeton de service ne sera affiché qu'une seule fois. Il n'est pas possible de voir à nouveau le jeton.
+====
+
+
+Cette commande prend les arguments de ligne de commande suivants :
+
+|===
+| Indicateur | Description
+
+| `--name`
+| Le nom du jeton de service
+
+| `--expiration`
+| La date d'expiration du jeton de service, le format est yyyy-MM-dd. L'expiration est optionnelle.
+
+| `--roles`
+| Une liste de rôles séparés par des virgules à attribuer au jeton de service
+|===
+
+Par exemple, la commande ci-dessous créera un jeton de service avec le nom `my-service-token` et le rôle `stackstate-k8s-troubleshooter` :
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+=== Configurez un jeton de service de démarrage
+
+Lors de l'installation de {stackstate-product-name}, il est possible de le démarrer avec un jeton de service (temporaire). Cela permet d'utiliser l'interface en ligne de commande sans d'abord interagir avec {stackstate-product-name} et obtenir un jeton API depuis l'interface utilisateur. Pour configurer cela, ajoutez le snippet suivant au fichier de configuration {stackstate-product-name} :
+
+Pour configurer {stackstate-product-name} afin de créer un jeton de service de démarrage sur Kubernetes, les valeurs suivantes doivent être ajoutées au fichier `authentication.yaml`. Par exemple :
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    serviceToken:
+      bootstrap:
+        token: <token>
+        roles:
+          - stackstate-admin
+        ttl: 24h
+----
+
+Suivez les étapes ci-dessous pour configurer {stackstate-product-name} afin de créer un jeton de service de démarrage :
+
+. Dans `authentication.yaml` - ajoutez le jeton de démarrage :
+ ** *token* - Le jeton qui est créé au démarrage (initial) de {stackstate-product-name}.
+ ** *roles* - Un tableau de rôles qui sont attribués au jeton de démarrage.
+ ** *ttl* - Optionnel. Le temps de vie du jeton de service, exprimé sous forme de chaîne de durée.
+. Stockez le fichier `authentication.yaml` avec le `values.yaml` des instructions d'installation de {stackstate-product-name}.
+. Exécutez une mise à niveau Helm pour appliquer les modifications.
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* La première exécution de la commande de mise à niveau Helm entraînera le redémarrage des pods, ce qui peut provoquer une courte interruption de disponibilité.
+* Incluez `authentication.yaml` à chaque exécution de `helm upgrade`.
+* La configuration d'authentification est stockée en tant que secret Kubernetes.
+====
+
+
+==== Configurez le jeton de service de démarrage à partir d'un secret externe.
+
+Au lieu de spécifier le jeton de service de démarrage via les valeurs Helm, vous pouvez également lire le jeton de service de démarrage à partir d'un secret qui est créé et géré en dehors du chart Helm (un secret externe). Pour utiliser un jeton de service de démarrage provenant d'un secret externe, suivez xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[ces étapes] et ajoutez les données suivantes :
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  bootstrap_token: <base64 of token>
+----
+
+Ce jeton peut être ajouté au secret à côté des données qui y sont déjà.
+
+=== Lister les jetons de service
+
+L'ID, le nom, la date d'expiration et les rôles de tous les jetons de service créés peuvent être consultés à l'aide du `sts` CLI. Par exemple :
+
+[,sh]
+----
+> sts service-token list
+ID              | NAME             | EXPIRATION | ROLES
+107484341630693 | my-service-token |            | [stackstate-admin]
+----
+
+=== Supprimer les jetons de service
+
+Un jeton de service peut être supprimé à l'aide du `sts` CLI. Passez l'ID du jeton de service en tant qu'argument. Par exemple :
+
+[,sh]
+----
+> sts service-token delete 107484341630693
+✅ Service token deleted: 107484341630693
+----
+
+== Utiliser des jetons de service
+
+Vous utilisez des jetons de service pour vous authentifier lors de l'utilisation des API SUSE Observability :
+* Lors de l'utilisation du CLI
+* Lors de l'utilisation des API HTTP directement
+* Lors de l'ingestion de données de télémétrie
+
+=== SUSE Observability `sts` CLI
+
+Un jeton de service est utilisé pour l'authentification avec le `sts` CLI. Pour plus d'informations, consultez xref:/setup/cli/cli-sts.adoc#_authentication[la documentation du CLI].
+
+=== APIs SUSE Observability
+
+Pour utiliser un jeton de service pour communiquer directement avec l'API SUSE Observability, ajoutez-le à l'en-tête de la requête de l'une des manières suivantes :
+
+* Dans l'en-tête `Authorization` :
++
+[,sh]
+----
+  > curl -X GET -H "Authorization: ApiKey <TOKEN>" http://localhost:8080/api/server/status
+----
+
+* Dans l'en-tête `X-API-Key` :
++
+[,sh]
+----
+  > curl -X GET -H "X-API-Key: <TOKEN>" http://localhost:8080/api/server/status
+----
+
+=== Ingestion de données de télémétrie
+
+Pour créer un jeton de service pour l'ingestion de données de télémétrie, vous devez d'abord créer un rôle :
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+Si vous souhaitez utiliser le jeton de service pour ingérer des données RBAC Kubernetes, vous devez également accorder `update-scoped-permissions` :
+[,sh]
+----
+> sts rbac grant --subject my-agent --permission update-scoped-permissions --resource my-cluster
+✅ Granted permission 'update-scoped-permissions' on 'my-cluster' to subject 'my-agent'
+PERMISSION                | RESOURCE
+update-metrics            | system
+update-scoped-permissions | my-cluster
+----
+
+Cela créera un nouveau rôle dans SUSE Observability appelé `my-agent` et lui accordera la permission `update-metrics`. Vous pouvez ensuite créer un jeton de service pour ce rôle :
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+Le jeton de service nouvellement créé peut être utilisé comme clé API pour l'authentification des données de télémétrie provenant de :
+
+* {stackstate-product-name} xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[Agent (y compris l'Agent RBAC)]
+* xref:setup/otel/getting-started/getting-started-k8s.adoc[Collecteur OTel]
+
+

@@ -1,0 +1,268 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Tutorial: Desenvolva uma Integração Personalizada (StackPack)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description:  Desenvolva uma Integração Personalizada (StackPack)
+
+[IMPORTANT]
+====
+Este recurso está em pré-produção e não foi lançado. Está disponível apenas se a variável de ambiente `STS_EXPERIMENTAL_STACKPACK` estiver definida. Mudanças significativas podem ocorrer.
+====
+
+== Meta
+
+Como desenvolvedor, você deseja integrar sua tecnologia com {stackstate-product-name} construindo um StackPack personalizado. Este tutorial o guia pelo processo usando o StackPack CLI.
+
+== Pré-requisitos
+
+- Acesso ao xref:/setup/cli/cli-sts.adoc[StackPack CLI]
+- Flag de recurso habilitada:
++
+[source,bash]
+----
+export STS_EXPERIMENTAL_STACKPACK=true
+----
+
+
+== Como Desenvolver uma Integração Personalizada (StackPack)
+
+=== Estruture um Novo StackPack
+
+O subcomando `scaffold` cria uma nova estrutura de projeto StackPack a partir de templates configuráveis, agilizando o processo inicial de configuração para o desenvolvimento do StackPack. O comando suporta tanto templates de diretório local quanto templates hospedados no GitHub.
+
+- Crie um novo projeto StackPack usando o CLI:
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack
+----
+
+- Para usar um template específico do GitHub (padrão: https://github.com/StackVista/stackpack-templates[stackvista/stackpack-templates]):
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack --template-github-repo stackvista/stackpack-templates --template-name microservice --destination-dir stackpack
+✓ Validating arguments...
+✓ Checking destination directory...
+✓ Fetching template from github:stackvista/stackpack-templates@main:templates
+✓ Rendering templates...
+✓ Validating rendered templates...
+✓ Copying files to destination...
+Files copied:
+  README.md
+  provisioning/dashboard.sty
+  provisioning/metricbindings.sty
+  provisioning/monitors.sty
+  provisioning/remediation-hints/node-memory-pressure.md.hbs
+  provisioning/stackpack.sty
+  resources/deprovisioning.md
+  resources/error.md
+  resources/installed.md
+  resources/logo.png
+  resources/notinstalled.md
+  resources/overview.md
+  resources/provisioning.md
+  resources/waitingfordata.md
+  stackpack.yaml
+
+✅ ✓ Scaffold complete!
+
+Next steps:
+1. Review the generated files in: ./my-stackpack
+2. Check the ./my-stackpack/README.md for instructions on what to do next.
+...
+----
+
++
+- Para usar um template local:
++
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack --template-local-dir ./templates --template-name webapp
+----
+
+
+=== Revise e Personalize
+
+- Revise os arquivos gerados no diretório de destino.
+- Edite `stackpack.yaml` e outros arquivos para definir sua lógica de integração.
+  * Integrando dados. Para mapear componentes e ingerir métricas, veja xref:setup/custom-integrations/otelmappings/README.adoc[Adicionando Mapeamentos de Telemetria Otel]
+  * xref:use/alerting/k8s-add-monitors-cli.adoc[Adicionando monitores usando a CLI]
+  * xref:setup/custom-integrations/metric-bindings/index.adoc[Adicionando Vinculações de Métricas]
+
+[NOTE]
+====
+O padrão: https://github.com/StackVista/stackpack-templates[stackvista/stackpack-templates] é um ótimo ponto de partida, pois contém exemplos para a maioria dos pontos de extensão, como Monitores e Vinculações de Métricas.
+====
+
+=== Teste Seu StackPack
+
+O subcomando `test` simplifica o fluxo de trabalho de desenvolvimento do StackPack, automatizando a sequência de pacote → upload → instalação/fazer upgrade com gerenciamento automático de versão para iterações de teste.
+
+- Teste rapidamente seu StackPack em um ambiente de pré-produção (requer uma instância do SUSE Observability em execução):
++
+[source,bash]
+----
+sts stackpack test -d ./my-stackpack --yes
+✅ Starting stackpack test sequence...
+  Stackpack: my-stackpack (current version: 0.0.1)
+
+Step 1/5: Checking installed version...
+
+Step 2/5: Creating temporary copy for testing...
+✅ ✓ Temporary copy created
+
+Step 3/5: Bumping version for testing...
+✅ ✓ Version bumped to: 0.0.1-cli-test.10000
+
+Step 4/5: Packaging stackpack...
+✅ ✓ Stackpack packaged successfully!
+
+Stackpack: my-stackpack (v0.0.1-cli-test.10000)
+Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.10000.zip
+✅ ✓ Stackpack packaged successfully
+
+Step 5/5: Uploading and installing/upgrading stackpack...
+✅ Uploaded StackPack: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.10000.zip
+NAME              | DISPLAY NAME      | VERSION
+my-stackpack | my-stackpack | 0.0.1-cli-test.10000
+✅ ✓ Stackpack uploaded successfully
+✅ StackPack instance installed
+ID             | NAME | STATUS      | VERSION         | LAST UPDATED
+274027256960772 | -    | PROVISIONING | 0.0.1-cli-test.1 | Fri Aug 29 09:10
+                |      |              | 0000             | :26 2025 CEST
+✅ ✓ Stackpack installed successfully
+
+✅ 🎉 Test sequence completed successfully!
+----
+
+- O subcomando `test` empacota, faz upload e instala seu StackPack com um sufixo de versão de teste.
+- Itere sobre seu StackPack, usando o comando `test` para feedback rápido, faça alterações e observe o processo de instalação/fazer upgrade ser executado com sucesso. Revise a topologia e a telemetria ingeridas na interface do usuário do SUSE Observability.
+
+=== Empacote sua versão final do StackPack
+
+O subcomando `package` cria um arquivo zip a partir dos diretórios do StackPack. Este comando empacota todos os arquivos e diretórios necessários do StackPack em um arquivo zip nomeado corretamente para distribuição e implantação.
+
+- Empacote seu StackPack em um zip distribuível:
++
+[source,bash]
+----
+sts stackpack package -d ./my-stackpack
+✅ ✓ Stackpack packaged successfully!
+
+Stackpack: stackpack (v0.0.1)
+Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.zip
+----
+
+- Para especificar o arquivo de saída:
++
+[source,bash]
+----
+sts stackpack package -d ./my-stackpack -f my-custom-archive.zip
+----
+
+=== Valide seu StackPack
+
+Antes de fazer upload e instalar seu StackPack, você pode validá-lo para garantir que está configurado corretamente (para um ciclo de feedback mais eficiente). Existem duas abordagens dependendo do seu fluxo de trabalho:
+
+==== Validação local com backend ao vivo
+
+O subcomando `validate` valida um StackPack contra uma instância {stackstate-product-name} em execução. Isso é útil para validar seu StackPack durante o desenvolvimento.
+
+- Valide um diretório de StackPack (empacotado e enviado automaticamente):
++
+[source,bash]
+----
+sts stackpack validate -d ./my-stackpack
+✅ Stackpack validation successful!
+----
+
+- Valide um arquivo `.sts` pré-empacotado:
++
+[source,bash]
+----
+sts stackpack validate -f ./my-stackpack-0.0.1.sts
+✅ Stackpack validation successful!
+----
+
+[NOTE]
+====
+O comando `sts stackpack validate` requer uma instância {stackstate-product-name} em execução configurada no seu contexto CLI. Se você não tiver uma instância ativa disponível, use a validação CI em vez disso.
+====
+
+==== Validação em Pipelines CI/CD
+
+Para pipelines CI/CD onde você pode não ter uma instância {stackstate-product-name} em execução, use a ferramenta `stack-pack-validator` da imagem Docker do StackState Server. Isso realiza a validação sem exigir uma conexão de backend ativa.
+
+===== Exemplo de GitLab CI
+
+Use a imagem Docker do StackState Server diretamente no seu pipeline GitLab CI:
+
+[source,yaml]
+----
+.validate-stackpack: &validate-stackpack
+  stage: validate
+  image: registry.rancher.com/stackstate/stackstate-server:<latest-tag>
+  script:
+    - |
+      echo "Validating stackpack source: stackpacks/$STACKPACK"
+      /opt/docker/bin/stack-pack-validator -directory "$CI_PROJECT_DIR/stackpacks/$STACKPACK" || {
+        echo "ERROR: Stackpack validation failed for stackpacks/$STACKPACK"
+        exit 1
+      }
+      echo "Stackpack validation passed for stackpacks/$STACKPACK"
+  dependencies: []
+
+validate-my-stackpack:
+  <<: *validate-stackpack
+  variables:
+    STACKPACK: my-stackpack
+----
+
+===== Linha de Comando do Docker
+
+Se estiver executando a validação localmente ou em outros sistemas CI/CD, use o comando `docker run`:
+
+- Valide um arquivo `.sts` empacotado:
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack-0.0.1.sts:/stackpack.sts \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -file /stackpack.sts
+----
+
+- Valide um diretório de StackPack:
++
+[source,bash]
+----
+docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
+    -v /path/to/my-stackpack:/stackpack \
+    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
+    -directory /stackpack
+----
+
+[TIP]
+====
+Use o script `stack-pack-validator` na imagem `stackstate-server` no seu pipeline CI/CD para validar StackPacks antes de publicá-los. Isso garante que seu StackPack atenda a todos os requisitos sem precisar de uma instância {stackstate-product-name} em execução.
+====
+
+=== Envie seu StackPack
+
+O subcomando `upload` envia o arquivo zip para uma instância {stackstate-product-name} em execução.
+
+- Envie o arquivo para {stackstate-product-name}:
++
+[source,bash]
+----
+sts stackpack upload -f ./my-stackpack-0.0.1.zip
+✅ ✓ Stackpack uploaded successfully!
+----
+
+=== Instale o StackPack
+
+xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[Instale ou faça upgrade do seu StackPack] através da interface de usuário de stackpacks {stackstate-product-name}.
+
+endif::ss-ff-stackpacks2_enabled[]

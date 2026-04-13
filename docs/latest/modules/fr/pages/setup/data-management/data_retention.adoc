@@ -1,0 +1,216 @@
+= Conservation des données
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergée
+
+== Présentation
+
+SUSE Observability impose des limites de conservation des données pour économiser de l'espace de stockage et améliorer les performances. Vous pouvez configurer la période de conservation des données pour équilibrer la quantité de données stockées avec les performances de SUSE Observability et la disponibilité des données.
+
+== Conservation des données du graphique topologique
+
+Par défaut, les données du graphique topologique seront conservées pendant 30 jours. Cela fonctionne de manière à ce que l'état le plus récent du graphique topologique soit toujours conservé ; seul l'historique de plus de 30 jours sera supprimé.
+Dans certains cas, il peut être utile de conserver des données historiques pendant plus de 30 jours ou de les réduire à moins de 30 jours pour économiser de l'espace disque. La conservation de la topologie peut être configurée via le chart Helm :
+
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week
+    retentionHours: 144
+----
+
+Notez qu'en ajoutant plus de temps à la période de conservation des données, la quantité de données stockées va également augmenter et nécessiter plus d'espace de stockage. Cela peut également affecter les performances des vues.
+
+Lors de la réduction de la période de conservation, il peut falloir un certain temps avant que l'espace disque soit libéré (au moins 15 minutes).
+
+=== Résolution des problèmes d'espace disque de la topologie
+En cas de problèmes d'espace disque, une ligne de journal - `Not enough replicas was chosen. Reason: {NOT_ENOUGH_STORAGE_SPACE=1` apparaît dans le namenode. Suivez les étapes ci-dessous pour traiter ce scénario :
+
+* Réduisez la période de conservation, préparez l'instance à récupérer immédiatement de l'espace disque et déclenchez une mise à niveau helm :
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+hbase:
+  console:
+    enabled: true
+    replicaCount: 1
+  hdfs:
+    datanode:
+      extraEnv:
+        open:
+          HDFS_CONF_dfs_datanode_du_reserved_pct: "0"
+----
+
+[NOTE]
+====
+Attendez que tous les pods hbase et hdfs soient stables avant de passer à l'étape suivante.
+====
+
+* Déclenchez la compaction des données historiques :
+[,bash]
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediately\(\)\)"
+----
+
+* Suivez les progrès en utilisant :
+----
+kubectl exec -t --namespace suse-observability  $(kubectl get pods --namespace suse-observability --no-headers | grep "console" | awk '{print $1}' | head -n 1) -- /bin/bash -c "stackgraph-console run println\(retention.removeExpiredDataImmediatelyStatus\(\)\)"
+----
+
+* En cas d'espace disque alloué insuffisant, contactez <support-portal-link>.
+
+* Restaurez les paramètres. Une fois que le statut n'est plus en cours - `Status(inProgress = false, lastFailure = null)`, déclenchez une mise à niveau de helm pour préserver la nouvelle rétention dans le cadre de vos valeurs.
+[,yaml]
+----
+stackstate:
+  topology:
+    # Retention set to 1 week in case you are running with the default 1 month
+    retentionHours: 144
+----
+
+== Conservation des événements et des journaux
+
+=== Magasin de données SUSE Observability
+
+Si vous utilisez le magasin d'événements/journaux fourni avec SUSE Observability, vos données seront par défaut conservées pendant 30 jours. Dans la plupart des cas, les paramètres par défaut seront suffisants pour stocker tous les indices pendant cette période.
+
+==== Configurer l'espace disque pour Elasticsearch
+
+Dans certaines circonstances, il peut être nécessaire d'ajuster l'espace disque disponible pour Elasticsearch et comment il est alloué aux journaux et événements, par exemple si vous prévoyez beaucoup de données pour un type de données spécifique.
+
+Voici un extrait avec la configuration complète de l'espace disque et de la rétention pour Elasticsearch, y compris les valeurs par défaut.
+
+[,yaml]
+----
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 250Gi
+stackstate:
+  components:
+    receiver:
+      esDiskSpaceShare: 70
+      # Number of days to keep the logs data on Es
+      retention: 7
+    e2es:
+      esDiskSpaceShare: 30
+      # Number of days to keep the events data on Es
+      retention: 30
+----
+
+L'espace disque disponible pour Elasticsearch est configuré via la clé `elasticsearch.volumeClaimTemplate.resources.requests.storage`. Pour changer cette valeur après l'installation initiale, certaines xref:/setup/data-management/data_retention.adoc#_resizing_storage[étapes supplémentaires sont requises].
+
+NOTE: Voici l'espace disque pour chaque instance d'Elasticsearch. Pour non-HA, c'est l'espace disque total disponible, mais pour HA, il y a 3 instances et un facteur de réplication de 1. Le résultat final est que le stockage total disponible pour Elasticsearch sera de `(250Gi * 3) / 2 = 375Gi`.
+En fonction des `esDiskSpaceShare` et `retention`, une partie de l'espace disque d'Elasticsearch est réservée pour chaque type de données.
+
+== Rétention des métriques
+
+SUSE Observability utilise VictoriaMetrics pour stocker les métriques. Il est configuré avec une rétention par défaut de 30 jours. Le chart Helm alloue de l'espace disque et configure la période de rétention pour les 1 ou 2 instances de métriques Victoria comme suit :
+
+----
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 250Gi
+    retentionPeriod: 1 # month
+# For HA setups:
+victoria-metrics-1:
+  server:
+    persistentVolume:
+      size: 250Gi
+    retentionPeriod: 1 # month
+----
+
+Pour changer la taille du volume après l'installation initiale, des xref:/setup/data-management/data_retention.adoc#_resizing_storage[étapes supplémentaires sont requises].
+
+Pour changer la période de rétention, remplacez les deux `retentionPeriod` clés par la même valeur dans votre fichier custom values.yaml et xref:/setup/data-management/data_retention.adoc#_update_stackstate[mettez à jour SUSE Observability] :
+
+* Les suffixes optionnels suivants sont pris en charge : h (heure), d (jour), w (semaine), y (année). Si aucun suffixe n'est défini, la durée est en mois.
+* La période de rétention minimale est de 24h ou 1 jour.
+
+== Mettez à jour SUSE Observability
+
+Après avoir apporté des modifications au values.yaml, SUSE Observability doit être mis à jour pour appliquer ces changements à l'exécution. Cela peut entraîner un court temps d'arrêt pendant le redémarrage des services. Pour mettre à jour SUSE Observability, utilisez la même commande que celle utilisée lors de l'installation de SUSE Observability et assurez-vous d'inclure les mêmes fichiers de configuration, y compris les modifications qui ont été apportées :
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Kubernetes]
+* xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift] :
+
+== Redimensionnement du stockage
+
+Dans la plupart des clusters, il est possible de redimensionner un volume persistant après sa création et sans interrompre le fonctionnement des applications. Cependant, cela ne peut pas être fait simplement en modifiant la taille de stockage configurée dans le values.yaml du chart Helm de SUSE Observability. Au lieu de cela, plusieurs étapes sont nécessaires :
+
+. Vérifiez que la classe de stockage utilisée peut être redimensionnée
+. Redimensionnez les volumes
+. Mettez à jour le values.yaml et appliquez le changement (optionnel mais recommandé)
+
+Les exemples ci-dessous utilisent le stockage VictoriaMetrics comme exemple. SUSE Observability est installé dans l'espace de noms `suse-observability`. Le volume va être redimensionné à 500Gi.
+
+=== Vérifiez que la classe de stockage prend en charge le redimensionnement.
+
+Utilisez les commandes suivantes `kubectl` pour obtenir la classe de stockage utilisée et vérifier que le `allowVolumeExpansion` est défini sur vrai.
+
+[,bash]
+----
+# Get the PVC's for SUSE Observability
+kubectl get pvc --namespace suse-observability
+
+# There is a storage class column in the output, copy it and use it to describe the storage class
+kubectl describe storageclass <storage-class-name>
+----
+
+Vérifiez que la sortie contient cette ligne :
+
+----
+AllowVolumeExpansion:  True
+----
+
+Si la ligne est absente ou si elle est définie sur `False`, veuillez consulter votre administrateur Kubernetes pour savoir si le redimensionnement est pris en charge et peut être activé.
+
+=== Redimensionnez les volumes
+
+Le chart Helm de SUSE Observability crée un ensemble d'état, qui a un modèle pour créer la demande de volume persistant (PVC). Ce modèle n'est utilisé que pour créer le PVC une seule fois, après cela, il ne sera plus appliqué et il n'est également pas autorisé de le modifier. Ainsi, pour agrandir le PVC, il est nécessaire de modifier le PVC lui-même.
+
+Pour changer la taille du PVC, utilisez les commandes suivantes.
+
+[,bash]
+----
+# Get the PVC's for SUSE Observability, allows us to check the current size and copy the name of the PVC to modify it with the next command
+kubectl get pvc --namespace suse-observability
+
+# Patch the PVC's specified size, change it to 500Gi
+kubectl patch pvc server-volume-stackstate-victoria-metrics-0-0 -p '{"spec":{"resources": { "requests": { "storage": "500Gi" }}}}'
+
+# Get the PVC's again to verify if it was resized, depending on the provider this can take a while
+kubectl get pvc --namespace suse-observability
+----
+
+=== Mettez à jour values.yaml et appliquez le changement.
+
+Le changement apporté à la demande de volume persistant (PVC) restera pendant toute la durée de vie du PVC, mais chaque fois qu'une installation propre est effectuée, il sera perdu. Plus important encore, après le redimensionnement du PVC, il y a maintenant une divergence entre l'état du cluster et la définition de l'état souhaité dans values.yaml. Il est donc recommandé de mettre à jour values.yaml également. Pour contourner le fait que ce changement n'est pas autorisé, supprimez d'abord l'ensemble d'état (mais gardez les pods en cours d'exécution) pour le recréer avec les nouveaux paramètres.
+
+[NOTE]
+====
+Cette étape ne change pas la taille du PVC lui-même, donc ne faire que cette étape ne produira aucun changement dans l'environnement en cours d'exécution.
+====
+
+
+Tout d'abord, modifiez votre values.yaml pour mettre à jour la taille du volume pour les PVC que vous venez de redimensionner. Consultez les sections sur xref:/setup/data-management/data_retention.adoc#_retention_of_metrics[Metrics] ou xref:/setup/data-management/data_retention.adoc#_retention_of_events_traces_and_logs[Events and Logs].
+
+Maintenant, supprimez l'ensemble d'état pour les applications pour lesquelles le stockage a été modifié :
+
+[,bash]
+----
+# List all stateful sets, check that all are ready, if not please troubleshoot that first
+kubectl get statefulset --namespace suse-observability
+
+# Delete the
+kubectl delete statefulset --namespace suse-observability stackstate-victoria-metrics-0 --cascade=orphan
+----
+
+Enfin, xref:/setup/data-management/data_retention.adoc#_update_[mettez à jour SUSE Observability] avec les nouveaux paramètres.

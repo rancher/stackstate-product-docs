@@ -1,0 +1,56 @@
+= Chaves de API (descontinuadas)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-22
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Uma chave de API foi usada para autenticar contra {stackstate-product-name} para enviar dados de telemetria para {stackstate-product-name}. Em uma instalação do agente Helm, isso foi feito definindo a `stackstate.apiKey` variável helm.
+
+Chaves de API e chaves de API de ingestão estão descontinuadas e serão removidas no quarto trimestre de 2026. Tokens de serviço agora são o mecanismo de autenticação preferido, também para enviar dados de telemetria. 
+
+O fluxo para adicionar novos clusters a {stackstate-product-name} no fluxo de instalação xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[StackPack] inclui a criação de um token específico do cluster que é compatível com o RBAC Agent para Rancher RBAC.
+
+== Migrando de chave de API para token de serviço
+
+Existem 2 opções para migrar do uso da chave de API única para usar tokens de serviço para dados de telemetria. 
+
+1. Migrar para um token de serviço por cluster. Isso dá um pouco mais de trabalho para configurar, mas suporta Rancher RBAC.
+2. Migrar para um único token de serviço que você usa de todos os clusters Kubernetes e coletores OTel. Isso não suporta Rancher RBAC.
+
+Após migrar todos os agentes e coletores de Open Telemetry para tokens de serviço, você pode agora remover o `global.receiverApiKey` ou `stackstate.apiKey` dos valores do Helm para instalar {stackstate-product-name} e executar um `helm upgrade` para aplicar as mudanças.
+
+=== Migrar para um token de serviço por cluster
+
+1. Abra o Stackpack Kubernetes na interface do usuário
+2. Expanda o cluster que você está migrando
+3. Clique no botão "Criar novo token de serviço" para obter o token de serviço específico do cluster e copie o token
+4. Siga as instruções de instalação/fazer upgrade do agente no stackpack para reimplantar o agente no cluster com o token de serviço como a chave de API.
+
+Em vez de usar a interface do usuário, você também pode gerar o token com a CLI como xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documentado aqui]. Certifique-se de também atribuir o `update-scoped-permissions` com escopo ao cluster que você está migrando. Os outros passos permanecem os mesmos que para a interface do usuário.
+
+=== Migre para um único token de serviço.
+
+Gere um token de serviço com a CLI conforme xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documentado aqui]:
+
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+Não adicione uma permissão `update-scoped-permissions`, pois não funcionará para um token que é usado em múltiplos clusters.
+
+Reimplante seus agentes e coletores de Open Telemetry seguindo as instruções disponíveis na interface do usuário para o Kubernetes StackPack e a xref:setup/otel/getting-started/getting-started-k8s.adoc[documentação do coletor Open Telemetry]. Use o token de serviço gerado como a chave de API seguindo.
+
+== Migre de Chaves de API de Ingestão.
+
+As Chaves de API de Ingestão eram usadas por ferramentas externas para ingerir dados (como métricas, eventos e rastros) para o cluster de Observabilidade da SUSE.
+Essas ferramentas incluem o Agente STS e/ou o Coletor OTel. tokens de serviço têm as mesmas capacidades, e mais. Siga os mesmos passos que para a chave de API (na seção anterior) para migrar para <<_migrate_to_a_service_token_per_cluster, um token de serviço por cluster>> ou <<_migrate_to_a_single_service_token, um único token de serviço>>.
+
+== Mais informações
+
+* xref:use/security/k8s-service-tokens.adoc[Tokens de serviço]

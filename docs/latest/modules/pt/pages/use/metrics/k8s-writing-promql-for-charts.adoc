@@ -1,0 +1,106 @@
+= Escrevendo consultas PromQL para gráficos representativos
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Diretrizes
+
+Quando o SUSE Observability exibe dados em um gráfico, quase sempre é necessário alterar a resolução dos dados armazenados para que se encaixem no espaço disponível para o gráfico. Para obter os gráficos mais representativos possíveis, siga estas diretrizes:
+
+* Não consulte a métrica bruta, mas sempre agregue ao longo do tempo (usando as funções `*_over_time` ou `rate`).
+* Use o parâmetro `${__interval}` como o intervalo para agregações ao longo do tempo, ele se ajustará automaticamente com a resolução do gráfico.
+* Use o parâmetro `${__rate_interval}` como o intervalo para agregações de `rate`, ele também se ajustará automaticamente com a resolução do gráfico, mas leva em conta comportamentos específicos de `rate`.
+
+Aplicar uma agregação muitas vezes significa que um compromisso é feito para enfatizar certos padrões nas métricas mais do que outros. Por exemplo, para janelas de tempo grandes, `max_over_time` mostrará todos os picos, mas não mostrará todos os vales. Enquanto `min_over_time` faz exatamente o oposto e `avg_over_time` suaviza tanto picos quanto vales. Para mostrar esse comportamento, aqui está um exemplo de vinculação de métrica usando o uso de CPU de pods. Para experimentar você mesmo, copie-o para um arquivo YAML e use o xref:/use/metrics/k8s-add-charts.adoc#_create_or_update_the_metric_binding_in_stackstate[CLI para aplicá-lo] no seu próprio SUSE Observability (você pode removê-lo depois).
+
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: CPU Usage (different aggregations and intervals)
+  priority: HIGH
+  identifier: urn:custom:metric-binding:pod-cpu-usage-a
+  queries:
+    - expression: sum(max_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: max_over_time dynamic interval
+    - expression: sum(min_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: min_over_time dynamic interval
+    - expression: sum(avg_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: avg_over_time dynamic interval
+    - expression: sum(last_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: last_over_time dynamic interval
+    - expression: sum(max_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: max_over_time 1m interval
+    - expression: sum(min_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: min_over_time 1m interval
+    - expression: sum(avg_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: avg_over_time 1m interval
+    - expression: sum(last_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
+      alias: last_over_time 1m interval
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+----
+
+Após aplicá-lo, abra a perspectiva de métricas para um pod no SUSE Observability (preferencialmente um pod com alguns picos e vales no uso de CPU). Amplie o gráfico usando o ícone no canto superior direito para obter uma visão melhor. Agora você também pode mudar a janela de tempo para ver quais são os efeitos das diferentes agregações (30 minutos vs 24 horas, por exemplo).
+
+[CAUTION]
+====
+Quando a vinculação de métrica não especifica uma agregação, o SUSE Observability usará automaticamente a agregação `last_over_time` para reduzir o número de pontos de dados para um gráfico. Veja também xref:/use/metrics/k8s-writing-promql-for-charts.adoc#_why[Por que isso é necessário?] para uma explicação.
+====
+
+
+image::k8s/metric-aggregation-differences-30m.png[O gráfico para esta vinculação métrica nos últimos 30 minutos, there are only a few lines in the chart visible because most time series are on top of each other]
+image::k8s/metric-aggregation-differences-24h.png[O mesmo gráfico, same component and same end time, but now for the last 24h. It shows, sometimes completely, different results for the different aggregations]
+
+== Por que isso é necessário?
+
+Primeiramente, por que você deve usar uma agregação? Não faz sentido recuperar mais pontos de dados do armazenamento métrico do que cabem no gráfico. Portanto, o SUSE Observability determina automaticamente o passo necessário entre 2 pontos de dados para obter um bom resultado. Para janelas de tempo curtas (por exemplo, um gráfico mostrando apenas 1 hora de dados), isso resulta em um pequeno passo (cerca de 10 segundos). As métricas são frequentemente coletadas a cada 30 segundos, então para passos de 10 segundos, o mesmo valor se repetirá por 3 passos antes de mudar para o próximo valor. Ao ampliar a visualização para uma janela de tempo de 1 semana, será necessário um passo muito maior (cerca de 1 hora, dependendo do tamanho exato do gráfico na tela).
+
+Quando os passos se tornam maiores do que a resolução dos pontos de dados coletados, uma decisão precisa ser tomada sobre como resumir os pontos de dados da faixa de tempo de 1 hora em um único valor. Quando uma agregação ao longo do tempo já está especificada na consulta, ela será usada para isso. No entanto, se nenhuma agregação for especificada, ou quando o intervalo de agregação for menor que o passo, a agregação `last_over_time` é usada, com o tamanho `step` como intervalo. O resultado é que apenas o último ponto de dados de cada hora é usado para "resumir" todos os pontos de dados naquela hora.
+
+Para resumir: ao executar uma consulta PromQL para um intervalo de tempo de 1 semana com um passo de 1 hora, esta consulta:
+
+----
+container_cpu_usage /1000000000
+----
+
+é automaticamente convertida para:
+
+----
+last_over_time(container_cpu_usage[1h]) /1000000000
+----
+
+Experimente por conta própria no https://play.stackstate.com/#_/metrics?promql=last_over_time%28container_cpu_usage%7Bnamespace%3D%22sock_shop%22%2C%20pod_name%3D~%22carts.%2A%22%7D%5B%24%7B%5F%5Finterval%7D%5D%29%20%2F%201000000000&timeRange=LAST_7_DAYS[SUSE Observability playground].
+
+image::k8s/k8s-metric-queries-for-chart-last-over-time.png[Último ao longo do tempo]
+image::k8s/k8s-metric-queries-for-chart-max-over-time-fixed-range.png[Máximo ao longo do tempo com intervalo fixo]
+image::k8s/k8s-metric-queries-for-chart-max-over-time-interval.png[Máximo ao longo do tempo com intervalo automático]
+
+Frequentemente, esse comportamento não é intencional e é melhor decidir por si mesmo que tipo de agregação é necessária. Usando diferentes funções de agregação, é possível enfatizar certos comportamentos (à custa de ocultar outros comportamentos). É mais importante ver picos, vales, um gráfico suave, etc.? Então use o parâmetro `${__interval}` para o intervalo, pois ele é automaticamente substituído pelo tamanho `step` usado para a consulta. O resultado é que todos os pontos de dados no passo são utilizados.
+
+image::k8s/k8s-metric-queries-small-range.png[Um intervalo fixo, shorter than the data resolution]
+image::k8s/k8s-metric-queries-interval-for-range.png[Intervalo automático, based on step but with a lower limit]
+
+O parâmetro `${__interval}` previne outro problema. Quando o tamanho `step` e, portanto, o valor `${__interval}`, diminuem para um tamanho menor do que a resolução dos dados métricos armazenados, isso resultaria em lacunas no gráfico.
+
+Portanto, `${__interval}` nunca diminuirá para menos que 2 vezes o intervalo de coleta padrão (o intervalo de coleta padrão é de 30 segundos) do agente SUSE Observability.
+
+Finalmente, a função `rate()` requer pelo menos 2 pontos de dados no intervalo para calcular uma taxa. Com menos de 2 pontos de dados, a taxa não terá um valor. Portanto, `${__rate_interval}` está garantido para ser sempre pelo menos 4 * o intervalo de coleta. Isso garante que não haja lacunas inesperadas ou outro comportamento estranho em gráficos de taxa, a menos que dados estejam faltando.
+
+Existem alguns excelentes posts em blogs na internet que explicam isso com mais detalhes:
+
+* https://www.robustperception.io/step-and-query_range/[Passo e intervalo de consulta]
+* https://www.robustperception.io/what-range-should-i-use-with-rate/[Qual intervalo devo usar com rate()?]
+* https://grafana.com/blog/2020/09/28/new-in-grafana-7.2-%5F%5Frate_interval-for-prometheus-rate-queries-that-just-work/[Introdução do __rate_interval no Grafana]
+
+== Consulte também
+
+Mais alguns recursos sobre como entender consultas PromQL:
+
+* https://promlabs.com/blog/2020/06/18/the-anatomy-of-a-promql-query/[Anatomia de uma Consulta PromQL]
+* https://promlabs.com/blog/2020/07/02/selecting-data-in-promql/[Selecionando Dados em PromQL]
+* https://iximiuz.com/en/posts/prometheus-vector-matching/[Como juntar múltiplas métricas]
+* https://iximiuz.com/en/posts/prometheus-functions-agg-over-time/[Agregação ao longo do tempo]

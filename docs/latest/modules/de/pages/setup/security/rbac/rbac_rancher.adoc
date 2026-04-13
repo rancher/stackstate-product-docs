@@ -1,0 +1,200 @@
+= Rancher RBAC
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Übersicht
+
+Die SUSE Rancher Prime Observability Erweiterung verwendet Kubernetes RBAC, um Rancher-Benutzern in SUSE Observability Zugriff zu gewähren.
+Wenn Sie Rancher nicht verwenden, sehen Sie sich xref:/setup/security/rbac/rbac_roles.adoc[Anleitung zum Einrichten von Rollen] in einer eigenständigen Installation an.
+
+[NOTE]
+====
+Damit Rancher RBAC funktioniert, 
+
+* muss die Authentifizierung für {stackstate-product-name} mit dem xref:setup/security/authentication/oidc.adoc#_rancher[Rancher OIDC Provider] konfiguriert werden.
+* der {stackstate-product-name} Agent muss den RBAC Agent aktiviert haben und sich mit einem Service-Token authentifizieren.
+====
+
+Jeder authentifizierte Benutzer hat die Rolle *Instance Basic Access*, die es ihm ermöglicht, das System zu nutzen.  Diese Berechtigungen gewähren Zugriff auf die Ansichten, Einstellungen, Metrikbindungen und ermöglichen es einem Benutzer, Systembenachrichtigungen zu sehen.  Sie gewähren jedoch KEINEN Zugriff auf Daten von {stackstate-product-name}.  Um Daten zu sehen, muss einem Benutzer eine zusätzliche Rolle zugewiesen werden. Zwei Richtungen zur Erweiterung der Rolle *Instance Basic Access* werden mit Rancher *Rollenvorlagen* bereitgestellt:
+
+Instanzrollen:: Ermöglicht Ihnen, {stackstate-product-name} zu konfigurieren oder zu personalisieren.
+Eingeschränkte Rollen:: Gewährt Zugriff auf {stackstate-product-name} Daten aus beobachteten Clustern.
+
+== Instanzrollen
+
+Sie können die *Rollenvorlagen* für *Instanzrollen* Benutzern oder Gruppen im *Projekt* zuweisen, das {stackstate-product-name} ausführt. Wenn einem Mitglied eines Projekts keine Instanzrollen ausdrücklich zugewiesen sind, hat es die Berechtigungen der Rolle *Instance Basic Access*.
+
+=== Instanzrollen mit Zugriff auf {stackstate-product-name} Daten
+
+Einige "globale" Rollen gewähren Zugriff auf alle {stackstate-product-name} Daten - in jedem der beobachteten Cluster.  Diese Rollen sind dafür gedacht, das System einzurichten und Probleme auf Systemebene zu beheben.  Für Benutzer mit einer dieser Rollen ist es nicht erforderlich, xref:scoped[Scoped Roles] zu konfigurieren.
+
+Instanzadministrator:: Gewährt vollen Zugriff auf alle Ansichten und alle Berechtigungen.
+Instanz-Fehlerbeheber:: Gewährt alle Berechtigungen, die erforderlich sind, um SUSE Observability zur Fehlersuche zu verwenden, einschließlich der Möglichkeit, Monitore zu aktivieren/deaktivieren, benutzerdefinierte Ansichten zu erstellen und die Kommandozeilenschnittstelle zu verwenden.
+Instanzbeobachter:: Gewährt Zugriff auf alle Daten in einer SUSE Observability-Instanz.
+
+=== Instanzrollen ohne Zugriff auf {stackstate-product-name} Daten
+
+Diese Rollen müssen mit der Rolle *Instanzbeobachter* oder einer der xref:scoped[Eingeschränkten Rollen] (siehe unten) kombiniert werden.  Andernfalls sind keine {stackstate-product-name} Daten zugänglich und die Benutzeroberfläche zeigt eine "Keine Komponenten gefunden"-Meldung an.  Dies gilt für alle Rancher-Benutzer, einschließlich solcher, die Projektbesitzer sind.
+
+Empfohlener Zugriff auf die Instanz:: Gewährt empfohlene Berechtigungen zur Nutzung von SUSE Observability.  Diese Rolle umfasst Berechtigungen, die nicht unbedingt erforderlich sind, aber (eingeschränkte) Möglichkeiten zur Personalisierung {stackstate-product-name} bieten.
+Instance Basic Access:: Gewährt minimale Berechtigungen zur Nutzung von {stackstate-product-name}. Diese Rolle muss nicht ausdrücklich zugewiesen werden und es gibt keine *Rollenvorlage* dafür; jeder angemeldete Benutzer hat sie. 
+
+Sie finden die Berechtigungen, die jeder vordefinierten Rolle in SUSE Observability zugewiesen sind, unten. Für Details zu den verschiedenen Berechtigungen und wie man sie mit der `sts` Kommandozeilenschnittstelle verwaltet, siehe xref:/setup/security/rbac/rbac_permissions.adoc[Rollenbasierte Zugriffskontrolle (RBAC) Berechtigungen]
+
+[tabs]
+====
+Basiszugriff::
++
+--
+Basiszugriff gewährt minimale Berechtigungen zur Nutzung von SUSE Observability. Um mit einem Observer (Instanz, Cluster oder Projekt) kombiniert zu werden.
+Diese Berechtigungen werden allen Benutzern gewährt.
+
+|===
+|Ressource |Verben 
+
+|Metrik-Bindungen |get
+|Einstellungen |get
+|Systembenachrichtigungen |get
+|Layouts |get
+|===
+
+--
+Empfohlener Zugriff::
++
+--
+Empfohlener Zugriff gewährt Berechtigungen, die nicht unbedingt erforderlich sind, aber SUSE Observability deutlich nützlicher machen. Es bietet einen begrenzten Grad an Personalisierung.
+Um mit einem Observer (Instanz, Cluster oder Projekt) kombiniert zu werden.
+
+|===
+|Ressource |Verben 
+
+|API-Token |get
+|Favoriten-Dashboards |erstellen, löschen
+|Favoritenansichten |erstellen, löschen
+|Stackpacks |get 
+|Visualisierungseinstellungen |update
+|===
+
+--
+Beobachter::
++
+--
+Der Beobachter gewährt Zugriff auf alle Observability-Daten in einer SUSE Observability-Instanz.  Kombinieren Sie dies mit *Empfohlenem Zugriff* für ein besseres Erlebnis.
+
+|===
+|Ressource |Verben 
+
+|Topologie |get
+|Metriken |get
+|Spuren |get
+|===
+
+--
+Fehlerbeheber::
++
+--
+Die Fehlerbeheberrolle hat Zugriff auf alle in SUSE Observability verfügbaren Daten und die Möglichkeit, Ansichten zu erstellen und Monitore zu aktivieren/deaktivieren.
+
+|===
+|Ressource |Verben 
+
+|Agenten |get 
+|API-Token |get
+|Komponentenaktionen |execute
+|Dashboards |abrufen, erstellen, aktualisieren, löschen 
+|Favoriten-Dashboards |erstellen, löschen
+|Favoritenansichten |erstellen, löschen
+|Metrik-Bindungen |get
+|Metriken |get 
+|Monitore |abrufen, erstellen, aktualisieren, löschen, ausführen 
+|Benachrichtigungen |abrufen, erstellen, aktualisieren, löschen 
+|Einstellungen |get 
+|Stackpack-Konfigurationen |abrufen, erstellen, aktualisieren, löschen
+|Stackpacks |get 
+|Systembenachrichtigungen |get
+|Topologie |get 
+|Spuren |get 
+|Layouts |abrufen, erstellen, aktualisieren, löschen 
+|Visualisierungseinstellungen |get
+|===
+
+--
+Admin.::
++
+--
+Die Administratorrolle hat alle Berechtigungen zugewiesen.
+
+|===
+|Ressource |Verben 
+
+|Agenten |get 
+|API-Token |get
+|Komponentenaktionen |execute
+|Dashboards |abrufen, erstellen, aktualisieren, löschen 
+|Favoriten-Dashboards |erstellen, löschen
+|Favoritenansichten |erstellen, löschen
+|Ingestion-API-Keys |abrufen, erstellen, aktualisieren, löschen
+|Metrik-Bindungen |get
+|Metriken |get 
+|Monitore |abrufen, erstellen, aktualisieren, löschen, ausführen 
+|Benachrichtigungen |abrufen, erstellen, aktualisieren, löschen 
+|permissions |abrufen, erstellen, aktualisieren, löschen 
+|eingeschränkte Skripte |execute
+|Service-Token |abrufen, erstellen, aktualisieren, löschen
+|Einstellungen |abrufen, erstellen, aktualisieren, löschen, entsperren 
+|Stackpack-Konfigurationen |abrufen, erstellen, aktualisieren, löschen
+|Stackpacks |abrufen, erstellen 
+|sync-data |abrufen, aktualisieren, löschen
+|Systembenachrichtigungen |get
+|Themen-Nachrichten |get
+|Topologie |get 
+|Spuren |get 
+|Layouts |abrufen, erstellen, aktualisieren, löschen 
+|Visualisierungseinstellungen |update
+|===
+
+--
+====
+
+[#scoped]
+== Eingeschränkte Rollen
+
+Sie können die folgenden *Rollenvorlagen* Benutzern oder Gruppen in einem beobachteten Cluster zuweisen.  Sie gewähren Zugriff auf {stackstate-product-name} Daten, die von (einem *Projekt* in) dem *Cluster* stammen, und geben einem Benutzer die Berechtigung, Topologie, Metriken, Protokolle und Trace-Daten zu lesen.
+
+Beobachter:: Gewährt Zugriff auf Daten, die aus Namensräumen in einem *Projekt* stammen. Sie können dies im Abschnitt *Projektmitgliedschaft* der Clusterkonfiguration verwenden.
+Cluster-Beobachter:: Gewährt Zugriff auf alle Daten, die aus einem *Cluster* stammen. Sie können diese Vorlage im Abschnitt *Clustermitgliedschaft* der Clusterkonfiguration verwenden.
+
+Die Ressourcen in diesen Rollen entsprechen xref:/setup/security/rbac/rbac_permissions.adoc#_scoped_permissions[Scoped Permissions]. Sie sind in der `scope.observability.cattle.io` API-Gruppe verfügbar (mit nur dem Verb `get`, da diese Ressourcen nur lesbar sind):
+
+* `topology` - Komponenten (Implementierungen, Pods usw.) aus dem Cluster oder Namensraum
+* `traces` - Spans aus dem Cluster oder Namensraum
+* `metrics` - Metrikdaten, die aus dem Cluster oder Namensraum stammen
+
+Beachten Sie, dass der Zugriff auf Protokolle durch die `topology` Ressource gesteuert wird.
+
+Aktivieren Sie die Personalisierung für Benutzer mit diesen Beobachterrollen, indem Sie die Rolle *Instance Recommended Access* im *Projekt* zuweisen, das {stackstate-product-name} ausführt.
+
+== Benutzerdefinierte Rollen
+
+Um zusätzliche Berechtigungen über den empfohlenen Zugriff hinaus zu gewähren, erstellen Sie eine benutzerdefinierte Projekt-*Rollenvorlage* in Rancher, die von *SUSE Observability Instance Recommended Access* erbt.  Fügen Sie dann beispielsweise, um die Rechte zum Anzeigen von Monitoren und Metrikdiagrammen zu gewähren, Regeln mit hinzu:
+
+* Verb: `get`
+* Ressource: `metricbindings` und `monitors`
+* ApiGroup: `instance.observability.cattle.io`
+
+image::rancher-custom-role.png[Benutzerdefinierte Rollenvorlage für reichhaltigeren Zugriff]
+
+Sie können jede Ressource und jede Verbkombination angeben, die in den xref:/setup/security/rbac/rbac_permissions.adoc[RBAC-Berechtigungen] definiert ist.  Beachten Sie, dass die Bindestriche (`-`) aus den Ressourcennamen entfernt werden, sodass die Berechtigung `get-metric-bindings` zur Kubernetes RBAC-Ressource `metricbindings` mit dem Verb `get` wird.
+
+
+== Fehlerbehebung
+
+* Überprüfen Sie, ob der Rbac-Agent für den Cluster in der Lage ist, mit der Plattform zu kommunizieren.
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Überprüfen Sie die Benutzerobjekte] (Benutzer und Rollen).
+  ** Überprüfen Sie die Konfiguration der Rollen beim OIDC-Anbieter.
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[Überprüfen Sie die Berechtigung des Subjekts]
+  ** Überprüfen Sie, ob die relevanten (Cluster)RoleBindings vorhanden sind, die den Benutzer mit einer (Cluster)Rolle verknüpfen.
+  ** Überprüfen Sie die (Cluster)Rolle, um sicherzustellen, dass sie die richtigen Berechtigungen gewährt.

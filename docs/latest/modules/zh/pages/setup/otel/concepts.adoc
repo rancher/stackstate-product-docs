@@ -1,0 +1,54 @@
+= Open Telemetry 概念
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+这是 Open Telemetry 中最重要的概念的总结，足以让您入门。要获取更详细的介绍，请使用 https://opentelemetry.io/docs/concepts/[Open Telemetry 文档]
+
+== 信号
+
+Open Telemetry 识别 3 种遥测信号：
+
+* 追踪
+* 指标
+* 日志
+
+目前 SUSE Observability 支持追踪和指标，日志将在未来版本中支持。对于 Kubernetes 日志，可以使用 xref:/k8s-quick-start-guide.adoc[SUSE Observability 代理]。
+
+=== 追踪
+
+追踪使我们能够可视化请求在应用程序中的路径。一个追踪由一个或多个跨度组成，这些跨度共同形成一棵树，单个追踪可以完全在单个服务内，但也可以跨越多个服务。每个跨度代表请求处理中的一个操作，并具有：
+
+* 一个名称
+* 开始和结束时间，从中可以计算出持续时间
+* status
+* 特性
+* 资源属性（见 <<_resources,资源>>）
+* 事件
+
+跨度属性用于为跨度提供元数据，例如，一个用于下订单操作的跨度可以将 `orderId` 作为属性，或者一个用于 HTTP 操作的跨度可以将 HTTP 方法和 URL 作为属性。
+
+跨度事件可用于表示在跨度操作中发生重要事件的时间点。例如，如果跨度失败，可以有一个 `exception` 或 `error` 事件来捕获错误消息、堆栈跟踪和错误发生的确切时间。
+
+=== 指标
+
+指标是在运行时捕获的测量结果，导致一个指标事件。指标是应用程序性能和可用性的重要指标，通常用于对故障或性能问题发出警报。指标包括：
+
+* 一个名称
+* 一个时间戳
+* 一种类型（计数器、仪表、直方图等）
+* 特性
+* 资源属性（见 <<_resources,资源>>）
+
+属性提供指标的元数据。
+
+== 资源
+
+资源是生成遥测数据的实体。资源属性提供资源的元数据。例如，在 Kubernetes 集群中，运行在容器、Pod 和名称空间中的一个进程，可以拥有所有这些实体的资源属性。
+
+资源属性通常由SDK自动分配。然而，建议始终显式设置`service.name`和`service.namespace`属性。第一个是服务的逻辑名称，如果未设置，SDK 将设置一个 `unknown_service` 值，这将使得在 SUSE Observability 中使用数据变得非常困难。名称空间是组织服务的便捷方式，特别是在多个位置运行相同服务时非常有用。
+
+== 语义约定
+
+Open Telemetry 定义了操作和数据的通用名称，他们称之为语义约定。语义约定遵循一种命名方案，允许在不同语言、库和代码库之间标准化数据处理。所有信号和资源属性都有语义约定。它们为许多不同的平台和操作在https://opentelemetry.io/docs/specs/semconv/attributes-registry/[Open Telemetry网站]上定义。SDK 利用语义约定来分配这些属性，SUSE Observability 也遵循这些约定并依赖它们，例如识别 Kubernetes 资源。

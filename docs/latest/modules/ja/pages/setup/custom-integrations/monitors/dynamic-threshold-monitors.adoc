@@ -1,0 +1,51 @@
+= 動的閾値モニター
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+時間とサービスによって大きく変動するメトリクスに対して、動的閾値モニターはシンプルで高性能な異常検知を提供します。 最近のデータに加えて、1、2、または3週間前のデータをコンテキストとして使用し、現在のデータと比較します。
+
+「チェックウィンドウ」からのデータは、アンダーソン-ダーリング検定を使用して、歴史的コンテキストから提供されたデータと比較されます。 これはデータ分布に対して非常に少ない仮定を課します。 この検定は、分布の上端と下端の外れ値に特に敏感です。 メトリクスは滑らかであったり、スパイキーであったり、いくつかの「レベル」を持つことがあります - データ値は直接比較され、モデルフィッティングは行われないため、動的閾値モニターは非常に堅牢です。
+
+時間とともに滑らかに変動するメトリクス（例えば、5分の時間スケール）に対しては、実際のデータポイントの数は生データの数よりも少なくなります。 DTはこれを補正するため、同じモニターを広範囲のメトリクスに使用でき、パラメータを調整する必要はありません。
+
+モニター機能に設定できるパラメータがいくつかあります：
+
+* `falsePositiveRate`: `!!float 1e-8`と言う - モニターが逸脱した行動に対してどれだけ敏感であるか。 値が低いほど、より多くの（偽）陽性を抑制しますが、偽陰性（見逃された異常）が発生する可能性もあります。
+* `checkWindowMinutes`: `10`分と言う - チェックウィンドウは、迅速なアラート（小さい値）と正しく特定された異常（高い値）の間でバランスを取る必要があります。 実際には、少数のデータポイントがうまく機能します。
+* `historicWindowMinutes`: `120`（2時間）と言う - 現在時刻を中心に括られ、その前は1週間またはそれ以上前のデータが対象となり、結果として現在時刻の1時間前から1時間後までが含まれます。 また、チェックウィンドウの2時間前のデータも使用されます。 動的閾値モニターは、この歴史的データの分布をチェックウィンドウ内のデータポイントと比較します。
+* `historySizeWeeks`: `2`と言う - 歴史的コンテキストのためにデータが取得される週の数。 `1`, `2`または`3`である可能性があります。
+* `removeTrend`: トレンド行動を持つメトリクス（例えば、リクエスト数）に対して、絶対値が週ごとに異なる場合、このトレンド（平均値）を考慮することができます。
+* `includePreviousDay`: 通常 `false` - 週間パターンがなく、日次パターンのみを持つメトリクスの場合、より最近のデータを使用することができます。
+
+== 動的閾値モニターの使用例
+
+動的閾値機能を使用して実装されたモニターの例は次のとおりです:
+
+----
+  - _type: "Monitor"
+    name: "<name of the monitor>"
+    identifier: "urn:stackpack:<stackpack-name>:monitor:<identifier for the monitor>"
+    status: "DISABLED"
+    description: "<description>"
+    function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+    arguments:
+      telemetryQuery:
+        query: "<metric to bind to component>"
+        unit: s
+        aliasTemplate: "<name for the metric>"
+      topologyQuery: <topology query for the components to bind to>
+      falsePositiveRate: <floating point number, e.g. !!float 1e-8>
+      checkWindowMinutes: <integer, e.g. 10>
+      historicWindowMinutes: <integer, e.g. 120>
+      historySizeWeeks: <integer: 1, 2 or 3>
+      includePreviousDay: <boolean>
+      removeTrend: <boolean>
+    intervalSeconds: 60
+    remediationHint: "<how to remediate deviating states>"
+----
+
+モニターは、xref:use/alerting/k8s-dynamic-threshold-monitors.adoc[CLIを使用してコンポーネントに閾値モニターを追加するガイド]を使って実装できます。

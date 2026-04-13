@@ -1,0 +1,56 @@
+= Claves API (quedar obsoletas)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-22
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Se utilizó una clave API para autenticar contra {stackstate-product-name} para enviar datos de telemetría a {stackstate-product-name}. En una instalación del agente Helm, esto se hizo configurando la variable de Helm `stackstate.apiKey`.
+
+Las claves API, y las claves API de ingestión, quedarán obsoletas y se eliminarán en el cuarto trimestre de 2026. Los tokens de servicio son ahora el mecanismo de autenticación preferido, también para enviar datos de telemetría. 
+
+El flujo para añadir nuevos clústeres a {stackstate-product-name} en xref:/k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[flujo de instalación de StackPack] incluye la creación de un token específico del clúster que es compatible con el Agente RBAC para Rancher RBAC.
+
+== Migrando de clave API a token de servicio
+
+Hay 2 opciones para migrar de usar la única clave API a usar tokens de servicio para datos de telemetría. 
+
+1. Migrar a un token de servicio por clúster. Esto requiere un poco más de trabajo para configurarlo, pero soporta Rancher RBAC.
+2. Migrar a un único token de servicio que utilices desde todos los clústeres de Kubernetes y los recolectores OTel. Esto no soporta Rancher RBAC.
+
+Después de migrar todos los agentes y recolectores de Open Telemetry a tokens de servicio, ahora puedes eliminar el `global.receiverApiKey` o `stackstate.apiKey` de los valores de Helm para instalar {stackstate-product-name} y ejecutar un `helm upgrade` para aplicar los cambios.
+
+=== Migrar a un token de servicio por clúster
+
+1. Abre el Stackpack de Kubernetes en la interfaz de usuario
+2. Expande el clúster que estás migrando
+3. Haz clic en el botón "Crear nuevo token de servicio" para obtener el token de servicio específico del clúster y copia el token
+4. Sigue las instrucciones de instalación/actualizar versión del agente en el stackpack para volver a desplegar el agente en el clúster con el token de servicio como clave API.
+
+En lugar de usar la interfaz de usuario, también puedes generar el token con la CLI como xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documentado aquí]. Asegúrate de asignar también el `update-scoped-permissions` con alcance al clúster que estás migrando. Los otros pasos permanecen igual que para la interfaz de usuario.
+
+=== Migra a un único token de servicio
+
+Genera un token de servicio con la CLI como xref:setup/security/authentication/service_tokens#_telemetry_data_ingestion[documentado aquí].
+
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+No añadas un `update-scoped-permissions` permiso ya que no funcionará para un token que se utiliza desde múltiples clústeres.
+
+Vuelve a desplegar tus agentes y recolectores de Open Telemetry siguiendo las instrucciones disponibles en la interfaz de usuario para el Kubernetes StackPack y la xref:setup/otel/getting-started/getting-started-k8s.adoc[documentación del recolector de Open Telemetry]. Utiliza el token de servicio generado como clave API, siguiendo las indicaciones.
+
+== Migra desde las claves API de ingestión
+
+Las claves API de ingestión eran utilizadas por herramientas externas para ingerir datos (como métricas, eventos y trazas) en el clúster de SUSE Observability.
+Estas herramientas incluyen el Agente STS y/o el recolector OTel. Los tokens de servicio tienen las mismas capacidades y más. Sigue los mismos pasos que para la clave API (en la sección anterior) para migrar a <<_migrate_to_a_service_token_per_cluster, un token de servicio por clúster>> o <<_migrate_to_a_single_service_token, un único token de servicio>>.
+
+== Más información.
+
+* xref:use/security/k8s-service-tokens.adoc[Tokens de servicio]

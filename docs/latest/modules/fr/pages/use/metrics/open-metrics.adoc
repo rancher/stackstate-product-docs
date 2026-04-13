@@ -1,0 +1,91 @@
+= OpenMetrics
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Présentation
+
+L'Agent d'Observabilité SUSE V2 peut être configuré pour récupérer des métriques à partir d'un point de terminaison OpenMetrics et les envoyer à SUSE Observability.
+
+== Installation
+
+=== Installation
+
+La vérification OpenMetrics est incluse dans le [Agent V2 StackPack].
+
+=== Configuration
+
+Pour activer l'intégration OpenMetrics et commencer à collecter des données de métriques à partir d'un point de terminaison OpenMetrics, la vérification OpenMetrics doit être configurée sur l'Agent d'Observabilité SUSE V2. La configuration de la vérification fournit tous les détails nécessaires pour que l'Agent se connecte à votre point de terminaison OpenMetrics et récupère les métriques disponibles.
+
+[tabs]
+====
+Kubernetes, OpenShift::
++
+--
+
+. Déployez l'Agent sur votre cluster Kubernetes ou OpenShift.
+. Ajoutez les annotations ci-dessous lors du lancement d'un pod qui expose des métriques via un point de terminaison OpenMetrics. Ajoutez ce qui suit :
+ ** **+++<CONTAINER_NAME>+++** - le nom du conteneur qui expose les OpenMetrics. Il est possible de traiter plusieurs points de terminaison dans un seul pod (c'est pourquoi il y a une liste dans le JSON).+++</CONTAINER_NAME>+++
+ ** *prometheus_url* - le chemin (souvent juste `metrics`) et le port auquel le point de terminaison OpenMetrics est exposé.
+ ** *namespace* - toutes les métriques collectées ici auront ce préfixe séparé par des points.
+ ** *metrics* - utilisez `["*"]` pour collecter toutes les métriques disponibles. Il est également possible de spécifier une liste de métriques à récupérer. Cela doit être soit une chaîne représentant le nom de la métrique, soit un mappage pour renommer la métrique``<EXPOSED_METRIC>:<SENT_METRIC>``
++
+[,yaml]
+----
+ ...
+ metadata:
+   annotations:
+     ad.stackstate.com/<CONTAINER_NAME>.check_names: '["openmetrics"]'
+     ad.stackstate.com/<CONTAINER_NAME>.init_configs: '[{}]'
+     ad.stackstate.com/<CONTAINER_NAME>.instances: |
+       [
+         {
+           "prometheus_url": "http://%%host%%:<METRICS_PORT>/<METRICS_PATH>",
+           "namespace": "<METRICS_NAMESPACE>",
+           "metrics": ["*"]
+         }
+       ]
+ ...
+ # This already exists in the pod spec, the container name needs to match the container that is exposing the openmetrics endpoint
+ spec:
+   containers:
+    - name: <CONTAINER_NAME>
+ ...
+----
+. Vous pouvez également ajouter une configuration et des filtres optionnels :
+ ** *prometheus_metrics_prefix* - préfixe à ajouter aux métriques OpenMetrics exposées.
+ ** *health_service_check* - envoyer une vérification de service `<NAMESPACE>.prometheus.health` rapportant la santé du point de terminaison OpenMetrics. Par défaut `true`.
+ ** *label_to_hostname* - remplacer le nom d'hôte par la valeur d'une étiquette.
+ ** *label_joins* - cibler une métrique et récupérer son étiquette via un mappage 1:1.
+ ** *labels_mapper* - renommer les étiquettes. Le format est `<LABEL_TO_RENAME>: <NEW_LABEL_NAME>`.
+ ** *type_overrides* - Remplacez un type dans la charge utile OpenMetrics ou attribuez un type à une métrique non typée (ces dernières seraient ignorées par défaut). Les `<METRIC_TYPE>` pris en charge sont `gauge`, `count` et `rate`. Le format est `<METRIC_NAME>: <METRIC_TYPE>`.
+ ** *tags* - liste des étiquettes à attacher à chaque métrique, événement et vérification de service émis par cette intégration.
+ ** *send_histograms_buckets* - envoyer les buckets d'histogrammes. Par défaut `true`.
+ ** *send_monotonic_counter* - définir à `true` pour convertir les compteurs en un taux (notez que deux exécutions sont nécessaires pour produire le premier résultat). Définir à `false` pour envoyer les compteurs en tant que compteur monotone. Par défaut `true`.
+ ** *exclude_labels* : liste des étiquettes à exclure.
+ ** *prometheus_timeout* : définir un délai d'attente pour la requête OpenMetrics.
+ ** *ssl_cert* : Si votre point de terminaison OpenMetrics est sécurisé, entrez le chemin vers le certificat et spécifiez la clé privée dans le paramètre `ssl_private_key`, ou donnez le chemin vers un fichier contenant à la fois le certificat et la clé privée.
+ ** *ssl_private_key* : requis si le certificat lié dans `ssl_cert` n'inclut pas la clé privée. Notez que la clé privée de votre certificat local doit être non chiffrée.
+ ** *ssl_ca_cert* : le chemin vers le CA de confiance utilisé pour générer des certificats personnalisés.
+ ** *extra_headers* : un dictionnaire mappant les noms d'en-tête HTTP à leurs valeurs correspondantes à envoyer dans les requêtes au point de terminaison OpenMetrics. Les valeurs peuvent inclure dynamiquement des variables d'environnement en utilisant la syntaxe `%%env_VARIABLE%%`. Par exemple, `"Authorization: Bearer %%env_TOKEN%%"` substitue automatiquement la valeur de la variable d'environnement `TOKEN`.
+. Attendez que l'Agent collecte les données depuis le point de terminaison OpenMetrics et les envoie à SUSE Observability.
+
+--
+====
+
+== Données collectées
+
+=== Métriques
+
+Par défaut, toutes les métriques sont récupérées depuis le point de terminaison OpenMetrics spécifié. Pour optimiser les performances, un maximum de 2000 métriques sera récupéré. Si la vérification tente de récupérer plus de 2000 métriques, ajoutez un filtre `metrics` à la <<_configuration,configuration>> pour garantir que toutes les métriques importantes peuvent être récupérées dans la limite.
+
+Les métriques récupérées ne seront pas automatiquement mappées aux éléments de topologie, mais elles peuvent être consultées à l'aide de l'xref:/use/metrics/k8sTs-explore-metrics.adoc[inspecteur de télémétrie] et éventuellement xref:/use/metrics/k8s-add-charts.adoc[ajoutées aux composants via une liaison de métrique].
+
+=== Événements
+
+L'intégration OpenMetrics ne récupère aucune donnée d'événements.
+
+=== Traces
+
+L'intégration OpenMetrics ne récupère pas de données de trace.

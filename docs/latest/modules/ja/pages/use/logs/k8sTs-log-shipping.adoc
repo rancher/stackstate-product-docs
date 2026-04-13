@@ -1,0 +1,28 @@
+= ログシッピング
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== エージェントのインストール
+
+=== OpenShift
+
+OpenShiftではサードパーティのログシッパーは容易にはサポートされていませんが、プラットフォームにはログ転送のオプションがあり、これはSUSE Observabilityのヘルムチャートに含まれるpromtail設定の代わりに使用されます。 これを構成する方法についての詳細な手順は、実行中のSUSE ObservabilityインスタンスのKubernetesスタックパックのドキュメントを参照してください。
+
+=== Kubernetes
+
+SUSE Observabilityのk8sエージェントヘルムチャートのデフォルト設定では、ヘルムチャートに供給された値を使用してログシッピングが有効に設定されています。
+
+[,yaml]
+----
+logsAgent:
+  # logsAgent.enabled -- Enable / disable k8s pod log collection
+  enabled: true
+----
+
+上記により、各ノードにpromtailコンテナがデプロイされ、ログを収集してSUSE Observabilityに送信することが保証されます。 SUSE Observabilityにログを送信することが望ましくないデプロイメントの場合は、上記の値を`false`に設定してください。
+
+=== 追加のPromtailポッドの起動
+
+SUSE Observabilityはログ取り込みのために調整された設定を使用しており、これは通常、補助的な要件と一致しません。 したがって、他の宛先エンドポイントへのログ取り込みのために別の設定を実行することはできません。代わりに、エージェントヘルムチャートによってデプロイされたpromtailとは別に、これらの要件に対処するために2つ目のpromtailポッドを起動することが推奨されます。

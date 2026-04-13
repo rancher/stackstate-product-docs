@@ -1,0 +1,215 @@
+= ストレージを設定します
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== ストレージのデフォルト
+
+SUSE Observabilityは、デフォルトでPVC（永続ボリュームクレーム）に特定のストレージクラスを指定しません。EKSやAKSのようなクラウドプロバイダーでは、デフォルトのストレージクラスが使用されます。
+
+これらのストレージクラスのデフォルトは、PVCが削除されるとPV（永続ボリューム）も削除されることが一般的です。ただし、`helm delete`を実行してStackStateリリースを削除しても、PVCはネームスペース内に残り、同じリリース名で同じネームスペースで`helm install`が実行されると再利用されます。
+
+PVCを削除するには、`kubectl delete pvc`を使用して手動で削除するか、ネームスペース全体を削除します。
+
+[NOTE]
+====
+SUSE Observabilityは、基盤となるストレージがフラッシュメモリ（SSD）または同等の性能であることを要求します。
+====
+[NOTE]
+====
+本番環境では、データの破損のリスクがあるため、NFSはSUSE Observabilityのストレージプロビジョニングには推奨されておらず、サポートされていません。
+====
+[NOTE]
+====
+疑問がある場合は、xref:/setup/install-stackstate/support-package-performance.adoc[パフォーマンススクリプト]を実行し、それをxref:/setup/install-stackstate/support-package-performance.adoc#_reference_performance[参照パフォーマンス]と比較することができます。
+====
+
+== ストレージをカスタマイズします
+
+Helmチャートの異なるボリュームに対して`storageClass`と`size`の設定をカスタマイズできます。これらの例値ファイルは、ストレージクラスやボリュームサイズを変更する方法を示しています。これらは、同時に両方を変更するためにマージできます。
+`size`については、インストールプロセス中に選択されたサイズプロファイルに応じて、`HA`と`NonHa`の両方のサンプルを提供します。
+
+[tabs]
+====
+ストレージクラスを変更します::
++
+--
+
+[,yaml]
+----
+global:
+  # The storage class for all of the persistent volumes
+  storageClass: "standard"
+----
+
+--
+
+HAのためのボリュームサイズを変更します::
++
+--
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    # Size of persistent volume for each clickhouse pod
+    size: 50Gi
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        # size of volume for each Elasticsearch pod
+        storage: 250Gi
+
+hbase:
+  hdfs:
+    datanode:
+      persistence:
+        # size of volume for HDFS data nodes
+        size: 250Gi
+
+    namenode:
+      persistence:
+        # size of volume for HDFS name nodes
+        size: 20Gi
+
+
+kafka:
+  persistence:
+    # size of persistent volume for each Kafka pod
+    size: 100Gi
+
+
+zookeeper:
+  persistence:
+    # size of persistent volume for each Zookeeper pod
+    size: 8Gi
+
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 250Gi
+victoria-metrics-1:
+  server:
+    persistentVolume:
+      size: 250Gi
+
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 2Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    state:
+      tmpToPVC:
+        volumeSize: 2Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    vmagent:
+      persistence:
+        size: 10Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 600Mi
+  stackpacks:
+    pvc:
+      size: 1Gi
+
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 1Gi
+minio:
+  persistence:
+    size: 500Gi
+----
+
+--
+Non-HAのボリュームサイズを変更します::
++
+--
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    # Size of persistent volume for each clickhouse pod
+    size: 50Gi
+
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        # size of volume for each Elasticsearch pod
+        storage: 250Gi
+
+hbase:
+  stackgraph:
+    persistence:
+      # Size of persistent volume for the single stackgraph hbase pod
+      size: 100Gi
+
+kafka:
+  persistence:
+    # size of persistent volume for each Kafka pod
+    size: 100Gi
+
+
+zookeeper:
+  persistence:
+    # size of persistent volume for each Zookeeper pod
+    size: 8Gi
+
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 50Gi
+
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 2Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    state:
+      tmpToPVC:
+        volumeSize: 2Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    vmagent:
+      persistence:
+        size: 10Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 600Mi
+  stackpacks:
+    localpvc:
+      size: 1Gi
+    pvc:
+      size: 1Gi
+
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 1Gi
+minio:
+  persistence:
+    size: 500Gi
+----
+
+--
+====
+
+[NOTE]
+====
+Non-HAの例は、100ノードを観察し、2週間データを保持することを目的とした最大のNon-HAインスタンスに属します。
+====

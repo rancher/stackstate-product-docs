@@ -1,0 +1,478 @@
+= 启用备份
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+[NOTE]
+====
+此页面适用于 {stackstate-product-name} v2.7.0 或更高版本。
+====
+
+== 概述
+
+{stackstate-product-name} 具有内置的备份机制，可以配置为将备份存储到 AWS S3、Azure Blob 存储或 Kubernetes 持久卷。
+
+大多数备份通过单个 Helm 值 `global.backup.enabled` 启用。设置备份始终启用，但根据以下值表现不同：
+
+=== 备份范围
+
+以下数据可以自动备份：
+
+* *设置*（StackPacks、监视器、视图、令牌）- 始终启用：
+** 当 `global.backup.enabled` 为 `true` 时：备份通过 MinIO 存储到您配置的存储后端
+** 当 `global.backup.enabled` 为 `false` 时：备份存储到专用的 Kubernetes 持久卷，绕过 MinIO
+* *拓扑数据和设置* 存储在 StackGraph 中 - 当 `global.backup.enabled` 为 `true` 时启用
+* *指标* 存储在 {stackstate-product-name} 的 Victoria Metrics 实例中 - 当 `global.backup.enabled` 为 `true` 时启用
+* *遥测数据* 存储在 {stackstate-product-name} 的 Elasticsearch 实例中 - 当 `global.backup.enabled` 为 `true` 时启用
+* *OpenTelemetry 数据* 存储在 {stackstate-product-name} 的 ClickHouse 实例中 - 当 `global.backup.enabled` 为 `true` 时启用
+
+=== 存储选项
+
+备份使用 https://min.io/[MinIO (min.io)] 作为与您的存储后端兼容的 S3 网关。当启用备份时，Helm 图表会自动部署 MinIO。
+
+内置的 MinIO 实例可以配置为在三个位置存储备份：
+
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[AWS S3]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Azure Blob 存储]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Kubernetes 存储]
+
+== 启用备份
+
+=== AWS S3
+
+[CAUTION]
+====
+
+*加密*
+
+在加密存储备份的 S3 存储桶时，应使用 Amazon S3 管理的密钥 (SSE-S3)。
+
+⚠️ 不支持使用存储在 AWS 密钥管理服务中的 AWS KMS 密钥进行加密 (SSE-KMS)。这将导致 Elasticsearch 日志中出现如下错误：
+
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)\",`
+====
+
+
+==== 使用单独的 S3 存储桶
+
+要启用定期备份到单独的 AWS S3 存储桶（每个数据存储一个），请将以下 YAML 片段添加到用于安装 `values.yaml` 的 Helm {stackstate-product-name} 文件中：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  stackGraph:
+    bucketName: AWS_STACKGRAPH_BUCKET
+  elasticsearch:
+    bucketName: AWS_ELASTICSEARCH_BUCKET
+  configuration:
+    bucketName: AWS_CONFIGURATION_BUCKET
+victoria-metrics-0:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+victoria-metrics-1:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+clickhouse:
+  backup:
+    bucketName: AWS_CLICKHOUSE_BUCKET
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+替换以下值：
+
+* `YOUR_ACCESS_KEY` 和 `YOUR_SECRET_KEY` 是用于保护 MinIO 系统的凭据。这些凭据在 MinIO 系统上设置，并由自动备份作业和恢复作业使用。如果您想手动访问 MinIO 系统，这些凭据也是必需的。
+ ** YOUR_ACCESS_KEY 应包含 5 到 20 个字母数字字符。
+ ** YOUR_SECRET_KEY 应包含 8 到 40 个字母数字字符。
+* `AWS_ACCESS_KEY` 和 `AWS_SECRET_KEY` 是具有访问存储备份的 S3 存储桶的 IAM 用户的 AWS 凭据。请参见下文需要附加到该用户的权限策略。
+* `AWS_*_BUCKET` 是应存储备份的 S3 存储桶名称。
++
+[Note]
+====
+AWS S3 存储桶的名称在整个 AWS 中是全局的。因此，具有默认名称（`sts-elasticsearch-backup`、`sts-configuration-backup`、`sts-stackgraph-backup`、`sts-victoria-metrics-backup` 和 `sts-clickhouse-backup`）的 S3 存储桶可能不可用。
+====
+
+==== 使用带前缀的单个 S3 存储桶
+
+您可以使用带有不同前缀的单个 S3 存储桶，而不是为每个数据存储使用单独的存储桶：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: BUCKET
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: BUCKET
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: BUCKET
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: clickhouse
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+将 `BUCKET` 替换为您的 S3 存储桶名称。不同数据存储的备份使用配置的 `s3Prefix` 值进行组织。前一节中的相同 `YOUR_ACCESS_KEY`、`YOUR_SECRET_KEY`、`AWS_ACCESS_KEY` 和 `AWS_SECRET_KEY` 值适用于此。
+
+=== AWS S3 权限
+
+由`AWS_ACCESS_KEY`和`AWS_SECRET_KEY`标识的 IAM 用户必须配置以下权限策略以访问 S3 存储桶：
+
+[,javascript]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowListMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        },
+        {
+            "Sid": "AllowWriteMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET/*",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET/*",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET/*",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET/*",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        }
+    ]
+}
+----
+
+=== Azure Blob 存储
+
+==== 使用单独的容器
+
+要启用对单独 Azure Blob 存储容器（每个数据存储一个）的备份，请将以下 YAML 片段添加到用于安装 `values.yaml` 的 Helm {stackstate-product-name} 文件中：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+替换以下值：
+
+* `AZURE_STORAGE_ACCOUNT_NAME` - https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[Azure 存储帐户名称 (learn.microsoft.com)]
+* `AZURE_STORAGE_ACCOUNT_KEY` - https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[Azure 存储帐户密钥 (learn.microsoft.com)]，备份将存储在此处。
+
+StackGraph、Elasticsearch、Victoria Metrics 和 ClickHouse 的备份分别存储在名为`sts-stackgraph-backup`、`sts-configuration-backup`、`sts-elasticsearch-backup`、`sts-victoria-metrics-backup`、`sts-clickhouse-backup`的 BLOB 容器中。通过分别设置 Helm 值 `backup.stackGraph.bucketName`、`backup.elasticsearch.bucketName`、`victoria-metrics-0.backup.bucketName`、`victoria-metrics-1.backup.bucketName` 和 `clickhouse.backup.bucketName`，可以更改这些名称。
+
+==== 使用带前缀的单个容器
+
+您可以使用一个带有不同前缀的 Azure Blob 存储容器，而不是为每个数据存储使用单独的容器：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: CONTAINER
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: CONTAINER
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: CONTAINER
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: clickhouse
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+将 `CONTAINER` 替换为您的 Azure Blob 存储容器名称。不同数据存储的备份将使用配置的 `s3Prefix` 值进行组织。前一节中的相同 `AZURE_STORAGE_ACCOUNT_NAME` 和 `AZURE_STORAGE_ACCOUNT_KEY` 值适用于此。
+
+=== Kubernetes 持久卷
+
+[CAUTION]
+====
+使用 Kubernetes 持久卷进行备份有显著的限制：
+
+* 昂贵 - 云服务提供商通常使用块存储（EBS/Azure 块），这对于大型备份来说成本高昂。
+* 无灾难恢复 - 如果集群被删除，PV 将被销毁。
+* 不可移植 - 无法将备份恢复到不同的集群。
+
+**建议：**在生产环境中使用 AWS S3 或 Azure Blob 存储。
+====
+
+==== 基本配置
+
+要启用对集群本地存储的备份，请通过将以下 YAML 片段添加到用于安装 `values.yaml` 的 Helm {stackstate-product-name} 文件中来启用 MinIO：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+可以替换以下值：
+
+* `YOUR_ACCESS_KEY` 和 `YOUR_SECRET_KEY` - 将用于保护 MinIO 系统的凭据。自动备份作业和恢复作业将使用它们。它们也是手动访问 MinIO 存储所必需的。`YOUR_ACCESS_KEY` 应包含 5 到 20 个字母数字字符，`YOUR_SECRET_KEY` 应包含 8 到 40 个字母数字字符。
+
+== 配置和拓扑数据（StackGraph）
+
+配置和拓扑数据（StackGraph）备份是完整备份，存储在扩展名为 `.graph` 的单个文件中。每个文件包含一个完整的备份，可以根据需要移动、复制或删除。
+
+=== 备份计划
+
+默认情况下，StackGraph 备份每天在服务器时间的凌晨 03:00 创建。
+
+备份计划可以使用 Helm 值 `backup.stackGraph.scheduled.schedule` 配置，该值在 https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[Kubernetes cron 调度语法 (kubernetes.io)] 中指定。
+
+=== 备份保留
+
+默认情况下，StackGraph 备份保留 30 天。由于 StackGraph 备份是完整备份，这可能需要大量存储。
+
+备份保留增量可以使用 Helm 值 `backup.stackGraph.scheduled.backupRetentionTimeDelta` 配置，格式为 GNU 日期 `--date` 参数。默认值为 `30 days ago`。有关更多示例，请参见 https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[日期字符串中的相对项]。
+
+=== 禁用计划备份
+
+要禁用计划的 StackGraph 备份，请使用 Helm 值 `backup.stackGraph.scheduled.schedule` 将备份计划设置为一个很久以前的日期：
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== 设置
+
+设置（之前的配置）包括已安装的 StackPacks 实例及其配置和用户创建的其他自定义内容，例如监视器、自定义视图和服务令牌。
+
+设置备份是轻量级的（通常只有几兆字节），并且可以快速恢复，停机时间最小。在恢复设置备份后，新数据将像以前一样处理，重新创建拓扑、健康状态和警报。然而，拓扑历史（包括健康状态）在设置备份中不会被保留 - 为此，请使用上述描述的 StackGraph 备份。
+
+[NOTE]
+====
+*设置备份始终启用*，无论 `global.backup.enabled` 值如何：
+
+* 当 `global.backup.enabled` 为 `true` 时：设置备份通过 MinIO 存储到您配置的存储后端（AWS S3、Azure Blob 存储或 Kubernetes 持久卷）
+* 当 `global.backup.enabled` 为 `false` 时：设置备份存储到专用的 Kubernetes 持久卷，绕过 MinIO
+====
+
+=== 备份计划
+
+默认情况下，设置备份每天在服务器时间凌晨 04:00 创建。
+
+备份计划可以使用 Helm 值 `backup.configuration.scheduled.schedule` 配置，该值在 https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[Kubernetes cron 调度语法 (kubernetes.io)] 中指定。
+
+=== 备份保留
+
+备份保留取决于 `global.backup.enabled` 设置：
+
+**当 `global.backup.enabled` 为 `true`**（通过 MinIO 存储的备份）：
+
+* 默认情况下，设置备份保留 365 天。
+* 使用 `backup.configuration.scheduled.backupRetentionTimeDelta` 配置保留时间 - 以 GNU 日期 `--date` 参数的格式指定。默认值为 `365 days ago`
+
+**当 `global.backup.enabled` 为 `false`**（存储到专用持久卷的备份）：
+
+* 默认情况下，最后 10 个备份文件保留在持久卷上
+* 使用 `backup.configuration.maxLocalFiles` 配置最大文件数（默认：`10`）
+* 使用 `backup.configuration.scheduled.pvc.size` 配置持久卷大小（默认：`1Gi`）
+
+专用持久卷存储的示例配置：
+
+[,yaml]
+----
+backup:
+  configuration:
+    maxLocalFiles: 10
+    scheduled:
+      pvc:
+        size: '1Gi'
+----
+
+=== 禁用计划备份
+
+要禁用计划的设置备份，请使用 Helm 值 `backup.configuration.scheduled.schedule` 将备份计划设置为一个很久以前的日期：
+
+[,yaml]
+----
+backup:
+  configuration:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== 指标（Victoria Metrics）
+
+Victoria Metrics 通过对当前指标数据进行快照并仅存储自上次备份以来的更改（增量方法）来创建备份。
+
+[WARNING]
+====
+*备份版本限制*
+
+Victoria Metrics 的备份每次新备份运行时会替换之前的备份。这意味着您只能访问到 *最新备份*，而无法查看多个备份版本的历史记录。
+
+**重要**：如果备份失败或数据损坏，您之前的备份数据可能会丢失。仅最新的成功备份可用于恢复。
+
+**例外**：如果 Victoria Metrics 持久卷被清空或重置（例如，`/storage` 目录被挂载为空或删除），系统将检测到这一点并自动创建一个新的备份系列。在这种情况下，旧备份（重置前）和新备份将被保留并可用于恢复。
+====
+
+[NOTE]
+====
+*高可用性部署*
+
+高可用性部署使用两个 Victoria Metrics 实例（`victoria-metrics-0` 和 `victoria-metrics-1`）。每个实例的备份配置是独立的。
+====
+
+=== 备份计划
+
+Victoria Metrics 的备份每小时创建一次：
+
+* `victoria-metrics-0` - 每小时的第25分钟
+* `victoria-metrics-1` - 每小时的第35分钟
+
+=== 禁用计划备份
+
+要禁用计划的 Victoria Metrics 备份，请将两个实例的备份计划设置为一个很久以前的日期：
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== OpenTelemetry（ClickHouse）
+
+ClickHouse 使用增量备份和全量备份。旧备份根据配置的保留策略被删除。
+
+=== 备份计划
+
+ClickHouse 的备份创建时间为：
+
+* 完整备份 - 每天00:45
+* 增量备份 - 每小时的第45分钟（从凌晨3点到午夜12点）
+
+=== 备份保留
+
+默认情况下，工具保留最后308个备份（完整和增量），相当于约14天。
+
+备份保留可以使用 Helm 值 `clickhouse.backup.config.keep_remote` 进行配置。
+
+=== 禁用计划备份
+
+要禁用计划的 ClickHouse 备份，请将完整和增量备份的计划设置为一个很久以前的日期：
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== 遥测数据（Elasticsearch）
+
+Elasticsearch快照是增量的。
+
+=== 快照计划
+
+Elasticsearch快照每天在服务器时间03:00创建。
+
+=== 快照保留
+
+默认情况下，Elasticsearch快照保留30天，最少保留5个快照，最多保留30个快照。
+
+保留时间和保留的快照数量可以使用以下Helm值进行配置：
+
+* `backup.elasticsearch.scheduled.snapshotRetentionExpireAfter`，在https://www.elastic.co/guide/en/elasticsearch/reference/7.6/common-options.html#_time_units[Elasticsearch 时间单位（elastic.co）]中指定。
+* `backup.elasticsearch.scheduled.snapshotRetentionMinCount`
+* `backup.elasticsearch.scheduled.snapshotRetentionMaxCount`
+
+=== 禁用计划快照
+
+要禁用计划的 Elasticsearch 快照，请使用 Helm 值 `backup.elasticsearch.scheduled.schedule` 将快照计划设置为一个很久以前的日期：
+
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----

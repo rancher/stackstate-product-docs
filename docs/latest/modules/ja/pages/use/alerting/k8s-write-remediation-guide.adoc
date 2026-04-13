@@ -1,0 +1,100 @@
+= ユーザーが問題をトラブルシューティングできるよう支援する修正ガイドを作成してください。
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+SUSE Observabilityはxref:/use/alerting/k8s-monitors.adoc[標準で監視機能を提供]しており、Kubernetesクラスターで発生しうる一般的な問題の監視を行います。これらのモニターには、ユーザーが問題を正確にトラブルシューティングするための修正ガイドも標準で含まれています。これらはベストプラクティスとコミュニティの知識を基に作成されています。このページの指示に従って、効果的な修正ガイドを自分で作成する方法を学んでください。
+
+== ガイドライン
+
+* ユーザーがモニターによって検出された問題を解決するための手順を提供してください。
+* 指示は最も可能性の高い原因から順に並べてください。
+* 可能であれば、調査を迅速化するために関連データやリソースへのリンクを含めてください。
+* 短く要点を押さえてください。
+ ** 過剰な説明は避け、必要に応じてサポート文書へのリンクを追加してください。
+ ** 目次や同様のコンテンツブロックの使用は避けてください。
+ ** 同じ内容の要約を避けてください。
+* ガイドを構造的にフォーマットするようにしてください。使用する：
+ ** 箇条書き
+ ** 番号付け
+ ** 短い文
+ ** 段落
+ ** インラインフォーマットされた例
+* 未解決の問題がある場合（異なる原因がまだ不明な場合もあります）、問題をエスカレーションするためのガイダンスを提供してください。例えば、ユーザーにサポートリンクや番号などを提供してください。
+
+== 修正ガイドの例
+
+----
+When a Kubernetes container has errors, it can enter into a state called CrashLoopBackOff, where Kubernetes attempts to restart the container to resolve the issue. The container will continue to restart until the problem is resolved.Take the following steps to diagnose the problem:
+
+### Pod Events
+
+Check the pod events to identify any explicit errors or warnings.
+1. Go to the "Events" section in the middle of the [Pod highlight page](/#/components/\{{ componentUrnForUrl \}})
+2. Check if there is are events like "BackOff", "FailedScheduling", "FailedAttachVolume" or "OOMKilled" in the Alert Category by clicking on 'Alerts'.
+3. You can see the details of the event (click on the event) to give more information about the issue.
+4. If the 'Show related event' option is enabled all events of resources related to this resource like a deployment will also show up and can give you a clue if any change on them is causing this issue. You can see this by checking if there is a correlation between the time of a deployment and a change of behaviour seen by the metrics and events of this pod.
+For easy correlation you can use 'shift'-'click' to add markers to the different graph, log and event widgets.
+
+### Container Logs
+Check the container logs for any explicit errors or warnings
+Inspect the [Logs](/#/components/\{{ componentUrnForUrl \}}#logs) of all the containers in this pod.
+Search for hints in the logs by:
+1.  Looking for changes in logging pattern, by looking at the number of logs per time unit (The histogram bars).
+    In many cases the change in pattern will indicate what is going on.
+    You can click-drag on the histogram bars to narrow the logs displayed to that time-frame.
+2.  Searching for "Error" or "Fatal" in the search bar.
+3.  Looking at the logs around the time that the monitor triggered
+
+### Recent Changes
+Look at the pod age in the "About" section on the [Pod highlight page](/#/components/\{{ componentUrnForUrl \}}) to identify any recent deployments that might have caused the issue
+1. The "Age" is shown in the "About" section on the left side of the screen
+2. If the "Age" and the time that the monitor was triggered are in close proximity then take a look at the most recent deployment by clicking on [Show last change](/#/components/\{{ componentUrnForUrl \}}#lastChange).
+----
+
+== リンクの挿入
+
+私たちが使用する構文は、「ディープリンク」と「ページ内リンク」で異なります。「ディープリンク」は現在のページからユーザーをリダイレクトしますが、「ページ内リンク」はユーザーを同じページに留まらせます。
+
+=== ディープリンク
+
+現在のリソースの任意の視点（例：「ハイライト」、「トポロジー」、「イベント」、「メトリクス」）にリンクするには、次の構文を使用してください：
+
+----
+[highlight page](/#/components/\{{ componentUrnForUrl \}})
+----
+
+----
+[topology](/#/components/{{ componentUrnForUrl }}/topology)
+----
+
+----
+[events](/#/components/{{ componentUrnForUrl }}/events)
+----
+
+----
+[metrics](/#/components/{{ componentUrnForUrl }}/metrics)
+----
+
+=== ページ内リンク
+
+現在のリソースに関する追加データ（例：「ログを表示」、「最終変更を表示」、「ステータスを表示」、「設定を表示」）にリンクするには、次の構文を使用してください：
+
+----
+[logs](/#/components/\{{ componentUrnForUrl \}}#logs)
+----
+
+----
+[last change](/#/components/\{{ componentUrnForUrl \}}#lastChange)
+----
+
+----
+[status](/#/components/\{{ componentUrnForUrl \}}#status)
+----
+
+----
+[configuration](/#/components/\{{ componentUrnForUrl \}}#configuration)
+----

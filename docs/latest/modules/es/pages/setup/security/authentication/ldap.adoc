@@ -1,0 +1,154 @@
+= LDAP
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+SUSE Observability puede utilizar un servidor LDAP (incluido AD) para autenticar contra él y obtener roles/grupos. Se requiere un servidor LDAP en funcionamiento que sea accesible para SUSE Observability.
+
+El directorio principal de LDAP y todos los subdirectorios se comprobarán en busca de archivos de usuario. Las credenciales de enlace en la configuración de SUSE Observability se utilizan para autenticar SUSE Observability en el servidor LDAP. Después de la autenticación, SUSE Observability pasa el nombre del directorio LDAP principal para el usuario que desea iniciar sesión en SUSE Observability.
+
+== Configurar SUSE Observability para LDAP
+
+=== Kubernetes
+
+Para configurar SUSE Observability para autenticar utilizando un servidor de autenticación LDAP en Kubernetes, se deben añadir los detalles de LDAP y el mapeo de roles de usuario al archivo `authentication.yaml`. Por ejemplo:
+
+[tabs]
+====
+authentication.yaml::
++
+--
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    ldap:
+      host: sts-ldap
+      port: 10389 # For most LDAP servers 389 for plain, 636 for ssl connections
+      #ssl:
+      #  sslType: ssl
+      #  trustStore: <see below>
+      #  trustCertificates <see below>
+      bind:
+        dn: "cn=admin,ou=employees,dc=acme,dc=com"
+        password: "password"
+      userQuery:
+        parameters:
+          - ou: employees
+          - dc: acme
+          - dc: com
+        usernameKey: cn
+        emailKey: mail
+      groupQuery:
+        parameters:
+          - ou: groups
+          - dc: acme
+          - dc: com
+        rolesKey: cn
+        groupMemberKey: member
+        # to return all nested groups, use:
+        # groupMemberKey: "member:1.2.840.113556.1.4.1941:"
+
+    # map the groups from LDAP to the
+    # standard subjects in SUSE Observability (guest, powerUser and admin)
+    roles:
+      guest: ["ldap-guest-role-for-stackstate"]
+      powerUser: ["ldap-power-user-role-for-stackstate"]
+      admin: ["ldap-admin-role-for-stackstate"]
+----
+
+--
+====
+
+Sigue los pasos a continuación para configurar SUSE Observability para autenticar utilizando LDAP:
+
+. En `authentication.yaml` - añade los detalles de LDAP (ver el ejemplo anterior):
+ ** *host* - El nombre del host del servidor LDAP.
+ ** *port* - El puerto en el que escucha el servidor LDAP.
+ ** *sslType* - Opcional. El tipo de conexión segura LDAP `ssl` o `startTls`. Omitir si se utiliza una conexión LDAP sin cifrado.
+ ** *trustCertificates* - Opcional, archivo de certificado para SSL. Se admiten los formatos PEM, DER y PKCS7.
+ ** *trustStore* - Opcional, archivo de almacén de confianza de Java para SSL. Si se especifican tanto `trustCertificates` como `trustStore`, `trustCertificatesPath` tiene prioridad.
+ ** *bind* - Opcional, utilizado para autenticar SUSE Observability en el servidor LDAP si el servidor LDAP no admite búsquedas LDAP anónimas.
+ ** *parámetros de userQuery y de groupQuery* - El conjunto de parámetros dentro corresponde al dn base de tu LDAP donde se pueden encontrar usuarios y grupos. El primero se utiliza para autenticar usuarios en SUSE Observability, mientras que el segundo se utiliza para recuperar el grupo de ese usuario para determinar si el usuario es un Administrador, Usuario Avanzado o un Invitado.
+ ** *usernameKey* - El nombre del atributo que almacena el nombre de usuario, el valor se compara con el nombre de usuario proporcionado en la pantalla de inicio de sesión.
+ ** *emailKey* - El nombre del atributo que se utiliza como dirección de correo electrónico en SUSE Observability.
+ ** *rolesKey* - El nombre del atributo que almacena el nombre del grupo.
+ ** *groupMemberKey* - El nombre del atributo que indica si un usuario es miembro de un grupo. El filtro LDAP construido sigue este patrón: `<groupMemberKey>=<user.dn>,ou=groups,dc=acme,dc=com`. Para devolver todos los grupos anidados, utiliza `groupMemberKey: "member:1.2.840.113556.1.4.1941:"`.
+. En `authentication.yaml` - asigna los roles de usuario de LDAP a los sujetos correctos de SUSE Observability (ver el ejemplo anterior):
+ ** *roles* - para más detalles, consulta los xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[roles predeterminados de SUSE Observability]. También se pueden crear más roles de SUSE Observability, consulta la xref:/setup/security/rbac/README.adoc[documentación de RBAC].
+. Almacena el archivo `authentication.yaml` junto con el `values.yaml` de las instrucciones de instalación de SUSE Observability.
+. Ejecuta una actualización de versión de Helm para aplicar los cambios. Si estás utilizando SSL con certificados personalizados, los archivos de certificado binarios que deben utilizarse al conectarse a LDAP deben establecerse desde la línea de comandos, utiliza el comando bajo *SSL con certificados personalizados*:
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values authentication.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+*trustCertificates*
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values authentication.yaml \
+  --set-file stackstate.authentication.ldap.ssl.trustCertificates=./ldap-certificate.pem \
+suse-observability \
+suse-observability/suse-observability
+----
+
+*trustStore*
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values authentication.yaml \
+  --set-file stackstate.authentication.ldap.ssl.trustStore=./ldap-cacerts \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*Nota:*
+
+* La primera ejecución del comando de actualizar versión de Helm resultará en el reinicio de pods, lo que puede causar una breve interrupción de la disponibilidad.
+* Incluye `authentication.yaml` en cada ejecución de `helm upgrade`.
+* La configuración de autenticación se almacena como un secreto de Kubernetes.
+====
+
+
+=== Usando un secreto externo
+
+Cuando la contraseña ldap debe provenir de un secreto externo, sigue xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[estos pasos] pero completa los siguientes datos:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  ldap_password: <base64 of ldap password>
+----
+
+== Consulte también
+
+* xref:/setup/security/authentication/authentication_options.adoc[Opciones de autenticación]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permisos para los roles predefinidos de SUSE Observability]
+* xref:/setup/security/rbac/rbac_roles.adoc[Crear roles RBAC]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[Secretos Externos]

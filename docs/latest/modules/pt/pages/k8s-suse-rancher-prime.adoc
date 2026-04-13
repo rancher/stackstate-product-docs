@@ -1,0 +1,545 @@
+= {stackstate-product-name}
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-25
+:page-revdate: {revdate}
+:description: {stackstate-product-name}
+
+== Introdução
+
+{stackstate-product-name}, anteriormente conhecido como StackState, pode ser usado para observabilidade de seus clusters Kubernetes e suas cargas de trabalho.
+
+A instalação do {stackstate-product-name}, da extensão de interface do usuário {stackstate-product-name} e dos Agentes {stackstate-product-name} leva cerca de 30 minutos no total.
+
+== Obtendo ajuda
+
+Para suporte, por favor, registre um caso de suporte no https://scc.suse.com/[SUSE Customer Center (SCC)].
+
+== Pré-requisitos
+
+=== Chave de licença
+
+Uma chave de licença para o servidor {stackstate-product-name} pode ser obtida através do SUSE Customer Center na aba de assinatura e será exibida como "{stackstate-product-name}" Código de Registro. Esta licença é válida até o final da sua assinatura do Rancher Prime.
+
+=== Requisitos
+
+Para instalar o {stackstate-product-name}, certifique-se de que o cluster tenha capacidade suficiente de CPU e memória. Abaixo estão os requisitos específicos.
+
+Existem diferentes opções de instalação disponíveis para o {stackstate-product-name}. É possível instalar o {stackstate-product-name} tanto em uma configuração de Alta Disponibilidade (HA) quanto em uma instância única (não-HA). A configuração não-HA é recomendada para fins de teste ou ambientes pequenos. Para ambientes de produção, é recomendado instalar o {stackstate-product-name} em uma configuração HA.
+
+A configuração de produção HA pode suportar de 150 até 4000 nós observados. Um nó observado nesta tabela de dimensionamento é considerado como 4 vCPUs e 16GB de memória, nosso `default node size`.
+Se os nós em seu cluster observado forem maiores, eles podem contar como múltiplos `default nodes`, então um nó de 12vCPU e 48GB conta como 3 `default nodes` sob observação ao escolher um perfil.
+A configuração não-HA pode suportar até 100 `default nodes` sob observação.
+
+
+A tabela a seguir descreve os recursos necessários para implantar o servidor {stackstate-product-name} em um cluster, dada a quantidade de `default nodes` que será observada e se a instalação deve ser HA ou não.
+
+|===
+|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *Solicitações de CPU (núcleos)*
+| 6.945
+| 6.945
+| 9.245
+| 13.945
+| 23.545
+| 49.245
+| 61.245
+| 84.745
+| 210.05
+
+| *Limites de CPU (núcleos)*
+| 15.02
+| 15.02
+| 19.32
+| 28.72
+| 47.87
+| 104
+| 127
+| 175.38
+| 278.95
+
+| *Requisições de Memória*
+| 23180Mi
+| 23180Mi
+| 27056Mi
+| 31582Mi
+| 48088Mi
+| 129958Mi
+| 142426Mi
+| 161106Mi
+| 264330Mi
+
+| *Limites de Memória*
+| 23718Mi
+| 23718Mi
+| 27708Mi
+| 31614Mi
+| 48120Mi
+| 134762Mi
+| 147030Mi
+| 165910Mi
+| 327550Mi
+
+| *Armazenamento*
+| 153613Mi
+| 338957Mi
+| 379917Mi
+| 482317Mi
+| 533517Mi
+| 2654430Mi
+| 2756950Mi
+| 3678260Mi
+| 7159862Mi
+|===
+
+NOTE: É necessário um adicional de 20% de recursos para distribuição desigual de pods, plano de controle e instalações de agentes.
+
+[NOTE]
+====
+O requisito mostrado para o arquivo de controle representa a quantidade total de recursos necessários para executar o servidor {stackstate-product-name}.
+Para garantir que todos os diferentes serviços do servidor SUSE Observability possam ser alocados:
+
+* Para instalações non-HA, o tamanho mínimo por nó é 4 vCPU, 8 GB
+* Para instalações HA de até 500 nós, o tamanho mínimo por nó é 8 vCPU, 16 GB
+* Para instalações HA de 4000 nós, o tamanho mínimo por nó é 16 vCPU, 32 GB
+====
+
+
+[NOTE]
+====
+Uma configuração trial é uma configuração de 10-nonha, configurada com uma retenção de 3 dias e requisitos menores de espaço em disco.
+====
+
+
+Esses são apenas os limites superior e inferior dos recursos que podem ser consumidos pelo {stackstate-product-name} nas diferentes opções de instalação. O uso real de recursos dependerá das funcionalidades utilizadas, limites de recursos configurados e padrões de uso dinâmico, como escalonamento de Deployment ou DaemonSet. Para nossos clientes do Rancher Prime, recomendamos começar com os requisitos padrão e monitorar o uso de recursos dos componentes {stackstate-product-name}.
+
+[NOTE]
+====
+Os requisitos mínimos não incluem capacidade de CPU/Memória reserva para garantir atualizações contínuas suaves da aplicação.
+====
+
+
+=== Armazenamento
+
+{stackstate-product-name} utiliza solicitações de volume persistente para os serviços que precisam armazenar dados. A classe de armazenamento padrão para o cluster será utilizada para todos os serviços, a menos que isso seja substituído por valores especificados na linha de comando ou em um arquivo `values.yaml`. Todos os serviços vêm com um tamanho de volume pré-configurado que deve ser bom para você começar, mas pode ser personalizado mais tarde usando variáveis conforme necessário.
+
+[NOTE]
+====
+{stackstate-product-name} requer que o armazenamento subjacente seja baseado em memória flash (SSD) ou similar em desempenho.
+====
+
+[NOTE]
+====
+Para ambientes de produção, NFS não é recomendado e suportado para provisionamento de armazenamento em {stackstate-product-name} devido ao risco potencial de corrupção de dados.
+====
+
+
+Para nossos diferentes arquivos de controle de instalação, os seguintes são os requisitos de armazenamento padrão:
+
+|===
+|  | trial | 10 non-HA | 20 non-HA | 50 non-HA | 100 non-HA | 150 HA | 250 HA | 500 HA | 4000 HA
+
+| *Retenção (dias)*
+| 3
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+| 30
+
+| *Requisito de armazenamento*
+| 125 GB
+| 280GB
+| 420 GB
+| 420 GB
+| 600 GB
+| 2TB
+| 2TB
+| 2,5 TB
+| 5,5 TB
+|===
+
+Para mais detalhes sobre os padrões utilizados, veja a página xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Configurar armazenamento].
+
+=== Helm
+
+{stackstate-product-name} é instalado através do Helm, que precisa ser instalado com uma versão mínima de 3.13.1.
+
+=== Os diferentes componentes
+
+==== {stackstate-product-name} Servidor
+
+Esta é a parte do servidor hospedado localmente da instalação. Ele contém um conjunto de serviços para armazenar dados de observabilidade:
+
+* Topologia (StackGraph)
+* Métricas (VictoriaMetrics)
+* Rastreamentos (ClickHouse)
+* Logs (ElasticSearch)
+
+Além disso, contém um conjunto de serviços para todas as tarefas de observabilidade, por exemplo, Notificações, Gerenciamento de estado, Monitoramento, etc.
+
+==== {stackstate-product-name} Agente
+
+O agente leve {stackstate-product-name} é instalado em seus nós worker downstream. Ele coleta e relata métricas, eventos, rastreamentos e logs, e fornece observabilidade e insights em tempo real, permitindo monitoramento proativo e solução de problemas do seu ambiente de TI.
+
+A versão {stackstate-product-name} do Agente também usa eBPF como uma maneira leve de monitorar todas as suas cargas de trabalho e sua comunicação. Ele também decodifica os sinais RED (Taxa, Erros e Duração) para a maioria dos protocolos L7 comuns, como TCP, HTTP, TLS, Redis, etc.
+
+==== Rancher Prime - Extensão da UI de Observabilidade
+
+Esta é uma extensão da UI para o Rancher Manager que integra os sinais de saúde observados pelo {stackstate-product-name}. Ele dá acesso direto à saúde de qualquer recurso e um link para a UI do {stackstate-product-name} para investigação adicional.
+
+=== Onde instalar o servidor {stackstate-product-name}
+
+O servidor {stackstate-product-name} deve ser instalado em seu próprio cluster downstream destinado à Observabilidade. Veja a imagem abaixo como referência.
+
+Para que o {stackstate-product-name} funcione corretamente, ele precisa:
+
+* https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/manage-clusters/create-kubernetes-persistent-storage[Armazenamento Persistente do Kubernetes] estar disponível no cluster de observabilidade para armazenar métricas, eventos, etc.
+* o cluster de observabilidade deve suportar uma maneira de expor o {stackstate-product-name} em uma URL HTTPS para Rancher, usuários do {stackstate-product-name} e o agente {stackstate-product-name}. Isso pode ser feito por meio de uma configuração de Ingress usando um controlador de ingress, alternativamente, um balanceador de carga (em nuvem) para os serviços {stackstate-product-name} também poderia fazer isso, para mais informações veja a https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/kubernetes-resources-setup/load-balancer-and-ingress-controller[documentação do Rancher].
+
+image::k8s/prime/SUSEObservabilityDeployment.png[Arquitetura]
+
+=== Pré-instalação
+
+Antes de instalar o servidor {stackstate-product-name}, uma classe de armazenamento padrão deve ser configurada no cluster onde o servidor {stackstate-product-name} será instalado:
+
+* *Para k3s*: A classe de armazenamento local-path do tipo rancher.io/local-path é criada por padrão.
+* *Para EKS, AKS, GKE* uma classe de armazenamento é definida por padrão.
+* *Para Drivers de Nó RKE2*: Nenhuma classe de armazenamento é criada por padrão. Você precisará criar uma antes de instalar {stackstate-product-name}.
+
+== Instalando {stackstate-product-name}
+
+[NOTE]
+====
+*Bom saber*
+
+Se você criou o cluster usando o Rancher Manager e gostaria de executar os comandos de provisionamento abaixo a partir de um terminal local em vez do terminal web, basta copiar ou baixar o kubeconfig do painel do cluster, veja a imagem abaixo, e colá-lo (ou colocar o arquivo baixado) em um arquivo que você possa encontrar facilmente, por exemplo, ~/.kube/config-rancher e definir a variável de ambiente KUBECONFIG=$HOME/.kube/config-rancher
+====
+
+
+image::k8s/prime/rancher_cluster_dashboard.png[Rancher]
+
+Após atender aos pré-requisitos, você pode prosseguir com a instalação. A instalação ainda NÃO ESTÁ DISPONÍVEL na loja de aplicativos. Em vez disso, você pode instalar {stackstate-product-name} via o shell kubectl do cluster.
+
+Agora você pode seguir as instruções abaixo para uma configuração HA ou NÃO-HA.
+
+[NOTE]
+====
+Esteja ciente de que a atualização ou downgrade de HA para NÃO-HA e vice-versa ainda não é suportado.
+====
+
+
+=== Instalação
+
+. Obtenha o Helm chart
++
+.helm_repo.sh
+[,text]
+----
+helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+helm repo update
+----
+
+. Crie a configuração e implante
++
+[tabs]
+====
+Método recomendado::
++
+--
+[NOTE]
+=====
+O método de configuração `global.suseObservability` está disponível a partir da versão `2.8.0`. Para versões anteriores, use o método legado.
+=====
+
+Crie um arquivo `values.yaml` com sua configuração:
+
+[source,yaml]
+----
+global:
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
+
+  suseObservability:
+    # Required: Your {stackstate-product-name} license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    # Required: Plain text Admin password
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password with adminPasswordBcrypt
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    # receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Affinity for pod scheduling (see affinity documentation)
+    # affinity:
+    #   nodeAffinity: ...
+    #   podAntiAffinity:
+    #     requiredDuringSchedulingIgnoredDuringExecution: true
+----
+
+O `baseUrl` deve ser a URL pela qual {stackstate-product-name} será acessível ao Rancher, usuários e ao agente {stackstate-product-name}. A URL deve incluir o esquema, por exemplo `https://observability.internal.mycompany.com`. Veja também <<_accessing_suse_observability,acessando {stackstate-product-name}>>.
+
+O `sizing.profile` deve ser um dos seguintes: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha, 150-ha, 250-ha, 500-ha, 4000-ha. Com base neste perfil, os recursos e a configuração são aplicados automaticamente para o modo HA ou não-HA. Atualmente, não é possível mover de um ambiente não-HA para um ambiente HA, então, se você espera que seu ambiente exija a observação de cerca de 150 nós, selecione um perfil HA imediatamente.
+
+Implante com um único comando:
+
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
+
+Alternativamente, implante diretamente usando as flags `--set` sem um arquivo de valores:
+
+[,bash]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+    --set global.suseObservability.baseUrl="https://observability.example.com" \
+    --set global.suseObservability.sizing.profile="150-ha" \
+    --set global.suseObservability.adminPassword='$2a$10$...' \
+    suse-observability \
+    suse-observability/suse-observability
+----
+
+[WARNING]
+=====
+Usar uma única senha padrão é ótimo para começar com {stackstate-product-name}, mas para uma configuração de produção, opções de autenticação xref:/setup/security/authentication/authentication_options.adoc[mais seguras] estão disponíveis.
+=====
+
+[NOTE]
+=====
+Para opções de configuração de afinidade, consulte xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configurar Afinidades do Kubernetes].
+=====
+--
+Método legado (Descontinuado)::
++
+--
+[WARNING]
+=====
+Este método está descontinuado. Para novas instalações, use o método recomendado acima. Para instalações existentes que utilizam este método, consulte o xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[guia de migração] para transitar para o novo formato de configuração.
+=====
+
+Gere arquivos de valores do helm chart:
+
+.helm_template.sh
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set rancherUrl='<rancher-prime-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+O `baseUrl` deve ser a URL pela qual {stackstate-product-name} será acessível ao Rancher, usuários e ao agente {stackstate-product-name}. A URL deve incluir o esquema, por exemplo `https://observability.internal.mycompany.com`. Veja também <<_accessing_suse_observability,acessando {stackstate-product-name}>>.
+
+Para ver informações de saúde no Rancher usando a extensão da interface do usuário, defina o valor `rancherUrl` para a URL do Rancher (para ser preciso, sua Origem).
+
+Este comando gera os arquivos `$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`, `$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml` e `$VALUES_DIR/suse-observability-values/templates/affinity_values.yaml` contendo a configuração necessária para instalar o Helm Chart {stackstate-product-name}.
+
+[NOTE]
+=====
+A senha do administrador {stackstate-product-name} será gerada automaticamente pelo comando acima e será exibida como comentários no arquivo `basicConfig.yaml` gerado. Para mais informações, consulte xref:/setup/security/authentication/single_password.adoc[senha única].
+Os valores reais contêm os hashes `bcrypt` dessas senhas para que sejam armazenados de forma segura na liberação do Helm no cluster.
+=====
+
+[WARNING]
+=====
+Usar uma única senha padrão é ótimo para começar com {stackstate-product-name}, mas para uma configuração de produção, opções de autenticação xref:/setup/security/authentication/authentication_options.adoc[mais seguras] estão disponíveis.
+=====
+
+[NOTE]
+=====
+Armazene os arquivos gerados `basicConfig.yaml`, `sizing_values.yaml` e `affinity_values.yaml` com segurança. Você pode reutilizar esses arquivos para atualizações, o que economiza tempo e garante que {stackstate-product-name} continue a usar a mesma chave de API. Isso é desejável, pois significa que os Agentes e outros provedores de dados para {stackstate-product-name} não precisarão ser atualizados.
+Os arquivos podem ser regenerados independentemente usando os switches `basicConfig.generate=false` e `sizing.generate=false` para desativar qualquer um deles, mantendo a versão previamente gerada do arquivo em `output-dir`.
+=====
+
+[NOTE]
+=====
+O gráfico de Valores {stackstate-product-name} gera configurações de afinidade que você pode usar com o gráfico principal {stackstate-product-name} para controlar o comportamento de agendamento de pods. Consulte xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configurar Afinidades do Kubernetes] para mais informações.
+=====
+
+. Configure {stackstate-product-name} para usar o Rancher como um provedor OIDC.
+
+    Generate the `oidc_values.yaml`. This guide assumes that you save it in the `$VALUES_DIR`
+
++
+.$VALUES_DIR/oidc_values.yaml
+[,yaml]
+----
+stackstate:
+  authentication:
+    rancher:
+      clientId: "<oidc-client-id>"
+      secret: "<oidc-secret>"
+      baseUrl: "<rancher-url>"
+----
++
+[NOTE]
+=====
+Esta etapa é necessária se você planeja usar o RBAC do Rancher para limitar a visibilidade nos clusters downstream.
+Para uma explicação mais detalhada sobre como configurar {stackstate-product-name} para usar o Rancher como um provedor OIDC, veja xref:/setup/security/authentication/oidc.adoc#_rancher[Configurar {stackstate-product-name} para usar o Rancher como um provedor OIDC].
+=====
+
+. Implantar o gráfico helm {stackstate-product-name} com os valores gerados:
+
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/oidc_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
+--
+====
+
+
+== Acessando {stackstate-product-name}
+
+O gráfico Helm {stackstate-product-name} tem suporte para criar um recurso Ingress para tornar {stackstate-product-name} acessível fora do cluster. Siga xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc[estas instruções] para configurar isso quando você tiver um controlador de Ingress no cluster. Certifique-se de que a URL resultante use TLS com um certificado válido, não autoassinado.
+
+Se você preferir usar um balanceador de carga em vez de Ingress, exponha o serviço `suse-observability-router`. A URL para o balanceador de carga precisa usar um certificado TLS válido, não autoassinado.
+
+== Instalando extensões de UI
+
+Para instalar extensões de UI, ative as extensões de UI na UI do Rancher.
+
+image::k8s/prime/ui_extensions.png[Instalar]
+
+Após ativar as extensões de UI, siga estas etapas:
+
+. Navegue até extensões na UI do Rancher e, na seção "Disponíveis" das extensões, você encontrará a extensão de Observabilidade.
+. Instale a extensão de Observabilidade.
+. Uma vez instalada, no painel esquerdo da UI do Rancher, a seção _{stackstate-product-name}_ aparece.
+. Navegue até a seção _{stackstate-product-name}_ e selecione "configurações". Nesta seção, você pode adicionar os detalhes do servidor {stackstate-product-name} e conectá-lo.
+. Siga as instruções mencionadas na seção _Obter um token de serviço_ abaixo e preencha os detalhes.
+
+=== Obtenha um token de serviço:
+
+. Faça login na instância {stackstate-product-name}.
+. No canto superior esquerdo, selecione CLI.
+. Anote o token da API e instale o CLI {stackstate-product-name} em sua máquina local.
+. Crie um token de serviço executando
+
+
+----
+sts service-token create --name suse-observability-extension --roles stackstate-k8s-troubleshooter
+----
+
+
+=== {stackstate-product-name} Matriz de compatibilidade da extensão de UI do Rancher
+
+|===
+| Versão da extensão de UI | Versão do Rancher Suportada
+
+| 0.x.x
+| 2.8
+
+| 1.x.x
+| 2.9
+
+| 2.x.x
+| 2.10 +
+2.11 +
+2.12
+|===
+
+== Instalando o {stackstate-product-name} Agente
+
+. Na interface do {stackstate-product-name}, abra o menu principal e selecione StackPacks.
+. Selecione o StackPack do Kubernetes.
+. Clique em nova instância e forneça o nome do cluster downstream que você está adicionando. Certifique-se de que o nome do cluster do Rancher corresponda ao nome fornecido aqui. Clique em instalar.
+. Na lista de instruções, encontre a seção que melhor corresponde ao seu cluster.
+. Execute as instruções fornecidas para instalar o agente, estas podem ser executadas no `kubectl shell` que você pode abrir para seu cluster via a interface do Rancher. Mas também pode ser executado a partir de uma máquina local se tiver o Helm instalado e estiver autorizado a se conectar ao cluster.
+. Após instalar o agente, o cluster será exibido tanto na UI do {stackstate-product-name} quanto na extensão _SUSE Rancher - Observability UI extension_.
+
+== Privilégios necessários
+
+A implantação do agente {stackstate-product-name} requer os seguintes privilégios de sistema:
+
+. `hostPID: true`: Este privilégio é necessário para associar identificadores de processo (PIDs) aos seus grupos de controle correspondentes (cgroups). Essa associação é essencial para mapear com precisão os processos aos seus respectivos contêineres.
+. `hostNetwork: true` (Opcional): Por padrão, o agente do nó é executado com `hostNetwork: true` para facilitar a coleta de dados de métricas abertas de todos os pods configurados no nó sem exigir políticas de rede adicionais. Se desativado, políticas de rede apropriadas devem ser definidas para garantir que o agente possa acessar os endpoints necessários.
+. `securityContext.privileged: true`: Este privilégio elevado é necessário para várias funções críticas. Principalmente, permite que o agente injete programas eBPF (Extended Berkeley Packet Filter) em cada namespace de rede para fins de monitoramento. Também é necessário para ler as tabelas de rastreamento de conexões (conntrack) em todos os namespaces de rede. Embora esta lista não seja exaustiva, o desenvolvimento futuro visa substituir este privilégio amplo por capacidades Linux mais granulares, quando viável.
+
+Além disso, o agente requer que os sockets de tempo de execução do contêiner sejam montados dentro de seu pod. Esta configuração é essencial, pois facilita a comunicação direta com os daemons de tempo de execução do contêiner, que é um pré-requisito para coletar métricas e metadados de todos os contêineres no sistema host.
+
+== Modelo PSA Restrito do Rancher
+
+A configuração `Rancher-restricted` (link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates[Modelos de Configuração do Pod Security Admission (PSA)]) é uma configuração altamente restritiva que está alinhada com as melhores práticas atuais para proteger pods.
+
+Ao executar o Rancher em um cluster Kubernetes que impõe uma política de segurança restritiva por padrão, existem duas maneiras de instalar o gráfico Helm de Observabilidade da SUSE:
+
+* *Isentar todo o namespace do gráfico*, junto com outros link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[namespaces obrigatórios do Rancher].
+* *Desativar o contêiner init Elasticsearch privilegiado* definindo `elasticsearch.sysctlInitContainer.enabled` como `false`. Isso requer que você aumente manualmente as link:https://www.elastic.co/docs/deploy-manage/deploy/self-managed/vm-max-map-count[configurações de memória virtual] (`vm.max_map_count`) nos nós. Veja também xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_elasticsearch[Permissões Requeridas do Elasticsearch]. 
+
+Como o Agente de Observabilidade da SUSE deve ser executado em modo privilegiado, a abordagem recomendada é instalá-lo em um namespace que você planeja isentar da política restritiva.
+
+[NOTE]
+====
+Todos os contêineres do gráfico Helm de Observabilidade da SUSE são configurados com as seguintes `securityContext` configurações a partir da versão `v2.3.8` e seguintes:
+
+. `securityContext.capabilities.drop` é `["ALL"]`
+. `securityContext.seccompProfile.type` é `"RuntimeDefault"`
+. `securityContext.runAsNonRoot` é `true`
+. `securityContext.allowPrivilegeEscalation` é `false`
+====
+
+== Login Único
+
+Para habilitar o Single sign-on com seu próprio provedor de autenticação, por favor xref:/setup/security/authentication/authentication_options.adoc[veja aqui].
+
+== Perguntas frequentes & Observações:
+
+. É obrigatório instalar um agente {stackstate-product-name} antes de prosseguir com a adição da extensão da UI?
+ ** Não, isso não é obrigatório, a extensão da UI pode ser instalada de forma independente.
+. É obrigatório instalar o Servidor {stackstate-product-name} antes de prosseguirmos com as extensões da UI?
+ ** Sim, isso é obrigatório, pois você precisa fornecer um {stackstate-product-name} endpoint na configuração.
+. Podemos instalar {stackstate-product-name} em um cluster local ou em um cluster downstream?
+ ** Ambas as opções são possíveis.
+. Para monitorar os clusters downstream, devemos instalar o agente {stackstate-product-name} da loja de aplicativos ou adicionar uma nova instância da UI {stackstate-product-name}?
+ ** Ambas as opções são possíveis, dependendo da preferência do usuário.
+
+== Problemas Abertos
+
+. Quando você desinstala e reinstala as extensões de UI para Observabilidade, notamos que o token de serviço não é excluído e é reutilizado após a reinstalação. Sempre que desinstalamos as extensões, o token de serviço deve ser removido.
+ ** Essas informações devem ser excluídas quando as extensões de UI são desinstaladas.
+. Após a instalação das extensões, a {stackstate-product-name} UI é aberta na mesma aba que a UI do Rancher.
+ ** Você pode usar shift-click para abrir em uma nova aba, isso se tornará o comportamento padrão.
+. Esteja ciente de que a atualização ou downgrade de HA para NÃO-HA e vice-versa ainda não é suportado.
+
+== Solução de problemas
+
+Para quaisquer dúvidas sobre a instalação da extensão de UI para Observabilidade, consulte xref:/setup/install-stackstate/extension-troubleshooting.adoc[Guia de solução de problemas da extensão].
