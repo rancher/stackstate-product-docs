@@ -78,29 +78,32 @@ presentation:
         title: string         # Optional
         projection:           # Optional Projection
           _type: string
-          ...
+          ...                 # Additional properties dependent on projection type
 
-  highlight:                  # Optional highlight page configuration
+  highlight:                                      # Optional highlight page configuration
     title: string
     fields:
       - fieldId: string
         title: string
-        description: string   # Optional
-        order: number         # Order in the about section - higher numbers come first
-        projection:           # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
+        description: string                       # Optional
+        order: number                             # Order in the about section - higher numbers come first
+        projection:                               # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
           _type: string
-    relatedResources:
-      - resourceId: string            # Stable identity key for merging
-        title: string                 # Section heading in the UI
-        order: number                 # Display order - higher numbers come first
-        stql: string                  # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
-        presentationIdentifier: string # Optional - references a ComponentPresentation by identifier
-          ...
-
-    provisioning:
-      externalComponentSelector: cel:boolean  # Optional predicate to select the external component with provisioning details
-      showConfiguration: cel:boolean          # Optional - should provisioning configuration be accessible
-      showStatus: cel:boolean                 # Optional - should provisioning status be accessible
+          ...                                     # Additional properties dependent on projection type
+    relatedResources:                             # Optional - related resources to display
+      - resourceId: string                        # Stable identity key for merging
+        title: string                             # Section heading in the UI
+        order: number                             # Display order - higher numbers come first
+        topologyQuery: string                     # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
+        presentationIdentifier: string            # Optional - references a ComponentPresentation by identifier
+    provisioning:                                 # Optional section to specify how provisioning details are shown
+      externalComponentSelector: cel:boolean      # Optional predicate to select the external component with provisioning details
+      showConfiguration: boolean                  # Optional - should provisioning configuration be accessible
+      showStatus: boolean                         # Optional - should provisioning status be accessible
+    events:                                       # Optional section to configure events
+      showEvents: boolean                         # Should events be shown
+      relatedResourcesQuery: cel:string           # Optional - topology query for components to include
+      excludeRelatedResourcesQuery: cel:string    # Optional - topology query for components to exclude of events
 
   filters:                    # Optional overview filters
     - filterId: string
@@ -250,19 +253,19 @@ highlight:
   relatedResources:
     - resourceId: "related-pods"
       title: "Related Pods"
-      stql: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
+      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
       order: 100
       presentationIdentifier: "urn:stackpack:otel:component-presentation:pod"
     - resourceId: "related-endpoints"
       title: "Related Endpoints"
-      stql: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
+      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
       order: 200
       presentationIdentifier: "urn:stackpack:otel:component-presentation:endpoint"
 ----
 
 ==== STQL templates
 
-The `stql` field is a template string that supports `${CEL_EXPRESSION}` placeholders.  Each placeholder is a CEL expression evaluated against the current component's data — the same <<CEL context>> variables are available.  All expressions must evaluate to a string.  Refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL reference] for the available query syntax.
+The `topologyQuery` field is a template string that supports `${CEL_EXPRESSION}` placeholders.  Each placeholder is a CEL expression evaluated against the current component's data — the same <<CEL context>> variables are available.  All expressions must evaluate to a string.  Refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL reference] for the available query syntax.
 
 ==== Merging
 
@@ -273,11 +276,34 @@ Related resources follow the same merge semantics as highlight fields:
 * Different `resourceId` values from different presentations are both included (append).
 * The `order` field controls display order.
 
-A more specific presentation can override or suppress related resource definitions of a more generic one.  A related resource provided by the generic presentation can be hidden by including a related resource with the same `resourceId`, but without `stql` and `presentationIdentifier`.
+A more specific presentation can override or suppress related resource definitions of a more generic one.  A related resource provided by the generic presentation can be hidden by including a related resource with the same `resourceId`, but without `topologyQuery` and `presentationIdentifier`.
 
 ==== Constraints
 
 * `presentationIdentifier` must reference a presentation within the same stackpack.
+
+=== Events
+
+Configures the "Events" section of the highlights page.  Controls whether to show the section at all and, if so, events for which "related resources" to include.
+The `relatedResourceQuery` and `exludedRelatedResourcesQuery` fields are template strings that supports `${CEL_EXPRESSION}` placeholders.  
+
+[,yaml]
+----
+highlight:
+  events:
+    showEvents: true
+    relatedResourcesQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type IN ("endpoint", "pod")'
+    excludedRelatedResourcesQuery: 'type = "service"'
+----
+
+==== Merging
+
+Events use the following merge semantics:
+
+* All matching presentations can contribute components to include events for
+* The most specific presentation determines whether the event section is shown at all
+
+More specific presentations can suppress related resources from more generic presentations by specifying the `excludedRelatedResourcesQuery` topology query.
 
 === Filters
 
