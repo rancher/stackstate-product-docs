@@ -1,0 +1,138 @@
+= Basada en archivos
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 10-07-2025
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+En caso de que no se pueda utilizar un proveedor de autenticación externo, puedes utilizar la autenticación basada en archivos. Esto requerirá que cada usuario de SUSE Observability esté preconfigurado en el archivo de configuración. Por cada cambio realizado a un usuario en la configuración, SUSE Observability se reiniciará automáticamente después de aplicar los cambios con Helm.
+
+SUSE Observability incluye una serie de roles predeterminados, consulta la configuración de ejemplo a continuación. Los permisos asignados a cada rol predeterminado y las instrucciones sobre cómo crear otros roles se pueden encontrar en la xref:/setup/security/rbac/README.adoc[documentación sobre control de acceso basado en funciones (RBAC)].
+
+== Configura la autenticación basada en archivos
+
+=== Kubernetes
+
+Para configurar la autenticación basada en archivos en Kubernetes, los usuarios de SUSE Observability deben ser añadidos al archivo `authentication.yaml`. Por ejemplo:
+
+[tabs]
+====
+authentication.yaml::
++
+--
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-admin ]
+        - username: guest
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-guest ]
+        - username: poweruser
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-power-user ]
+        - username: troubleshooter
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-k8s-troubleshooter ]
+----
+
+--
+====
+
+Sigue los pasos a continuación para configurar usuarios y aplicar cambios:
+
+. En `authentication.yaml` - añade usuarios. La siguiente configuración debe ser añadida para cada usuario (consulta el ejemplo anterior):
+ ** *username* - el nombre de usuario utilizado para iniciar sesión en SUSE Observability. Solo se permiten caracteres alfanuméricos y _.
+ ** *passwordHash* - la contraseña utilizada para iniciar sesión en SUSE Observability. Las contraseñas se almacenan como un hash bcrypt.
+ ** *roles* - la lista de roles de los que el usuario es miembro. Los xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[roles predeterminados de SUSE Observability] son `stackstate-admin`, `stackstate-power-user` y `stackstate-guest`, para más detalles sobre cómo crear otros roles, consulta xref:/setup/security/rbac/rbac_roles.adoc[roles RBAC].
+. Almacena el archivo `authentication.yaml` junto con el archivo `values.yaml` de las instrucciones de instalación de SUSE Observability.
+. Ejecuta una actualización de Helm para aplicar los cambios:
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*Nota:*
+
+* Un hash de contraseña bcrypt se puede generar utilizando el siguiente comando `htpasswd -bnBC 10 "" <password> | tr -d ':\n'` o utilizando una herramienta en línea.
+* La primera ejecución del comando de actualizar versión de Helm resultará en el reinicio de pods, lo que puede causar una breve interrupción de la disponibilidad.
+* Incluye `authentication.yaml` en cada ejecución de `helm upgrade`.
+* La configuración de autenticación se almacena como un secreto de Kubernetes.
+====
+
+
+Sigue los pasos a continuación para configurar usuarios y aplicar cambios:
+
+. En `authentication.yaml` - añade usuarios. La siguiente configuración debe ser añadida para cada usuario (consulta el ejemplo anterior):
+ ** *username* - el nombre de usuario utilizado para iniciar sesión en SUSE Observability. Solo se permiten caracteres alfanuméricos y _.
+ ** *password* - la contraseña utilizada para iniciar sesión en SUSE Observability. Las contraseñas se almacenan como un hash MD5 o un hash bcrypt.
+ ** *roles* - la lista de roles de los que el usuario es miembro. Los xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[roles predeterminados de SUSE Observability] son `stackstate-admin`, `stackstate-power-user`, `stackstate-k8s-troubleshooter` y `stackstate-guest`; para obtener detalles sobre cómo crear otros roles, consulta xref:/setup/security/rbac/rbac_roles.adoc[RBAC roles].
+. Reinicia SUSE Observability para aplicar los cambios.
+
+[NOTE]
+====
+*Nota:*
+
+* Un hash de contraseña MD5 se puede generar utilizando las aplicaciones de línea de comandos `md5sum` o `md5` en Linux y Mac.
+* Un hash de contraseña bcrypt se puede generar utilizando el siguiente comando `htpasswd -bnBC 10 "" <password> | tr -d ':\n'` o utilizando una herramienta en línea.
+====
+
+
+=== Usando un secreto externo
+
+Cuando las contraseñas de usuario deben provenir de un secreto externo, sigue xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[estos pasos] pero completa los siguientes datos:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  file_<username1>_password: <base64 of bcrypt of password>
+  file_<username2>_password: <base64 of bcrypt of password>
+----
+
+Para cada usuario en la sección de inicios de sesión, se debe añadir un registro al secreto, completando la plantilla. Por ejemplo:
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin_user
+          roles: [ stackstate-admin ]
+
+
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+   file_admin_user_password: "base64EncryptedPass"
+----
+
+== Consulte también
+
+* xref:/setup/security/authentication/authentication_options.adoc[Opciones de autenticación]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[Permisos para los roles predefinidos de SUSE Observability]
+* xref:/setup/security/rbac/rbac_roles.adoc[Crear roles RBAC]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[Secretos Externos]

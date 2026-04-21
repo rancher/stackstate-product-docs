@@ -1,0 +1,59 @@
+= SUSE Observability 支持包（日志）
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+本页面提供从 SUSE Observability 集群收集日志的工具和指导。这些日志对于诊断问题、识别根本原因以及排查可能未按预期运行的集群中的问题至关重要。
+如果您遇到意外行为、性能下降或在您的 {stackstate-product-name} 集群中出现故障，本页面将帮助您收集必要的数据，以了解发生了什么并采取纠正措施。在此处详细说明的脚本旁边，有一个活动脚本 xref:/setup/install-stackstate/support-package-performance.adoc[支持包（性能）]，该脚本将主动在集群上运行性能测量和 {stackstate-product-name}。
+
+== 注意
+
+该脚本应从具有 kubectl 配置并可以访问 SUSE Observability 集群的主机上执行，或从任何其他具有必要权限和连接性的主机上执行。
+可以直接在主机上使用 root 用户或通过 sudo 执行。 如果未设置 kubeconfig，请使用命令 `export KUBECONFIG=$PATH-TO-YOUR/kubeconfig`。
+
+== 用法
+
+需要下载脚本并直接在主机上运行，使用 `root` 用户或 `sudo`。
+
+=== 下载并运行脚本
+
+下载 xref::attachment$suse-observability_logs_collector.sh[suse-observability_logs_collector.sh] 脚本。
+
+* 将脚本保存为：`suse-observability_logs_collector.sh`
+* 使用以下命令运行脚本：
++
+[,bash]
+----
+bash suse-observability_logs_collector.sh
+----
++
+这将在当前目录中生成一个名为 `suse-observability_logs_<date>.tar.gz` 的文件。请将此文件上传到案例中。
+
+可以指定其他参数：
+[,bash]
+----
+> bash suse-observability_logs_collector.sh -h
+SUSE Observability support package collector.
+Fetches details of a SUSE Observability instance for troubleshooting.
+
+Usage: ./suse-observability_logs_collector.sh [options] [<namespace>]
+
+options:
+  -h  Print this help
+  -e  Fetch logs for suse-observability pods from Elasticsearch
+  -r  Time range for logs to fetch from Elasticsearch,
+      when not specified "7d" is used
+
+<namespace>:
+  The namespace that is running SUSE Observability, or
+  "suse-observability" when not specified
+----
+
+例如，要从嵌入式 elasticsearch 中收集 3 天的日志，当 {stackstate-product-name} 被部署在名称空间 `my-observability` 中时：
+[,bash]
+----
+bash suse-observability_logs_collector.sh -e -r 3d my-observability
+----

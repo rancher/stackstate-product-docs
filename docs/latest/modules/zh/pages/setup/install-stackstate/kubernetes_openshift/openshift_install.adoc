@@ -1,0 +1,454 @@
+= OpenShift 安装
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 自托管
+
+== 在开始之前
+
+[NOTE]
+====
+安装时的额外说明：
+
+* *具有有限权限的OpenShift集群*:阅读xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc[所需权限]。
+* *Kubernetes*:请参考xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes安装说明]。
+====
+
+
+在开始安装{stackstate-product-name}之前：
+
+* 检查您的OpenShift环境是否满足xref:/setup/install-stackstate/requirements.adoc[要求]
+* 确保您已安装OpenShift命令行工具(`oc`)
+* 将{stackstate-product-name} helm储存库添加到本地helm客户端：
+
+[,text]
+----
+helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+helm repo update
+----
+
+== 安装 {stackstate-product-name}
+
+[NOTE]
+====
+对于没有互联网访问的环境，也称为隔离的环境，请首先遵循xref:/k8s-suse-rancher-prime-air-gapped.adoc[这些额外说明]。
+
+此外，请确保在每个步骤中遵循隔离的安装说明（如果存在）。
+====
+
+
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[创建将要安装{stackstate-product-name}的项目]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#create-values-yaml[创建`values.yaml`配置文件]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_openshift_values_yaml[创建`openshift-values.yaml`文件]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[使用Helm{stackstate-product-name}部署]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_access_the_suse_observability_ui[访问{stackstate-product-name} UI]
+. xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_manually_create_securitycontextconfiguration_objects[手动创建`SecurityContextConfiguration`对象]
+
+=== 创建项目
+
+首先创建您希望安装{stackstate-product-name}的项目。在我们的演练中，我们将使用名称空间 `suse-observability`：
+
+[,text]
+----
+oc new-project suse-observability
+----
+
+[NOTE]
+====
+项目名称在`helm`和`kubectl`命令中作为`--namespace`标志指定的名称空间
+====
+
+
+[#create-values-yaml]
+=== 创建 `values.yaml` 配置文件
+
+`values.yaml` 文件包含部署 {stackstate-product-name} 所需的所有配置，包括您的许可证密钥、基础 URL、管理员密码和大小配置文件。
+
+[NOTE]
+====
+*在继续之前：*确保您拥有最新版本的 Helm 图表和 `helm repo update`。
+====
+
+[tabs]
+====
+推荐的方法::
++
+--
+[NOTE]
+=====
+从版本 `global.suseObservability` 开始提供 `2.8.0` 配置方法。对于早期版本，请使用遗留方法。
+=====
+
+创建一个具有 `global.suseObservability` 配置结构的 `values.yaml` 文件：
+
+[source,yaml]
+----
+global:
+  # Optional: Override image registry (defaults to registry.rancher.com)
+  # Only needed for air-gapped environments or custom registries
+  # imageRegistry: "your-private-registry.example.com"
+
+  # Optional: Override storage class (uses cluster default if not set)
+  # storageClass: "your-storage-class"
+
+  suseObservability:
+    # Required: Your {stackstate-product-name} license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    # Use http://localhost:8080 if ingress is not configured yet
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    # Required: Plain text Admin password
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password with adminPasswordBcrypt
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    # receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Pull secret for private registry
+    # pullSecret:
+    #   username: "registry-user"
+    #   password: "registry-pass"
+----
+
+TIP: 要生成bcrypt密码哈希，请使用：`htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'`
+
+有关更多配置选项，包括亲和性设置，请参见 xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[配置 Kubernetes 亲和性]。
+
+--
+遗留方法（已弃用）::
++
+--
+[WARNING]
+=====
+此方法已弃用。对于新安装，请使用上述推荐的方法。对于使用此方法的现有安装，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南] 以过渡到新的配置格式。
+=====
+
+您可以通过运行单独的Helm Chart来生成{stackstate-product-name}、`baseConfig_values.yaml`、`sizing_values.yaml`和`affinity_values.yaml`文件。`suse-observability/suse-observability-values`图表。示例命令行是：
+
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+此命令生成包含安装{stackstate-product-name} Helm Chart所需配置的文件`$VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml`、`$VALUES_DIR/suse-observability-values/templates/sizing_values.yaml`和`$VALUES_DIR/suse-observability-values/templates/affinity_values.yaml`。
+
+[NOTE]
+=====
+{stackstate-product-name} 管理员密码将由上述命令自动生成，并作为注释输出到生成的 `basicConfig.yaml` 文件中。实际值包含这些密码的 `bcrypt` 哈希，以便它们安全地存储在集群中的 Helm 发布中。
+=====
+
+
+可以传递给此图表的值包括：
+
+[cols="1,1,2"]
+|===
+| 配置 | 值 | 说明
+
+| 基本配置生成
+| `basicConfig.generate`
+| 开启或关闭 `basicConfig_values.yaml` 文件的生成。
+
+| 接收者 API 密钥
+| `receiverApiKey`
+| {stackstate-product-name} 用于从代理接收数据的 API 密钥。这是一个应保持私密的密钥。如果您省略此项，将为您生成一个随机密钥。
+
+| 基础 URL
+| `baseUrl`
+| 此 `<STACKSTATE_BASE_URL>`.用户和代理将用于连接的 {stackstate-product-name} 外部 URL。例如 `https://suse-observability.internal`。如果您尚未决定 Ingress 配置，请使用 `http://localhost:8080`。这可以在生成的文件中稍后更新。
+
+| 用户名和密码**
+| `-u` `-p`
+| {stackstate-product-name} 用于拉取镜像的用户名和密码。对于隔离环境，这需要是本地 Docker 注册表的用户名和密码。
+
+| 许可证密钥
+| `license`
+| {stackstate-product-name} 许可证密钥。
+
+| 默认密码
+| `adminPassword`
+| 默认用户 (`admin`) 访问 {stackstate-product-name} 的 UI 的密码。或者，您可以使用 `adminPasswordBcrypt` 提供 bcrypt 哈希密码。这两个选项只能同时使用一个。
+
+| 映像注册表
+| `imageRegistry`
+| 托管 {stackstate-product-name} 镜像的注册表。如果未提供，默认值将为 'quay.io'。
+
+| 拉取密钥用户名
+| `pullSecret.username`
+| 用于从托管 {stackstate-product-name} 镜像的 Docker 注册表拉取镜像的用户名。
+
+| 拉取密钥密码
+| `pullSecret.password`
+| 用于从托管 {stackstate-product-name} 镜像的 Docker 注册表拉取镜像的密码。
+
+| 大小生成
+| `sizing.generate`
+| 开启或关闭 `sizing_values.yaml` 文件的生成。
+
+| 大小配置文件
+| `sizing.profile`
+| OneOf 试用，10-nonha，20-nonha，50-nonha，100-nonha，150-ha，250-ha，500-ha。根据这些控制文件，您可以生成包含默认大小的`sizing_values.yaml`文件，用于{stackstate-product-name}资源的配置，以在高可用模式或非高可用模式下进行部署。例如，10-nonha 生成一个 `sizing_values.yaml`，用于在非高可用模式下观察 10 节点集群的 Non-HA {stackstate-product-name} 实例。目前，从非 HA 环境迁移到 HA 环境是不可能的。如果您预计您的环境需要观察大约 150 个节点，那么最好立即选择 HA。
+
+| Pod 反亲和性
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+| 强制同一数据服务的副本调度到不同的 Kubernetes 节点。仅适用于 `HA` 配置文件。要么是 `true`，要么是 `false`。默认是 `true` - 强制调度到不同节点。
+|===
+
+[NOTE]
+=====
+安全存储生成的 `basicConfig.yaml` 和 `sizing_values.yaml` 文件。您可以重用这些文件进行升级，这样可以节省时间并确保 {stackstate-product-name} 继续使用相同的 API 密钥。这是理想的，因为这意味着 {stackstate-product-name} 的代理和其他数据提供者无需更新。
+您可以独立重新生成文件，使用开关 `basicConfig.generate=false` 和 `sizing.generate=false` 禁用其中任何一个，同时仍然保留在 `output-dir` 中生成的文件的先前版本。
+=====
+
+[NOTE]
+=====
+{stackstate-product-name} 值图生成亲和性配置，您可以与主 {stackstate-product-name} 图表一起使用，以控制 Pod 调度行为。有关更多信息，请参阅 xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[配置 Kubernetes 亲和性] 文档。
+=====
+
+--
+====
+
+=== 创建 `openshift-values.yaml`
+
+由于 OpenShift 的安全模型比普通 Kubernetes 更严格，部署中的所有标准安全上下文都需要被禁用。
+
+创建一个 Helm 值文件 `openshift-values.yaml`，内容如下，并将其存放在生成的 `values.yaml` 文件旁边。这包含了 OpenShift 部署所需的值。
+
+[,yaml]
+----
+elasticsearch:
+  prometheus-elasticsearch-exporter:
+    podSecurityContext: ""
+  sysctlInitContainer:
+    enabled: false
+scc:
+  enabled: true
+----
+
+=== 使用 Helm 部署 {stackstate-product-name}
+
+推荐的 {stackstate-product-name} 部署是一个可用于生产用途的高可用性设置，运行多个冗余服务。如果需要，也可以在非冗余设置中运行 {stackstate-product-name}，其中每个服务只有一个副本。此设置仅建议用于测试环境。
+
+对于隔离的环境，请遵循隔离的安装说明。
+
+[tabs]
+====
+推荐的方法::
++
+--
+
+在 OpenShift 上以高可用性设置部署 {stackstate-product-name}:
+
+. 在您部署之前：
+ ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[创建将要安装{stackstate-product-name}的项目]
+ ** <<create-values-yaml,创建`values.yaml`配置文件>>
+ ** <<_create_openshift_values_yaml,创建 `openshift_values.yaml`>>
+. 使用以下命令将最新的 {stackstate-product-name} 版本部署到 `suse-observability` 名称空间：
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values openshift-values.yaml \
+  --set "clickhouse.sidecars[0].securityContext.runAsUser=null" \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+推荐方法（隔离的环境）::
++
+--
+
+在 OpenShift 上以隔离的设置部署 {stackstate-product-name}:
+
+. 在您部署之前：
+ ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[请遵循这些额外说明以进行隔离的安装]。
+ ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[创建将要安装{stackstate-product-name}的项目]
+ ** <<create-values-yaml,创建`values.yaml`配置文件>>
+ ** <<_create_openshift_values_yaml,创建 `openshift_values.yaml`>>
+. 使用以下命令将最新的 {stackstate-product-name} 版本部署到 `suse-observability` 名称空间：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values local-docker-registry.yaml \
+  --values values.yaml \
+  --values openshift-values.yaml \
+  --set "clickhouse.sidecars[0].securityContext.runAsUser=null" \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+遗留方法（已弃用）::
++
+--
+
+[WARNING]
+=====
+此方法已弃用。对于新安装，请使用上述推荐的方法。对于使用此方法的现有安装，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南] 以过渡到新的配置格式。
+=====
+
+在 OpenShift 上以高可用性设置部署 {stackstate-product-name}:
+
+. 在您部署之前：
+ ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[创建将要安装{stackstate-product-name}的项目]
+ ** <<create-values-yaml,生成 `baseConfig_values.yaml` 和 `sizing_values.yaml`>>
+ ** <<_create_openshift_values_yaml,创建 `openshift_values.yaml`>>
+. 使用以下命令将最新的 {stackstate-product-name} 版本部署到 `suse-observability` 名称空间：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --values openshift-values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+传统方法（隔离的环境）::
++
+--
+
+[WARNING]
+=====
+此方法已弃用。对于新安装，请使用上述推荐的方法。对于使用此方法的现有安装，请参见 xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[迁移指南] 以过渡到新的配置格式。
+=====
+
+在 OpenShift 上以隔离的设置部署 {stackstate-product-name}：
+
+. 在您部署之前：
+ ** xref:/k8s-suse-rancher-prime-air-gapped.adoc[请遵循这些额外说明以进行隔离的安装]。
+ ** xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_create_project[创建将要安装{stackstate-product-name}的项目]
+ ** <<create-values-yaml,生成 `baseConfig_values.yaml` 和 `sizing_values.yaml`>>
+ ** <<_create_openshift_values_yaml,创建 `openshift_values.yaml`>>
+. 使用以下命令将最新的 {stackstate-product-name} 版本部署到 `suse-observability` 名称空间：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values local-docker-registry.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --values openshift-values.yaml \
+  --set "clickhouse.sidecars[0].securityContext.runAsUser=null" \
+suse-observability \
+suse-observability-A.B.C.tgz
+----
+
+--
+====
+
+安装后，{stackstate-product-name} 发布应在 {stackstate-product-name} 名称空间中列出，所有 pod 应该正在运行：
+
+[,text]
+----
+# Check the release is listed
+helm list --namespace suse-observability
+
+# Check pods are running
+# It may take some time for all pods to be installed or available
+kubectl get pods --namespace suse-observability
+----
+
+=== 访问 {stackstate-product-name} 用户界面
+
+在 {stackstate-product-name} 部署后，您可以检查所有 pod 是否正常运行：
+
+[,bash]
+----
+kubectl get pods --namespace suse-observability
+----
+
+当所有的 pod 启动后，您可以启用端口转发：
+
+[,bash]
+----
+kubectl port-forward service/suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+{stackstate-product-name} 现在可以在您的浏览器中访问 `https://localhost:8080`。使用用户名 `admin` 和 `values.yaml` 文件中提供的默认密码登录。
+
+后续步骤是
+
+* xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc[将 {stackstate-product-name} 暴露在集群外部]
+* xref:/k8s-quick-start-guide.adoc[开始监控您的 Kubernetes 集群]
+* 给予您的 xref:/setup/security/authentication/README.adoc[同事访问权限]。
+
+== 手动创建 `SecurityContextConfiguration` 对象
+
+如果您无法使用管理员帐户在 OpenShift 上安装 {stackstate-product-name}，请请求您的管理员应用以下 `SecurityContextConfiguration` 对象。
+
+[,yaml]
+----
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: {{ template "common.fullname.short" . }}-{{ .Release.Namespace }}
+  labels:
+    {{- include "common.labels.standard" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install
+    suse-observability.io/note: "Ignored by helm uninstall, has to be deleted manually"
+fsGroup:
+  type: RunAsAny
+groups:
+- system:serviceaccounts:{{ .Release.Namespace }}
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- ephemeral
+- persistentVolumeClaim
+- projected
+- secret
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: false
+seccompProfiles:
+  - runtime/default
+----
+
+== 另请参见
+
+* 有关其他配置和管理选项，请参阅 Kubernetes 文档 - xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[管理 {stackstate-product-name} Kubernetes 安装]
+* xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[现有安装的迁移指南]

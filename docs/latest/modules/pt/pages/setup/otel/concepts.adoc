@@ -1,0 +1,54 @@
+= Conceitos do OpenTelemetry
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Este é um resumo dos conceitos mais importantes do OpenTelemetry e deve ser suficiente para começar. Para uma introdução mais detalhada, utilize a https://opentelemetry.io/docs/concepts/[documentação do OpenTelemetry]
+
+== Sinais
+
+O OpenTelemetry reconhece 3 sinais de telemetria:
+
+* Rastros
+* Métricas
+* Registros
+
+No momento, o SUSE Observability suporta rastros e métricas; logs serão suportados em uma versão futura. Para logs do Kubernetes, é possível usar o xref:/k8s-quick-start-guide.adoc[agente do SUSE Observability] em vez disso.
+
+=== Rastros
+
+Rastros nos permitem visualizar o caminho de uma solicitação através do seu aplicativo. Um rastro consiste em um ou mais spans que juntos formam uma árvore; um único rastro pode estar totalmente dentro de um único serviço, mas também pode atravessar muitos serviços. Cada span representa uma operação no processamento da solicitação e possui:
+
+* um nome
+* tempo de início e fim, a partir do qual uma duração pode ser calculada
+* status
+* atributos
+* atributos de recurso (veja <<_resources,recursos>>)
+* eventos
+
+Os atributos do span são usados para fornecer metadados para o span; por exemplo, um span para uma operação que realiza um pedido pode ter o `orderId` como um atributo, ou um span para uma operação HTTP pode ter o método HTTP e a URL como atributos.
+
+Eventos de span podem ser usados para representar um ponto no tempo onde algo importante aconteceu dentro da operação do span. Por exemplo, se o span falhar, pode haver um `exception` ou um `error` evento que captura a mensagem de erro, um stacktrace e o ponto exato no tempo em que o erro ocorreu.
+
+=== Métricas
+
+Métricas são medições capturadas em tempo de execução e resultam em um evento de métrica. Métricas são indicadores importantes para o desempenho e a disponibilidade do aplicativo e são frequentemente usadas para alertar sobre uma interrupção ou problema de desempenho. Métricas têm:
+
+* um nome
+* um timestamp
+* um tipo (contador, medidor, histograma, etc.)
+* atributos
+* atributos de recurso (veja <<_resources,recursos>>)
+
+Os atributos fornecem os metadados para uma métrica.
+
+== Recursos
+
+Um recurso é a entidade que produz os dados de telemetria. Os atributos do recurso fornecem os metadados para o recurso. Por exemplo, um processo em execução em um contêiner, em um pod, em um namespace em um cluster Kubernetes pode ter atributos de recurso para todas essas entidades.
+
+Os atributos de recurso são frequentemente atribuídos automaticamente pelos SDKs. No entanto, é recomendado sempre definir os atributos `service.name` e `service.namespace` explicitamente. O primeiro é o nome lógico para o serviço; se não for definido, o SDK definirá um valor `unknown_service`, tornando muito difícil usar os dados posteriormente no SUSE Observability. O namespace é uma maneira conveniente de organizar seus serviços, especialmente útil se você tiver os mesmos serviços em execução em múltiplas localizações.
+
+== Convenções semânticas
+
+O OpenTelemetry define nomes comuns para operações e dados, e chama isso de convenções semânticas. As convenções semânticas seguem um esquema de nomenclatura que permite padronizar o processamento de dados entre linguagens, bibliotecas e bases de código. Existem convenções semânticas para todos os sinais e para atributos de recurso. Elas são definidas para muitas plataformas e operações diferentes no https://opentelemetry.io/docs/specs/semconv/attributes-registry/[site do OpenTelemetry]. Os SDKs utilizam as convenções semânticas para atribuir esses atributos e o SUSE Observability também respeita as convenções e depende delas, por exemplo, para reconhecer recursos do Kubernetes.

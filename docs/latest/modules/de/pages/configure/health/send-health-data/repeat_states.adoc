@@ -1,0 +1,120 @@
+= Wiederholungszustände
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-10-27
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Diese Seite beschreibt die exakten JSON-Nachrichten, die für das Repeat-States-Konsistenzmodell in der Health-Synchronisierung gesendet werden können.
+
+== JSON-Eigenschaft: "health"
+
+Die Gesundheitsdaten können über die `"health"`-Eigenschaft des xref:/configure/health/send-health-data/send-health-data.adoc#_common_json_object[gemeinsamen JSON-Objekts] an die SUSE Observability Receiver API gesendet werden.
+
+[tabs]
+====
+Beispiel für ein Health-`repeat_states`-JSON::
++
+--
+
+[,javascript]
+----
+   "apiKey":"<STACKSTATE_RECEIVER_API_KEY>",
+   "collection_timestamp":1585818978,
+   "internalHostname":"lnx-343242.srv.stackstate.com",
+   "events":{},
+   "metrics":[],
+   "service_checks":[],
+   "health":[
+      {
+        "consistency_model": "REPEAT_STATES",
+        "expiry": {
+          "repeat_interval_s": 50,
+          "expiry_interval_s": 100
+        },
+        "stream": {
+          "urn": "urn:health:sourceId:streamId"
+          //"sub_stream_id": "subStreamId" Optional
+        },
+        "check_states": [
+          {
+            "checkStateId": "checkStateId1",
+            "message": "Server Running out of disk space",
+            "health": "Deviating",
+            "topologyElementIdentifier": "server-1",
+            "name": "Disk Usage"
+          },
+          {
+            "checkStateId": "checkStateId2",
+            "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+            "health": "critical",
+            "topologyElementIdentifier": "server-2",
+            "name": "Health monitor"
+          }
+        ]
+      }
+   ],
+   "topologies":[]
+----
+
+--
+====
+
+Jede Datenlast für Health Wiederholungszustände enthält die folgenden Details:
+
+* *ablauf* – Optional. Eine Ablaufaktualisierung muss verarbeitet werden, bevor verarbeitet wird `check_states`. Dies ermöglicht es SUSE Observability, zu verfolgen, wie lange die externen Prüfungen im System vorhanden sein sollten, wenn sie nicht erneut gesendet werden. Es enthält die folgenden Felder als Ablaufmetadaten:
+ ** *repeat_interval_s* - Zeit in Sekunden. Die Häufigkeit, mit der die externe Quelle Gesundheitsdaten an SUSE Observability sendet. Der maximal erlaubte Wert beträgt 1800 (30 Minuten).
+ ** *expiry_interval_s* - Zeit in Sekunden. Die Zeit, die nach der letzten Aktualisierung gewartet werden muss, bevor eine externe Prüfung von SUSE Observability gelöscht wird, wenn sie nicht erneut beobachtet wird.
+* *stream* - Objekt, das die Identifikation bereitstellt, welche Snapshots und `check_states` zusammengehören. Sie enthält die folgenden Felder:
+ ** *urn* - Datenquelle und Stream-ID, kodiert als eine SUSE Observability xref:/configure/topology/identifiers.adoc[URN], die der folgenden Konvention entspricht: `urn:health:<sourceId>:<streamId>`, wobei `<sourceId>` der Name der externen Datenquelle ist und `<streamId>` ein eindeutiger Identifikator für den Gesundheitsdatenstream ist.
+ ** *sub_stream_id* - Optional. Identifikator für eine Teilmenge der Stream-Gesundheitsdaten. Wenn die Stream-Daten von mehreren Agenten verteilt und gemeldet werden, ermöglicht dies Snapshot-Lebenszyklen pro `sub_stream_id`.
+* *check_states* - Eine Liste von Prüfzuständen. Jeder Prüfzustand kann die folgenden Felder haben:
+ ** *checkStateId* - Identifikator für den Prüfzustand im externen System.
+ ** *message* - Optional. Nachricht, die in der SUSE Observability UI angezeigt werden soll. Die Daten werden als Markdown interpretiert, sodass Links zur externen Systemprüfung, die den externen Prüfzustand erzeugt hat, möglich sind.
+ ** *health* - Einer der folgenden SUSE Observability Gesundheitszustandswerte: `Clear`, `Deviating`, `Critical`.
+ ** *topologyElementIdentifier* - Wird verwendet, um den Prüfzustand an ein SUSE Observability Topologieelement zu binden.
+ ** *name* - Name des externen Prüfzustands.
+
+== Health an SUSE Observability senden.
+
+Gesundheitsdaten können in einer JSON-Nachricht über HTTP POST gesendet werden. Im folgenden Beispiel wird ein Snapshot, der zwei Prüfzustände enthält, von einem einzelnen externen Überwachungssystem an SUSE Observability gesendet.
+
+[,bash]
+----
+curl -X POST \
+ '<STACKSTATE_RECEIVER_API_ADDRESS>' \
+ -H 'Content-Type: application/json' \
+ -d '{
+  "collection_timestamp": 1548857167,
+  "internalHostname": "local.test",
+  "health": [
+    {
+      "consistency_model": "REPEAT_STATES",
+      "expiry": {
+        "repeat_interval_s": 300,
+        "expiry_interval_s": 600
+      },
+      "stream": {
+        "urn": "urn:health:sourceId:streamId"
+      },
+      "check_states": [
+        {
+          "checkStateId": "checkStateId1",
+          "message": "Server Running out of disk space",
+          "health": "Deviating",
+          "topologyElementIdentifier": "server-1",
+          "name": "Disk Usage"
+        },
+        {
+          "checkStateId": "checkStateId2",
+          "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+          "health": "critical",
+          "topologyElementIdentifier": "server-2",
+          "name": "Health monitor"
+        }
+      ]
+    }
+  ]
+}'
+----

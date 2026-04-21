@@ -1,0 +1,92 @@
+= トポロジースコープ
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+WARNING: トポロジースコープによるクエリ機能は、廃止する機能です。これは、特定のラベルを持つ任意のコンポーネントへのアクセスを付与できる`get-topology`権限に置き換えられます。
+
+== トポロジースコープはどのように機能しますか？
+
+トポロジースコープは、SUSE Observabilityで実行されるすべてのトポロジークエリの接頭辞として`get-topology`権限と組み合わされたxref:/develop/reference/k8sTs-stql_reference.adoc[STQLクエリ]です。ユーザーがSUSE Observabilityでビューを選択したりクエリを渡したりする際、この接頭辞クエリはユーザーのクエリの一部として実行されます。これにより、結果はユーザーの役割に一致するように制限されます。
+
+NOTE: `withCauseOf`や`withNeighborsOf`のような関数呼び出しは、このコンテキストではパフォーマンスが良くないためサポートされていません。
+
+ユーザーが複数のグループに属している場合、複数のトポロジースコープを持つことができ、その結果、複数の接頭辞が生成されます。ここでは、接頭辞はユーザーが持つすべてのトポロジースコープのORとして実行されます。
+
+ユーザーは、役割や権限が変更されるたびにSUSE Observabilityからログアウトし、再認証する必要があります。
+
+== なぜトポロジースコープが必要ですか？
+
+トポロジースコープは、SUSE Observability内の主体に対するセキュリティ機能です。事前定義されたSUSE Observabilityの役割である管理者、パワーユーザー、ゲストには、トポロジースコープが定義されていません。
+
+トポロジースコープをクエリのワイルドカードとして指定することは可能ですが、これによりすべてへのアクセスが可能になり、推奨されません。トポロジースコープなしでアクセスが必要な場合は、代わりにxref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[事前定義された役割]のいずれかを使用することをお勧めします。
+
+== 例
+
+以下の例は、異なる権限レベルを持つ4人のユーザーに対して「すべてのインフラストラクチャ」と呼ばれる同じトポロジービューを示しています。
+
+=== このユーザーはSUSE Observability管理グループの一部であるため、トポロジースコープはありません：
+
+image::v51_allperm.png[フルビュー権限]
+
+このビューのクエリは他のものと同じですが、接頭辞はありません：
+
+[,text]
+----
+'layer = "Infrastructure" AND domain IN ("Customer1", "Customer2")'
+----
+
+=== 以下のユーザーは、次のトポロジースコープを持つ構成された主題Xのグループにいます：
+
+[,text]
+----
+'domain = "Customer1"'
+----
+
+image::v51_esx1perm.png[制限されたビュー]
+
+このビューのプレフィックスによるクエリは次のとおりです：
+
+[,text]
+----
+'(domain = "Customer1") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== 構成された主題Yを持つグループの一部である別のユーザーが、次のトポロジースコープを持っています：
+
+[,text]
+----
+'domain = "Customer2"'
+----
+
+次のトポロジーになります:
+
+image::v51_esx2perm.png[制限されたビュー]
+
+このビューのプレフィックスによるクエリは次のとおりです:
+
+[,text]
+----
+'(domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+=== 複数のプレフィックスを持つユーザー
+
+主題を1つ以上のグループに割り当てることが可能です。この例では、上記に示された全体のビューを見ることができるインフラストラクチャマネージャーがいます。このユーザーは、構成された主題がXとYの両方のグループに所属する必要があります。この場合、ユーザークエリのプレフィックスは次のようになります：
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2")'
+----
+
+このユーザーのプレフィックスによるクエリは次のとおりです:
+
+[,text]
+----
+'(domain = "Customer1" OR domain = "Customer2") AND (layer = "Infrastructure" AND domain IN ("Customer1", "Customer2"))'
+----
+
+その結果、次のビューが表示されます:
+
+image::v51_allperm.png[フルビュー権限]

@@ -1,0 +1,46 @@
+= Resolução de problemas de gráficos de métricas personalizadas
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Visão Geral
+
+* <<_the_metric_chart_doesnt_show_on_the_highlights_page_of_a_component,O gráfico de métricas não aparece na página de Destaques de um componente>>
+* <<_the_metric_chart_doesnt_show_on_the_metrics_perspective_of_a_component,O gráfico de métricas não aparece na perspectiva de métricas de um componente>>
+* <<_the_metric_chart_on_a_component_remains_empty_no_data,O gráfico de métricas em um componente permanece vazio ("sem dados")>>
+
+== O gráfico de métricas não aparece na página de Destaques de um componente
+
+No momento, não é possível personalizar os gráficos de métricas que são exibidos na página de Destaques de um componente. Os gráficos para vinculações de métricas personalizadas serão exibidos apenas na perspectiva de Métricas.
+
+== O gráfico de métricas não aparece na perspectiva de métricas de um componente
+
+A `scope` consulta em uma vinculação de métricas é usada para determinar se um componente exibe a vinculação de métricas. Se um componente não exibir uma vinculação de métricas, verifique se a consulta de topologia no escopo corresponde ao componente.
+
+Primeiro, verifique se o componente realmente possui os rótulos e/ou tipo de componente esperados na página de Destaques do componente, o nome e o tipo estão no topo, os rótulos estão na seção "Sobre". Certifique-se de que não há erros de ortografia nos nomes ou valores dos rótulos.
+
+Verifique se a consulta de escopo tem a sintaxe correta:
+
+. Abra a visualização de exploração, através de Visualizações no menu e do botão azul "Explorar" à direita. Ou diretamente via URL: `https://<your-stackstate-instance>/#/views/explore`
+. Abra os filtros e selecione `switch to STQL`
+. Agora copie/cole a consulta do escopo no campo STQL e execute a consulta
+
+A visão geral agora mostra todos os componentes que correspondem à consulta e que receberão o gráfico.
+
+== O gráfico de métricas de um componente permanece vazio ("sem dados")
+
+Para o gráfico de métricas que não possui dados enquanto dados eram esperados, abra o inspetor (o ícone no canto superior direito do gráfico). Ative o botão "Mostrar consulta" para exibir as consultas.
+
+Certifique-se de que a consulta não contenha mais nenhum dos parâmetros (ou seja, todos os valores como `${tags.cluster-name}` ou `${name}`) foram substituídos pelos valores do componente. Se alguns parâmetros foram deixados para trás na consulta, os rótulos não estavam disponíveis neste componente. Portanto, verifique os nomes usados (neste exemplo `cluster-name`) em relação aos rótulos disponíveis no componente. Além disso, certifique-se de que não há erros de digitação nos nomes.
+
+Se todos os parâmetros estiverem preenchidos, pode haver um problema com a consulta PromQL. Para investigar isso, copie a consulta PromQL e abra o explorador de Métricas (via o menu principal de {stackstate-product-name}). Cole a consulta no explorador de Métricas e execute-a. Isso ainda deve resultar em um resultado vazio.
+
+Ou a métrica não existe, ou não possui um dos rótulos, ou o rótulo existe, mas não há séries temporais correspondendo ao valor. O método mais rápido para resolver isso é reescrever a consulta apenas para o nome da métrica e executá-la; se houver resultados, a métrica existe (portanto, sem erros de digitação). O resultado da tabela também pode ser usado para verificar se todos os rótulos utilizados existem. Certifique-se de que não há erros de digitação aqui também.
+
+Se houver resultados, mas apenas não para um valor específico de um rótulo (por exemplo, para o rótulo `pod_name`), a consulta está correta, mas não há séries temporais para esta métrica específica para este componente específico. Coisas a verificar neste caso:
+
+* Os dados estão sendo coletados para este componente (seja via o agente {stackstate-product-name} ou por outros meios)?
+* O componente está realmente reportando a métrica?
+
+Como fazer isso depende de como a coleta de dados está configurada.

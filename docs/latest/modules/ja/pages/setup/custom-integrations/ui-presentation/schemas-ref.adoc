@@ -1,0 +1,160 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= コンポーネントプレゼンテーションスキーマ
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: コンポーネントプレゼンテーションスキーマ
+
+[IMPORTANT]
+====
+*ステータス:*現在、積極的に開発中です。
+
+*Availability:*StackPacks 2.0の機能フラグの背後にあります。機能を有効にする方法については、xref:/setup/custom-integrations/overview.adoc[カスタム統合の概要]を参照してください。
+
+このドキュメントは、現在の設計意図と高レベルの設定内容を説明しています。
+
+注意：動作や機能はまだ実装されていません。
+
+この機能は現在積極的に開発中であるため、動作、スキーマ、および機能はモデルの進化に伴い変更される可能性があります。
+====
+
+== 概要
+
+このページは、UIプレゼンテーションモデルで使用される設定スキーマを文書化しています。
+これは、UIプレゼンテーションの動作を定義する著者のためのリファレンスとして意図されています。
+
+ここで説明されているすべてのスキーマは、*StackPacks 2.0*の一部であり、現在積極的に開発中です。
+
+== `ComponentPresentation`によって生成されたUIページ
+
+以下のスクリーンショットを参照して、`ComponentPresentation`構成が関連するページおよびUI要素を把握してください。
+
+=== コンポーネントタイプ概要ページ
+
+以下のスキーマリファレンスで、`overview`セクションを参照してください。
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_overview_page.png[概要ページ]
+
+=== コンポーネントハイライトページ
+
+以下のスキーマリファレンスで、`highlight`セクションを参照してください。
+
+image:custom-integrations/ui-presentation/ui_presentation_schema_ref_highlight_page.png[ハイライトページ]
+
+== ComponentPresentation
+
+`ComponentPresentation`は、特定のモードとコンテキストにおいて、一致するコンポーネントがUIにどのように表示されるかを定義します。
+
+[,yaml]
+----
+_type: ComponentPresentation
+identifier: urn:...:component-presentation:<presentation-name>
+mode: ["observability" | "security" | "all"]
+
+binding:
+  _type: ComponentPresentationQueryBinding
+  query: string                       # Primitive STQL query used to match components
+
+rank:
+  specificity: number                 # Higher values indicate more specific definitions
+
+presentation:
+  icon: string                        # Optional icon (base64-encoded)
+  name:                               # Optional naming configuration
+    plural: string
+    singular: string
+    title: string
+
+  mainMenu:                           # Optional main menu entry
+    group: string                     # Name of an existing MainMenuGroup
+    rank: number                      # Optional override within the group
+
+  overview:                           # Optional overview page configuration
+    columns:
+      - _type: string                 # ViewTypeTableCol*
+
+  highlight:                          # Optional highlight page configuration
+    summary:
+      ...
+    fields:
+      - _type: string                 # ComponentTypeField
+        fieldId: string
+        label:
+          title: string
+          helpBubbleText: string      # Optional
+        valueExtractor:
+          _type: string
+        display:
+          _type: string
+    about:
+      _type: ComponentTypeAbout
+      fields:
+        - string
+
+  filter:                             # Optional overview filters
+    - _type: FilterField
+      name: string
+      tagField: string
+----
+
+== Identifier
+
+識別子は、{stackstate-product-name}識別子（すなわち、`urn:...`）形式に従う必要があります。詳細については、xref:/configure/topology/identifiers.adoc[identifiers] のマニュアルを参照してください。
+
+== バインディング
+
+バインディングは、`ComponentPresentation` が適用されるコンポーネントを決定します。
+
+バインディングはコンポーネントデータに対して評価され、シンプルで効率的でなければなりません。これはUI評価中に使用されます。
+
+現在サポートされている `binding` タイプ：
+
+* `ComponentPresentationQueryBinding`：STQLクエリ（詳細については xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] を参照してください）
+
+== ランク
+
+`rank` セクションは、複数の一致する `ComponentPresentation` 定義がどのように組み合わされるかを制御します。
+
+より高い特異性の値は、より専門的な定義を示し、プレゼンテーションの動作を構成する際に低い値よりも優先されます。
+
+== プレゼンテーションセクション
+
+`presentation` の下のすべてのフィールドはオプションです。`ComponentPresentation` はプレゼンテーションの側面のサブセットのみを定義することができます。
+
+複数の定義が同じコンポーネントに適用されると、プレゼンテーションセクションが構成されます。
+
+=== アイコンと名前
+
+UI全体で使用されるアイコンと名前を定義します。
+
+=== メインメニュー
+
+一致するコンポーネントがメインメニューに表示されるかどうかを制御します。
+
+参照されたメニューグループは、`MainMenuGroup` を使用して別途定義する必要があります。
+
+=== 概要
+
+概要テーブルに表示される列を定義します。
+
+列は、他の一致するプレゼンテーションによって定義された列を上書きまたは拡張することができます。
+
+=== 強調表示
+
+ハイライトページに表示されるフィールドとセクションを定義します。
+
+==== まとめ
+
+==== フィールド
+
+==== バージョン情報
+
+コンポーネントのハイライトページの「詳細」パネルに表示されるフィールドを定義します。
+
+=== フィルタ
+
+概要ページに表示されるフィルターを定義します。
+
+一致するデータがバウンドコンポーネントに存在する場合、フィルターが表示されます。
+
+endif::ss-ff-stackpacks2_enabled[]

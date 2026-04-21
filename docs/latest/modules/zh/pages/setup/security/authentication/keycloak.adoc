@@ -1,0 +1,126 @@
+= KeyCloak
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+SUSE Observability 可以使用 KeyCloak 作为身份验证提供者进行身份验证，您需要配置 SUSE Observability 和 KeyCloak 以便它们能够相互通信。以下部分描述了各自的设置。
+
+== 身份验证流程
+
+当使用 Keycloak 作为身份验证提供者时，SUSE Observability 将使用 OIDC（OpenID Connect）来验证用户。以下图表描述了身份验证流程。
+
+image::k8s/keycloak-flow.png[Keycloak 身份验证流程]
+
+== 配置 KeyCloak
+
+在您可以配置 SUSE Observability 以使用 KeyCloak 进行身份验证之前，您需要向 KeyCloak 身份验证服务器添加新的客户端配置。客户端所需的设置为：
+
+* *客户端 ID* - 连接的客户端的 ID，我们建议将其命名为 `stackstate`
+* *客户端协议* - 设置为 `openid-connect`
+* *访问类型* - 设置为 `confidential`，以便使用密钥在 KeyCloak 和 SUSE Observability 之间建立连接
+* *标准流程启用* - 设置为 `Enabled`
+* *隐式流程启用* - 设置为 `Disabled`
+* *根 URL* - SUSE Observability 的根位置（与 SUSE Observability 配置中的基本 URL 配置的值相同）
+* *有效重定向 URI* - 这应该是 `/loginCallback/*`
+* *基本 URL* - 这应该指向 SUSE Observability 的根位置
+
+== 配置 SUSE Observability
+
+=== Kubernetes
+
+要配置 SUSE Observability 以使用 KeyCloak 进行身份验证，需要将 KeyCloak 详细信息和用户角色映射添加到文件 `authentication.yaml`。例如：
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    keycloak:
+      url: "https://keycloak.acme.com/auth"
+      realm: acme
+      authenticationMethod: client_secret_basic
+      clientId: stackstate
+      secret: "8051a2e4-e367-4631-a0f5-98fc9cdc564d"
+      jwsAlgorithm: RS256
+      # scope is optional. By default `openid`, `profile` and `email` are requested
+      #_ scope: ["openid", "profile", "email"]
+      # jwtClaims:
+      #   usernameField: preferred_username
+      #   groupsField: roles
+
+    # map the roles from Keycloak to the
+    # 3 standard subjects in SUSE Observability (guest, powerUser and admin)
+    roles:
+      guest: ["keycloak-guest-role-for-stackstate"]
+      powerUser: ["keycloak-power-user-role-for-stackstate"]
+      admin: ["keycloak-admin-role-for-stackstate"]
+----
+
+[NOTE]
+====
+*注意：*
+默认情况下，当对用户进行身份验证时，如果在配置中未指定自定义范围，则请求 KeyCloak 会指定默认范围 `openid profile email`。请验证您 KeyCloak 实例上的 `Client scopes`，以确保默认范围正确，或者您需要一个自定义范围。
+====
+
+
+按照以下步骤配置 SUSE Observability 以使用 KeyCloak 进行身份验证：
+
+. 在 `authentication.yaml` 中 - 添加 KeyCloak 身份验证提供程序的详细信息（请参见上面的示例）。KeyCloak 特定值可以从 KeyCloak 中的客户端配置中获得：
+ ** *url* - KeyCloak 实例的基本 URI
+ ** *realm* - 要连接的 KeyCloak 领域
+ ** *authenticationMethod* - 设置为 `client_secret_basic`，这是当前唯一支持的值。
+ ** *clientId* - 在 KeyCloak 中配置的 KeyCloak 客户端的 ID
+ ** *secret* - 附加到 KeyCloak 客户端的密钥，用于验证该客户端在 KeyCloak 中的身份
+ ** *redirectUri* - 可选：SUSE Observability 的登录回调端点可访问的 URI。默认情况下使用 `stackstate.baseUrl` 填充，但可以被覆盖（必须是指向 `/loginCallback` 路径的完全合格 URL）
+ ** *jwsAlgorithm* - 将此设置为 `RS256`，这是当前唯一支持的值。
+ ** *jwtClaims* - 可选：角色或用户名可以从与 Keycloak 默认行为不同的属性中检索
+  *** *usernameField* - 可选：OIDC 用户配置文件中应作为用户名使用的字段。默认情况下，这将是 `preferred_username`。
+  *** *groupsField* - 可选：SUSE Observability 将始终默认仅使用 `roles` Keycloak 提供的内容。但它也可以从此处指定的字段添加角色。当 Keycloak 从第三方系统映射角色/组时，这主要是有用的。
+. 在 `authentication.yaml` 中 - 使用 `roles.guest`、`roles.powerUser` 或 `roles.admin` 设置将 KeyCloak 的用户角色映射到正确的 SUSE Observability 主体（请参见上面的示例）。有关详细信息，请参见 xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[默认的 SUSE Observability 角色]。还可以创建更多 SUSE Observability 角色，请参见 xref:/setup/security/rbac/README.adoc[RBAC 文档]。
+. 将文件 `authentication.yaml` 与 SUSE Observability 安装说明中的 `values.yaml` 文件一起存储。
+. 运行 Helm 升级以应用更改：
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*注意：*
+
+* 第一次运行 helm upgrade 命令将导致 pods 重启，这可能会导致短暂的可用性中断。
+* 在每次 `authentication.yaml` 运行中包含 `helm upgrade`。
+* 身份验证配置作为 Kubernetes 密文存储。
+====
+
+
+=== 使用外部密文
+
+当 keycloak 密钥应来自外部密文时，请遵循 xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[这些步骤]，但填写以下数据：
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  keycloak_client_id: <base64 of client id>
+  keycloak_secret: <base64 of secret>
+----
+
+== 另请参见
+
+* xref:/setup/security/authentication/authentication_options.adoc[身份验证选项]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[预定义的 SUSE Observability 角色的权限]
+* xref:/setup/security/rbac/rbac_roles.adoc[创建 RBAC 角色]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[外部密文]

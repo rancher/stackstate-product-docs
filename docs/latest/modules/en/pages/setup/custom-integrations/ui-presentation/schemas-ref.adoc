@@ -1,5 +1,6 @@
 ifdef::ss-ff-stackpacks2_enabled[]
 = Component Presentation Schema
+:page-languages: [en, de, es, fr, ja, pt, zh]
 :revdate: 2026-01-08
 :page-revdate: {revdate}
 :description: Component Presentation Schema
@@ -78,18 +79,32 @@ presentation:
         title: string         # Optional
         projection:           # Optional Projection
           _type: string
-          ...
+          ...                 # Additional properties dependent on projection type
 
-  highlight:                  # Optional highlight page configuration
+  highlight:                                      # Optional highlight page configuration
     title: string
     fields:
       - fieldId: string
         title: string
-        description: string   # Optional
-        order: number         # Order in the about section - higher numbers come first
-        projection:           # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
+        description: string                       # Optional
+        order: number                             # Order in the about section - higher numbers come first
+        projection:                               # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
           _type: string
-          ...
+          ...                                     # Additional properties dependent on projection type
+    relatedResources:                             # Optional - related resources to display
+      - resourceId: string                        # Stable identity key for merging
+        title: string                             # Section heading in the UI
+        order: number                             # Display order - higher numbers come first
+        topologyQuery: string                     # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
+        presentationIdentifier: string            # Optional - references a ComponentPresentation by identifier
+    provisioning:                                 # Optional section to specify how provisioning details are shown
+      externalComponentSelector: cel:boolean      # Optional predicate to select the external component with provisioning details
+      showConfiguration: boolean                  # Optional - should provisioning configuration be accessible
+      showStatus: boolean                         # Optional - should provisioning status be accessible
+    events:                                       # Optional section to configure events
+      showEvents: boolean                         # Should events be shown
+      relatedResourcesQuery: cel:string           # Optional - topology query for components to include
+      excludeRelatedResourcesQuery: cel:string    # Optional - topology query for components to exclude of events
 
   filters:                    # Optional overview filters
     - filterId: string
@@ -203,8 +218,8 @@ fields:
     order: 85.0
     projection:
       _type: ComponentLinkProjection
-      name: "${tags.service.namespace}"
-      identifier: "urn:opentelemetry:namespace/${tags.service.namespace}"
+      name: "tags['service.namespace']"
+      identifier: "'urn:opentelemetry:namespace/' + tags['service.namespace']"
 ----
 
 A more specific presentation can override field definitions of a more generic one, e.g. for reordering or suppression.  A field provided by the generic presentation can be hidden by including a field with the same `fieldId`, but without a `projection`.
@@ -215,6 +230,81 @@ To maintain a consistent UI, we use the following conventions:
 Generic fields:: (e.g., name, health) should use high order numbers (e.g., 80-100) to appear at the top by default.
 Specialized fields:: should use lower order numbers to appear after generic ones.
 Overrides:: A specialized presentation can hide a generic section (like health) or move it by overriding the field and providing a different order (e.g., a negative value to push it further down).
+
+==== Provisioning
+
+The "Show Configuration", "Show Last Change" and "Show Status" buttons reveal provisioning data.  Such data is received in "External Components" - one or more sources of data.
+[,yaml]
+----
+    provisioning:
+      externalComponentSelector: "matches(external.identifier, '^urn:open-telemetry:.*')"
+      showConfiguration: true
+      showStatus: true
+----
+
+=== Related resources
+
+Related resources are sections on a component's highlight page that show other components related to the one being viewed (for example, "This service instance has 5 related pods").  Each section renders as an overview table.
+
+A related resource references another `ComponentPresentation` by identifier, reusing its overview spec (columns, name) for rendering.  The `stql` field scopes which components appear in the section, and the backend intersects it with the referenced presentation's binding query — so you don't need to redundantly include the type filter.
+
+[,yaml]
+----
+highlight:
+  relatedResources:
+    - resourceId: "related-pods"
+      title: "Related Pods"
+      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
+      order: 100
+      presentationIdentifier: "urn:stackpack:otel:component-presentation:pod"
+    - resourceId: "related-endpoints"
+      title: "Related Endpoints"
+      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
+      order: 200
+      presentationIdentifier: "urn:stackpack:otel:component-presentation:endpoint"
+----
+
+==== STQL templates
+
+The `topologyQuery` field is a template string that supports `${CEL_EXPRESSION}` placeholders.  Each placeholder is a CEL expression evaluated against the current component's data — the same <<CEL context>> variables are available.  All expressions must evaluate to a string.  Refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL reference] for the available query syntax.
+
+==== Merging
+
+Related resources follow the same merge semantics as highlight fields:
+
+* All matching presentations contribute related resources.
+* Same `resourceId` with higher specificity wins (override).
+* Different `resourceId` values from different presentations are both included (append).
+* The `order` field controls display order.
+
+A more specific presentation can override or suppress related resource definitions of a more generic one.  A related resource provided by the generic presentation can be hidden by including a related resource with the same `resourceId`, but without `topologyQuery` and `presentationIdentifier`.
+
+==== Constraints
+
+* `presentationIdentifier` must reference a presentation within the same stackpack.
+
+=== Events
+
+Configures the "Events" section of the highlights page.  Controls whether to show the section at all and, if so, events for which "related resources" to include.
+The `relatedResourceQuery` and `exludedRelatedResourcesQuery` fields are template strings that supports `${CEL_EXPRESSION}` placeholders.  
+
+[,yaml]
+----
+highlight:
+  events:
+    showEvents: true
+    relatedResourcesQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type IN ("endpoint", "pod")'
+    excludedRelatedResourcesQuery: 'type = "service"'
+----
+
+==== Merging
+
+Events use the following merge semantics:
+
+* All matching presentations can contribute components to include events for
+* The most specific presentation determines whether the event section is shown at all
+
+More specific presentations can suppress related resources from more generic presentations by specifying the `excludedRelatedResourcesQuery` topology query.
 
 === Filters
 
@@ -281,6 +371,21 @@ CEL expressions are evaluated in an environment representing the component.  The
 |healthState            | string              | One of the supported health states (CLEAR, DEVIATING, CRITICAL, UNKNOWN)
 |lastUpdateTimestamp    | uint                | Timestamp of last update, in milliseconds since epoch
 |===
+
+==== CEL provisioning context
+
+When selecting an external component to provide configuration and status details, the `external` variable is available
+
+[cols="2,1,2"]
+|===
+|Variable               | Type                | Description
+
+|external.identifier    | string              | An identifier unique to the external component
+|external.syncIdentifier| string              | The identifier of the component mapping
+|external.tags          | string              | Tags contributed by the external component
+|external.configuration | string              | Configuration of the (external) component
+|===
+
 
 === PromQL interpolation
 

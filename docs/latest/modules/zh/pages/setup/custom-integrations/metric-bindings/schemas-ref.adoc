@@ -1,0 +1,80 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= 度量绑定的架构和参考
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+本页面描述了 `MetricBinding` 的架构，以及构造、表达式语法和语义的详细解释。
+
+== 度量绑定的架构
+
+每个度量绑定：
+
+* 选择可以应用的组件
+* 定义用于检索数据的 PromQL 查询模板
+* 指定结果数据的呈现方式
+* 包括布局提示，以选择在 UI 中显示图表的合适位置
+
+[,yaml]
+----
+_type: "MetricBinding"
+name: string
+chartType: "line"                     # "line" is the only type for now
+unit?: string
+scope: string                         # Topology scope - components to bind to
+enabled: boolean                      # default: true
+description?: string
+valuation?: "higher-is-better" | "lower-is-better"
+priority?: "HIGH" | "MEDIUM" | "LOW" | "NONE"    # deprecated
+queries:
+  - _type: "MetricBindingQuery"
+    expression: string                # promql query
+    alias: string                     # name in legend
+    componentIdentifierTemplate?: string    # URN template for linking
+    primary?: boolean                 # is this query the primary one
+tags:
+  <key>: <value>
+layout?:                              # where should chart be shown
+  metricPerspective?:                 # the metrics perspective for a component
+    tab: string
+    section: string
+    weight?: integer
+  componentHighlight?:                # highlight perspective of a component
+    section: string
+    weight?: integer
+  componentSummary?:                  # summary - supporting panel on the right
+    weight?: integer
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name} 需要知道这是一个度量绑定，因此，值始终需要是 `MetricBinding`
+* `name`：度量绑定的名称
+* `chartType`: {stackstate-product-name} 将支持不同的图表类型（`line`、`bar` 等），目前仅支持 `line`
+* `unit`：查询或查询返回的时间序列中值的单位，用于呈现图表的 Y 轴。请参阅 xref:/develop/reference/k8sTs-chart-units.adoc[支持的单位] 参考以获取所有单位
+* `scope`：度量绑定的拓扑范围，一个选择将显示此度量绑定的组件的拓扑查询
+* `enabled`：设置为 `false` 以保留度量绑定但不向用户显示
+* `description`：可选描述，在名称上悬停时显示
+* `valuation`：较高或较低的值是否为“更好”
+* `priority`: [已弃用] `HIGH`、`MEDIUM` 或 `LOW` 之一。组件上度量的主要排序顺序（按此处提到的顺序），次要排序顺序为 `name`。
+* `queries`：要在图表中显示的查询列表，用于度量绑定（请参见 xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[编写 PromQL 查询]）
+** `expression`：（模板化的）PromQL 查询
+** `alias`：图例中查询的名称
+** `componentIdentifierTemplate`：相关组件的标识符模板，填充来自查询的时间序列标签
+** `primary`：这个查询是主要查询吗？
+* `tags`：将用于在用户界面中组织度量，可以使用 `{}` 留空
+* `layout`：如何在不同的视角视图中分组图表，例如在 xref:/use/views/k8s-metrics-perspective.adoc[度量视角] 上
+** `metricPerspective` - 定义在 `Metrics Perspective` 上显示的度量。度量被分组到选项卡中，然后是节。
+*** `tab` - 选项卡名称。选项卡按字母顺序排序。
+*** `section` - 节名称。节按字母顺序排序。
+*** `weight` - 节内的度量主要按权重（升序）排序，其次按名称（字母顺序）排序。
+** `componentHighlight` - 定义在 `Component Highlight` 上显示的度量。度量被分组在节中。
+*** `section` - 节名称。节按字母顺序排序。
+*** `weight` - 节内的度量主要按权重（升序）排序，其次按名称（字母顺序）排序。
+** `componentSummary` - 指定在选择组件时在 `Components details` 侧边栏中显示的度量。仅当定义了此属性时，图表才会出现。
+*** `weight` - 这表示图表的权重。图表按权重升序排序，然后显示前三个图表。
+* `identifier`：URN（通用资源标识符），用作度量绑定的唯一标识符。它必须以`urn:stackpack:<stackpack-name>:metric-binding:`开头，其余部分可以自由格式，只要在所有度量绑定中是唯一的。
+
+endif::ss-ff-stackpacks2_enabled[]

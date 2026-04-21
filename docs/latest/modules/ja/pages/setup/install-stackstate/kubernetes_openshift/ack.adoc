@@ -1,0 +1,73 @@
+= Alibaba Cloud Container Service for Kubernetes (ACK) のインストールノート
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 最小ボリュームサイズ
+
+Alibaba Cloud の Kubernetes 用コンテナサービス (ACK) は、ディスクベースの PersistentVolumeClaims (PVC) に対して最小ボリュームサイズ *20 GiB* を強制します。ACK にデプロイする際、Persistent Volume Claims (pvc) は *少なくとも 20Gi* のストレージを要求する必要があります。20Gi の最小要件を満たさない場合、ボリュームのプロビジョニングのエラーや Helm デプロイ中のエラーが発生する可能性があります。
+
+この要件を満たすために、すべてのボリュームサイズを調整する専用の Helm 値のセットを提供します。ACK にインストールする場合は、インストール中にこのファイルを使用してください：
+
+[,yaml]
+----
+# ack-values.yaml
+zookeeper:
+  persistence:
+    size: 20Gi
+hbase:
+  tephra:
+    persistence:
+      size: 20Gi
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 20Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 20Gi
+      localpvc:
+        size: 20Gi
+    state:
+      tmpToPVC:
+        volumeSize: 20Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 20Gi
+    vmagent:
+      persistence:
+        size: 20Gi
+    workloadObserver:
+      persistence:
+        size: 20Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 20Gi
+  stackpacks:
+    localpvc:
+      size: 20Gi
+    pvc:
+      size: 20Gi
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 20Gi
+----
+
+ACK 専用の値のために別のファイルを作成し、インストール中に使用してください。例えば、xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Kubernetes インストールドキュメント] に従い、上記の値を `ack-values.yaml` という名前のファイルに保存すれば、SUSE Observability を次のようにインストールできます：
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --values ack-values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----

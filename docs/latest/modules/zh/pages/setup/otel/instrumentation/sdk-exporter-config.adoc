@@ -1,0 +1,92 @@
+= 配置 SDK 导出器
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+要将数据发送到 SUSE Observability，您用于对应用程序进行仪器化的 SDK 会使用内置导出器。可用于生产用途的设置会在靠近您的已仪器化应用程序的位置使用 <<_with_a_collector_production_setup,a collector>>，以将数据发送到 SUSE Observability，但也可以让已仪器化的应用程序 <<_without_a_collector,直接发送>> 遥测数据到 SUSE Observability。
+
+== 使用收集器（生产设置）
+
+=== Kubernetes 的 SDK 导出器配置
+
+所有 SDK，无论语言如何，都使用相同的基本配置来定义 Open Telemetry https://opentelemetry.io/docs/concepts/glossary/#_service[服务名称] 和导出器端点（即遥测发送到的地方）。
+
+这些可以通过为您的仪器化应用程序设置环境变量来配置。
+
+在 Kubernetes 中，在您的工作负载的清单中设置这些环境变量（将 `<the-service-name>` 替换为您的应用服务的名称）：
+
+[,yaml]
+----
+...
+spec:
+  containers:
+  - env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317
+    - name: OTEL_SERVICE_NAME
+      value: <the-service-name>
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+...
+----
+
+示例中指定的端点假设收集器是使用 xref:/setup/otel/collector.adoc[安装指南] 中的默认值安装的。它使用端口 `4317`，该端口使用 `gRPC` 版本的 OTLP 协议。某些仪器化仅支持 HTTP，在这种情况下，请使用端口 `4318`。
+
+服务名称也可以从可能已经存在的 Kubernetes 标签中派生。例如，像这样：
+
+[,yaml]
+----
+spec:
+  containers:
+  - env:
+    - name: OTEL_SERVICE_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.labels['app.kubernetes.io/component']
+----
+
+=== 其他安装的 SDK 导出器配置
+
+要配置 SDK，请为您的应用程序设置这些环境变量：
+
+[,bash]
+----
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://<the-host-for-the-collector>:4317"
+export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
+export OTEL_SERVICE_NAME="<the-service-name>"
+export OTEL_RESOURCE_ATTRIBUTES='service.namespace=<the-namespace>'
+----
+
+示例使用端口 `4317`，该端口使用 `gRPC` 版本的 OTLP 协议。某些仪器化仅支持 HTTP，使用端口 `4318`，协议设置为 `http`。请参考您所使用的语言的 SDK 文档，检查 SDK 支持的协议。`OTEL_EXPORTER_OLTP_ENDPOINT` 和 `OTEL_EXPORTER_OTLP_PROTOCOL` 可以省略，它们有默认值，将数据发送到 localhost 上的首选端点。
+
+`OTEL_RESOURCE_ATTRIBUTES`是可选的，除了定义服务名称空间外，还可以用于在逗号分隔的列表中设置更多资源属性。
+
+=== gRPC vs HTTP
+
+OTLP，即开放遥测协议，支持gRPC和通过HTTP的protobuf。在上一节中，导出协议设置为`gRPC`，这通常提供最佳性能。除了SDK不支持gRPC外，还有其他原因更倾向于使用HTTP：
+
+* 某些防火墙未设置为处理gRPC。
+* （反向）代理和负载均衡器可能不支持gRPC，除非进行额外配置。
+* gRPC的长连接可能在负载均衡时导致问题。
+
+要切换到HTTP而不是gRPC，请将协议更改为`http` _和_使用端口`4318`。
+
+总之，如果gRPC无法正常工作，您可以尝试使用HTTP：
+
+* `grpc`协议在收集器上使用端口`4317`。
+* `http`协议在收集器上使用端口`4318`。
+
+== 没有收集器。
+
+在小型测试环境中，直接将数据从您的仪器化应用程序发送到 SUSE Observability 可能会很方便。与上述文档中的收集器设置的唯一区别是使用`OTEL_EXPORTER_OTLP_ENDPOINT`的不同值：
+
+* 对于gRPC，请使用 SUSE Observability 的 OTLP 端点，参见xref:/setup/otel/otlp-apis.adoc[OTLP APIs 页面]。
+* 对于HTTP，请使用 SUSE Observability 的 OTLP over HTTP 端点，参见xref:/setup/otel/otlp-apis.adoc[OTLP APIs 页面]。
+
+[NOTE]
+====
+将收集器URL*和*端口替换为 SUSE Observability 端点。根据您的 SUSE Observability 安装，端口将会不同。
+====
+

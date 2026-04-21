@@ -1,0 +1,143 @@
+= Sincronización de salud
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Esta sección describe el tema avanzado de sincronizar datos de salud personalizados de diferentes sistemas de monitoreo a SUSE Observability.
+Este tema es principalmente interesante para ingenieros que desean realizar una integración personalizada con un sistema de monitoreo existente.
+Para monitores preconfigurados, puede consultar xref:/use/alerting/kubernetes-monitors.adoc[aquí].
+
+== Descripción general
+
+La sincronización de salud añade verificaciones de salud existentes de sistemas de monitoreo externos a los elementos de topología de SUSE Observability. Los datos de salud se calculan en el sistema de monitoreo externo utilizando sus propios datos y reglas, luego se sincronizan automáticamente y se adjuntan a los elementos de topología asociados en SUSE Observability.
+
+== Configurar la sincronización de salud
+
+La API del Receptor de SUSE Observability recibirá y procesará automáticamente todos los datos de salud entrantes. SUSE Observability no requiere configuración adicional para habilitar la sincronización de salud, sin embargo, los datos de salud recibidos deben coincidir con el formato JSON esperado.
+
+Los detalles sobre cómo ingerir datos de salud se pueden encontrar en las siguientes páginas:
+
+* xref:/configure/health/send-health-data/send-health-data.adoc[Ingerir datos de salud a través de la API del Receptor de SUSE Observability]
+
+== Canal de sincronización de salud
+
+El marco de sincronización de salud funciona de la siguiente manera:
+
+* Los datos de salud se envían a SUSE Observability y se ingieren a través de la API del Receptor.
+* Los elementos de topología de SUSE Observability relacionados con las verificaciones de salud ingeridas se identifican y vinculan en función de:
+ ** los identificadores de topología obtenidos durante la sincronización de topología.
+ ** el `topologyElementIdentifier` del xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[carga útil de salud] ingerido.
+* SUSE Observability realiza un seguimiento de los cambios tanto en los elementos de topología como en las verificaciones de salud para mantener información actualizada.
+
+image::health-sync-pipeline.svg[Canal de sincronización de salud]
+
+=== Modelos de consistencia
+
+La sincronización de salud de SUSE Observability se basa en diferentes modelos de consistencia para garantizar que los datos enviados desde un sistema de monitoreo externo coincidan con lo que SUSE Observability ingesta y muestra. El modelo de consistencia se especifica en la propiedad `"health"` del xref:/configure/health/send-health-data/send-health-data.adoc#_common_json_object[objeto JSON común] o como un argumento en la CLI de SUSE Observability cuando se envían datos de salud a SUSE Observability. Los modelos soportados son: `REPEAT_SNAPSHOTS` y `TRANSACTIONAL_INCREMENTS`.
+[tabs]
+====
+Modelo de instantáneas repetidas::
++
+--
+El modelo de consistencia `REPEAT_SNAPSHOTS` funciona con instantáneas completas periódicas de todas las comprobaciones en un sistema de monitoreo externo. SUSE Observability realiza un seguimiento de las comprobaciones en cada instantánea recibida y decide si los estados de comprobación externos asociados necesitan ser creados, actualizados o eliminados en SUSE Observability. Por ejemplo, si un estado de comprobación ya no está presente en una instantánea. Este modelo ofrece un control total sobre qué comprobaciones externas serán eliminadas, ya que todas las decisiones se infieren de las instantáneas recibidas. No hay ambigüedad sobre las comprobaciones externas que estarán presentes en SUSE Observability.
+
+*Utilice este modelo cuando:* El sistema de monitoreo externo es capaz de mantener el estado de qué elementos están presentes en una ventana de tiempo determinada y, por lo tanto, puede comunicar cómo se ve la instantánea completa.
+
+*Carga JSON:* La xref:/configure/health/send-health-data/repeat_snapshots.adoc[carga útil de salud de Repetir Instantáneas] acepta propiedades específicas para especificar cuándo comienza o termina una instantánea.
+--
+
+Modelo de Incrementos Transaccionales::
++
+--
+El modelo de consistencia `TRANSACTIONAL_INCREMENTS` está diseñado para ser utilizado en sistemas de transmisión donde solo se comunican cambios incrementales a SUSE Observability. Como no hay repetición de datos, la consistencia de los datos se mantiene asegurando que se garantice la entrega al menos una vez a lo largo de toda la canalización. Para detectar si falta algún dato, SUSE Observability requiere que tanto un punto de control como el punto de control anterior se comuniquen junto con el `check_states`. Este modelo requiere un control estricto a lo largo de toda la canalización para garantizar que no haya pérdida de datos.
+
+*Utilice este modelo cuando:* El sistema de monitoreo externo no tiene acceso al estado total de las comprobaciones externas, sino que solo trabaja en un enfoque basado en eventos.
+
+*Carga JSON:* Los metadatos `repeat_interval` y `expire_interval` no son relevantes para la xref:/configure/health/send-health-data/transactional_increments.adoc[carga útil de salud de Incrementos Transaccionales] ya que no hay una periodicidad predefinida en los datos.
+
+--
+====
+
+=== Flujo de salud y subflujo
+
+Los sistemas de monitoreo externo envían datos de salud al Receptor de Observabilidad de SUSE en un flujo de salud. Cada flujo de salud tiene al menos un subflujo con comprobaciones de salud.
+
+==== Flujo de salud
+
+El flujo de salud identifica de manera única la sincronización de salud y define los límites dentro de los cuales los estados de comprobación de salud deben ser procesados juntos.
+
+==== Subflujo
+
+Los subflujos contienen los datos de comprobación de salud que son procesados por SUSE Observability. Al trabajar con datos de salud de un sistema de monitoreo externo distribuido, se pueden configurar múltiples subflujos, cada uno conteniendo instantáneas de salud de una única ubicación. Los datos en cada subflujo son semi-independientes, pero contribuyen a los estados de comprobación de salud del flujo de salud completo. Si una única ubicación es responsable de informar los estados de comprobación de salud del flujo de salud, puedes omitir el `sub_stream_id` de la xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[carga útil de salud]. SUSE Observability asumirá que todas las comprobaciones de salud externas pertenecen a un único subflujo por defecto.
+
+=== Intervalo de repetición
+
+La sincronización de salud procesa los datos de salud ingeridos en cada subflujo. El intervalo de repetición especificado en la xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[carga útil de salud] es el compromiso del sistema de monitorización externa de enviar instantáneas completas una y otra vez para mantener los datos actualizados en SUSE Observability. Esto es útil para que SUSE Observability pueda informar al usuario cuán actualizada está la sincronización de salud.
+
+=== Intervalo de expiración
+
+El intervalo de expiración se puede utilizar para configurar subflujos en la sincronización de salud para eliminar datos que ya no son enviados por el sistema externo. Esto es útil en caso de que la fuente de un subflujo pudiera ser desmantelada y SUSE Observability no volviera a recibir información de ella. Sin un intervalo de expiración, los datos previamente sincronizados quedarían permanentemente colgando.
+
+=== Estado de comprobación
+
+El estado de verificación de salud se calcula mediante un sistema de monitoreo externo e incluye toda la información necesaria para adjuntarlo a un elemento de topología. Para poder materializarlo y adjuntarlo a un componente, es necesario atribuir el estado de salud a un monitor particular, en este caso un <<_external_monitor,ExternalMonitor>>.
+
+Una vez adjunto a un elemento de topología, el estado de verificación de salud contribuye al propio estado de salud del elemento.
+
+=== Monitor Externo
+
+Un monitor externo permite adjuntar los estados de salud a los componentes y mostrar un remediationHint en las páginas destacadas de SUSE Observability. Este recurso necesita ser creado a través del xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] o como parte de un stackpack. Aquí hay un ejemplo de un monitor externo:
+
+----
+    {
+      "_type": "ExternalMonitor",
+      "healthStreamUrn": "urn:health:kubernetes:external-health",
+      "description": "Monitored by external tool.",
+      "identifier": "urn:custom:external-monitor:heartbeat",
+      "name": "External Monitor Heartbeat",
+      "remediationHint": "",
+      "tags": [
+        "heartbeat"
+      ]
+    }
+----
+
+Cada carga útil de `ExternalMonitor` tiene los siguientes detalles:
+
+* `_type`: SUSE Observability necesita saber que esto es un monitor, por lo que el valor siempre debe ser `ExternalMonitor`.
+* `healthStreamUrn`: Este campo debe coincidir con el `urn` que se envía como parte de la xref:/configure/health/send-health-data/repeat_snapshots.adoc#_json_property_health[carga útil de salud].
+* `description`: Una descripción del monitor externo.
+* `identifier`: Un identificador de la forma `urn:custom:external-monitor:....` que identifica de manera única el monitor externo al actualizar su configuración.
+* `name`: El nombre del monitor externo.
+* `remediationHint`: Una descripción de lo que el usuario puede hacer cuando el monitor falla. El formato es markdown.
+* `tags`: Añade etiquetas al monitor para ayudar a organizarlos en la vista general de monitores de tu instancia de SUSE Observability, http://your-SUSE Observability-instance/#/monitors.
+
+Aquí hay un ejemplo de cómo crear un `External Monitor` utilizando el xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI].
+
+* Crea un nuevo archivo YAML llamado `externalMonitor.yaml` y añade esta plantilla YAML para crear tu propio monitor externo.
+```
+nodes:
+* _type: ExternalMonitor
+healthStreamUrn: urn:health:sourceId:streamId
+description: Monitored by external tool.
+identifier: urn:custom:external-monitor:heartbeat
+name: External Monitor Heartbeat
+remediationHint: |-
+  To remedy this issue with the deployment {{ labels.deployment }}, consider taking the following steps:
+ .. Look at the logs of the pods created by the deployment
+tags:
+  *** heartbeat
+```
+* Utiliza la CLI para crear el monitor externo.
+```bash
+sts settings apply -f externalMonitor.yaml
+✅ Applied 1 setting node(s).
+
+TYPE            | ID              | IDENTIFIER                            | NAME                    +
+ExternalMonitor | 150031117290020 | urn:custom:external-monitor:heartbeat | External Monitor Heartbeat
+```
+
+== Consulte también
+
+* xref:/configure/health/send-health-data/send-health-data.adoc#_json_health_payload[Carga útil de salud en JSON]

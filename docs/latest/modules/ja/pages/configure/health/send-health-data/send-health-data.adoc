@@ -1,0 +1,52 @@
+= HTTP経由で健康データを送信します
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+SUSE Observabilityは、HTTPまたはxref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]を介して、独自のデータソースから健康情報を同期できます。
+
+== SUSE Observability Receiver API
+
+SUSE Observability Receiver APIは、トポロジー、メトリクス、イベント、および健康データを共通のJSONオブジェクトで受け入れます。レシーバーAPIのデフォルトの場所は`<STACKSTATE_RECEIVER_API_ADDRESS>`で、`<STACKSTATE_BASE_URL>`と<``STACKSTATE_RECEIVER_API_KEY>``を使用して構築されます。
+
+KubernetesまたはOpenShiftにデプロイされたSUSE Observabilityの`<STACKSTATE_RECEIVER_API_ADDRESS>`は次のとおりです：
+
+[,text]
+----
+https://<STACKSTATE_BASE_URL>/receiver/stsAgent/intake?api_key=<STACKSTATE_RECEIVER_API_KEY>
+----
+
+`<STACKSTATE_BASE_URL>`と`<STACKSTATE_RECEIVER_API_KEY>`はSUSE Observabilityのインストール中に設定され、詳細はxref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_values_yaml[Kubernetes install - configuration parameters]を参照してください。
+
+== JSON
+
+=== 共通のJSONオブジェクト
+
+トポロジー、テレメトリ、および健康データは、HTTP POSTを介してレシーバーAPIに送信されます。すべてのメッセージに使用される共通のJSONオブジェクトがあります。
+
+[,javascript]
+----
+{
+  "collection_timestamp": 1548855554, // the epoch timestamp for the collection
+  "events": {}, // used to send events data
+  "internalHostname": "localdocker.test", // the host sending this data
+  "metrics": [], // used to send metrics data
+  "service_checks": [],
+  "topologies": [], // used to send topology data
+  "health": // used for sending health data
+}
+----
+
+=== JSON健康ペイロード
+
+SUSE Observabilityは、選択したxref:/configure/health/health-synchronization.adoc#_consistency_models[整合性モデル]に基づいて健康データを受け入れます。各モデルに送信できるメッセージは、以下のページに記載されています：
+
+* xref:/configure/health/send-health-data/repeat_snapshots.adoc[Repeat Snapshots JSON]
+* xref:/configure/health/send-health-data/transactional_increments.adoc[Transactional Increments JSON]
+
+== 関連項目
+
+* xref:/setup/cli/cli-sts.adoc[SUSE Observability CLIをインストールする]

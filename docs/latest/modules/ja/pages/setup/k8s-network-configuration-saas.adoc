@@ -1,0 +1,43 @@
+= ネットワーク設定
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observabilityは、クラウドでホストされるSaaSサービスです。オンプレミスやクラウド環境からSUSE Observability SaaSに通信するためには、SUSE ObservabilityエージェントがSUSE ObservabilityレシーバーAPIに接続できる必要があります。
+クラスターがプライベートネットワークで実行されている場合、SUSE ObservabilityエージェントがSUSE ObservabilityレシーバーAPIに接続できるようにネットワークを構成する必要があるかもしれません。なぜなら、ネットワーク構成がインターネットへの出口トラフィックを許可しない可能性があるからです。このページでは、SUSE Observabilityエージェントをインストールするためにネットワークを構成する方法と、SUSE ObservabilityエージェントがSUSE ObservabilityレシーバーAPIと通信できるようにする方法について説明します。
+
+[NOTE]
+====
+SUSE ObservabilityエージェントとSUSE ObservabilityレシーバーAPI間のトラフィックは常にSUSE Observabilityエージェントによって開始されます。SUSE ObservabilityレシーバーAPIは、SUSE Observabilityエージェントに対してトラフィックを開始することはありません。
+====
+
+
+== SUSE Observabilityエージェントのインストール
+
+SUSE Observabilityエージェントのインストールは、Helmを通じて行われます。デフォルトでは、HelmチャートはQuay.ioのDockerレジストリからSUSE Observabilityエージェントのコンテナイメージを取得するように構成されています。ネットワーク構成がインターネットへの出口トラフィックを許可しない場合、SUSE Observabilityエージェントをインストールするためのいくつかのオプションがあります：
+
+. KubernetesクラスターからQuay.ioコンテナレジストリへの出口トラフィックを許可するようにネットワークを構成します。
+. Quay.ioコンテナレジストリを自分のコンテナレジストリを通じてプロキシします。
+. Dockerイメージを自分のコンテナレジストリにプルします。
+
+オプション2および3の場合、Helmチャートを構成して自分のコンテナレジストリからSUSE Observabilityエージェントのコンテナイメージをプルする必要があります。自分のコンテナレジストリからイメージをプルするためにSUSE ObservabilityエージェントHelmチャートを構成するガイドはxref:/k8s-suse-rancher-prime-agent-air-gapped.adoc[こちら]にあります。
+
+== SUSE Observabilityエージェントの通信
+
+SUSE Observabilityエージェントは、HTTPSを介してSUSE ObservabilityレシーバーAPIと通信します。SUSE Observabilityエージェントの異なる部分が、テナント内にホストされているSUSE ObservabilityレシーバーAPIに接続します。以下の図を参照してください：
+
+image::k8s/k8s-agent-communication.png[SUSE Observabilityエージェントの通信]
+
+すべての通信はHTTPSを介して行われ、標準のHTTPSポート443を使用します。SUSE Observabilityエージェントは、SUSE ObservabilityレシーバーAPIと通信するために以下のエンドポイントを使用します：
+
+* *https://<tenant>.app.stackstate.io/receiver/stsAgent* - SUSE Observabilityエージェントは、メトリクス、イベント、およびトポロジーデータをSUSE ObservabilityレシーバーAPIに送信します。
+
+SUSE ObservabilityエージェントがSUSE ObservabilityレシーバーAPIと通信できるようにするためには、ネットワークを構成してSUSE ObservabilityレシーバーAPIへの出口トラフィックを許可する必要があります。SUSE ObservabilityレシーバーAPIはクラウドにホストされており、テナント専用の特定のIPがあります。インターネットへの出口トラフィックを許可する必要があります。出口トラフィックを許可するための正しいIPアドレスを取得するには、次のコマンドを使用できます：
+
+[,bash]
+----
+$ dig +short <tenant>.app.stackstate.io
+----
+
+または、ブラウザで次のURLを訪問することもできます：`https://www.nslookup.io/domains/<tenant>.app.stackstate.io/dns-records/`

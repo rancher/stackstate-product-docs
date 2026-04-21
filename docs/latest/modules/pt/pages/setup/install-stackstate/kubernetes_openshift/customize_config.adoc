@@ -1,0 +1,85 @@
+= Substituir a configuração padrão
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} Auto-hospedado
+
+Um número de valores pode ser definido no https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} Helm chart]. Por exemplo, é possível personalizar o `tolerations` e o `nodeSelectors` para cada um dos componentes. Você também pode adicionar configuração personalizada e incluir variáveis de ambiente
+
+== Configuração personalizada para {stackstate-product-name} `api`
+
+Para o serviço {stackstate-product-name} `api`, a configuração personalizada pode ser inserida diretamente no Helm chart. Esta é a maneira recomendada de substituir a configuração padrão com a qual {stackstate-product-name} vem e é especialmente conveniente para personalizar a autenticação. A configuração definida dessa forma estará disponível no arquivo de configuração {stackstate-product-name} no formato https://github.com/lightbend/config/blob/master/HOCON.md[HOCON].
+
+Por exemplo, você pode definir um link de recuperação de senha personalizado para a página de login do {stackstate-product-name}:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      config: |
+        stackstate.api.authentication.forgotPasswordLink =
+        "https://www.stackstate.com/forgotPassword.html"
+----
+
+--
+====
+
+[NOTE]
+====
+Observe que a configuração personalizada definida aqui será substituída por xref:/setup/install-stackstate/kubernetes_openshift/customize_config.adoc#_environment_variables[variáveis de ambiente].
+====
+
+
+== Variáveis de ambiente
+
+A configuração para todos os serviços {stackstate-product-name} (`receiver`, `k2es-*`, `correlation` e `api`) pode ser personalizada usando variáveis de ambiente. As variáveis de ambiente são especificadas no arquivo `values.yaml` e podem ser `secret` (como senhas) ou `open` (para valores normais). Para converter um item de configuração em um nome de variável de ambiente, substitua `.` por `_` e adicione o prefixo `CONFIG_FORCE_`.
+
+[,text]
+----
+# configuration item
+stackstate.api.authentication.forgotPasswordLink
+
+# environment variable name
+CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink
+----
+
+Por exemplo, você pode definir um link de recuperação de senha personalizado para a página de login do {stackstate-product-name}:
+
+[tabs]
+====
+values.yaml::
++
+--
+
+[,text]
+----
+stackstate:
+  components:
+    api:
+      extraEnv:
+        # The value for open env vars is defined on the deployment
+        open:
+          CONFIG_FORCE_stackstate_api_authentication_forgotPasswordLink: "https://www.stackstate.com/forgotPassword.html"
+        # The value for secret env vars is defined in a secret and referenced from the deployment
+        secret:
+          CONFIG_FORCE_some_config_with_sensitive_data: "data-stored-in-secret"
+----
+
+--
+====
+
+[NOTE]
+====
+Para o serviço {stackstate-product-name} `api`, as variáveis de ambiente substituirão <<_custom_configuration_for_suse_observability_api,configuração personalizada definida usando `config`>>.
+====
+
+
+* Detalhes completos sobre a nomenclatura de todos os diferentes serviços podem ser encontrados no https://github.com/StackVista/helm-charts/tree/master/stable/suse-observability[{stackstate-product-name} README do Helm chart].
+* Encontre mais detalhes sobre xref:/setup/security/authentication/README.adoc[personalização da autenticação].

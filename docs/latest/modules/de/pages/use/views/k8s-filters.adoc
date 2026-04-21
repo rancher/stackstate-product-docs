@@ -1,0 +1,143 @@
+= Filter
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Das *Filters*-Menü in der oberen rechten Ecke der Benutzeroberfläche der Ansicht ermöglicht es Ihnen, die Komponenten (Topologie) und Ereignisse, die in einer Ansicht angezeigt werden, zu filtern. Einmal angewendet, wirken sich die Filter auf den Inhalt aller Perspektiven in einer Ansicht aus.
+
+image::k8s/k8s-filters.png[Ansichtsfilter]
+
+== Topologie filtern
+
+Topologie-Filter können verwendet werden, um eine Teilmenge von Topologiekomponenten auszuwählen, die in einer der verfügbaren Perspektiven angezeigt werden sollen. Während der Ereignisfilter für alle Ansichtstypen gleich ist, hängen die Topologie-Filter vom Typ der Ansicht ab, in der Sie sich befinden. Hier erfahren Sie mehr:
+
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_kubernetes_views[Topologie-Filter in Kubernetes-Ansichten]
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_other_view_types[Topologie-Filter in anderen Ansichtstypen]
+
+=== Topologie-Filter in Kubernetes-Ansichten
+
+In den xref:/use/views/k8s-views.adoc[Kubernetes-Ansichten] sind die Topologie-Filter auf eine kleine Menge grundlegender Filter beschränkt, die in allen Kubernetes-Ansichten bestehen bleiben: `clusters` und / oder `namespaces`. Die persistenten Topologie-Filter für Kubernetes-Ansichten befinden sich außerhalb des regulären `filters`-Menüs in der Benutzeroberfläche und sind nicht voneinander abhängig (z. B. aktualisiert die Auswahl eines Clusters *nicht* automatisch den `namespaces`-Filter, um nur die Namespaces dieses Clusters anzuzeigen).
+
+image::k8s/k8s-filters-kube-topology.png[Kubernetes-Topologie-Filter]
+
+=== Topologie-Filter in anderen Ansichtstypen
+
+Für andere Ansichtstypen können Sie Ihre Topologie mit grundlegenden oder erweiterten Topologie-Filtern durchsuchen. Weitere Informationen:
+
+* xref:/use/views/k8s-filters.adoc#_basic_topology_filters[Grundlegende Topologie-Filter]
+* xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[Erweiterte Topologie-Filter]
+* xref:/use/views/k8s-filters.adoc#_topology_filtering_limits[Einschränkungen der Topologiefilterung]
+
+==== Grundlegende Topologie-Filter
+
+Der Hauptweg, um die Topologie zu filtern, ist die Verwendung der verfügbaren grundlegenden Filter. Wenn Sie einen Filter setzen, wird die geöffnete Perspektive aktualisiert, um nur die Visualisierung oder Daten für die Teilmenge Ihrer Topologie anzuzeigen, die mit dem Filter übereinstimmt. Das Setzen mehrerer Filter wird Ihre Suche weiter eingrenzen. Sie können mehr als einen Wert für jeden Filter festlegen, um Ihre Suche zu erweitern.
+
+|===
+| Filter | Beschreibung
+
+| Schichten, Domänen, Umgebungen und Komponententypen
+| Filtern Sie nach den Komponentendetails, die beim Importieren oder Erstellen von Komponenten enthalten sind.
+
+| Komponentenstatus
+| Nur Komponenten mit dem angegebenen Gesundheitszustand, wie er durch die zugehörige Gesundheitsprüfung gemeldet wird, einbeziehen.
+
+| Komponentenbeschriftungen
+| Nur Komponenten mit einer bestimmten Beschriftung einbeziehen.
+
+| Komponenten einbeziehen
+| Die hier genannten Komponenten werden in der Topologie *zusätzlich zu* den von anderen Filtern zurückgegebenen Komponenten einbezogen.
+|===
+
+Um die Topologie mit grundlegenden Filtern zu filtern, klicken Sie auf das *Filters*-Menü in der oberen rechten Ecke der Benutzeroberfläche und wählen Sie *Zu Basis wechseln* unter dem vertikalen Tab *Topologie*.
+
+image::k8s/k8s-filters-basic-topology.png[Grundlegende Topologie-Filter]
+
+==== Erweiterte Topologie-Filter
+
+Sie können die integrierte xref:/develop/reference/k8sTs-stql_reference.adoc[SUSE Observability Query Language (STQL)] verwenden, um einen erweiterten Topologie-Filter zu erstellen, der auf einen bestimmten Bereich Ihrer Topologie zoomt.
+
+Um die Topologie mit einer STQL-Abfrage zu filtern, klicken Sie auf das *Filters*-Menü in der oberen rechten Ecke der Benutzeroberfläche und wählen Sie *Zu STQL wechseln* unter dem vertikalen Tab *Topologie*.
+
+Das folgende Beispiel einer STQL-Abfrage gibt Komponenten zurück, die die folgenden Bedingungen erfüllen:
+
+* In der *Domäne* `security check`
+* UND hat einen *Gesundheits*zustand von `Clear` ODER `Deviating`
+* ODER ist die *Komponente* mit dem Namen `ai_engine`
+
+[,yaml]
+----
+(domain IN ("security check") AND healthstate IN ("CLEAR", "DEVIATING")) OR name IN ("ai_engine")
+----
+
+image::k8s/k8s-filters-advanced-topology.png[Erweiterte Topologie-Filter]
+
+==== Kompatibilität von Basis- und erweiterten Filtern
+
+Sie können zwischen Basis- und erweiterten Filtern wechseln, indem Sie *Zu Basis wechseln* oder *Zu STQL wechseln* im vertikalen Tab *Topologie* im *Filters*-Menü auswählen.
+
+Es ist immer möglich, von Basis- zu erweiterten Filtern zu wechseln. Die ausgewählten Basisfilter werden direkt in eine STQL-Abfrage umgewandelt. Für einfache Abfragen ist es auch möglich, von erweiterten zu Basisfiltern zu wechseln, jedoch sind einige erweiterte Abfragen nicht mit Basisfiltern kompatibel.
+
+➡️ xref:/develop/reference/k8sTs-stql_reference.adoc#_compatibility_basic_and_advanced_filters[Erfahren Sie mehr über die Kompatibilität von Basis- und erweiterten Topologie-Filtern]
+
+==== Andere Filter
+
+Die unten aufgeführten erweiterten Filter sind mit Basisfiltern kompatibel, können jedoch nicht als Basisfilter eingestellt oder angepasst werden.
+
+* *mitNachbarnVon* - wenn ein erweiterter Filter die Funktion xref:/develop/reference/k8sTs-stql_reference.adoc#_withneighborsof[mitNachbarnVon] enthält, wird die Anzahl der Komponenten, deren Nachbarn abgefragt werden, im Feld *Andere Filter* angezeigt. Um mit Basisfiltern kompatibel zu sein, muss eine `withNeighborsOf` Funktion mit anderen Filtern unter Verwendung eines `OR` Operators verbunden werden.
+* *Bezeichner* - wenn ein erweiterter Filter Komponenten nach xref:/develop/reference/k8sTs-stql_reference.adoc#_filters[Bezeichner] auswählt, wird die Anzahl der abgefragten Komponentenbezeichner im Feld *Andere Filter* angezeigt. Um mit Basisfiltern kompatibel zu sein, muss ein `identifier` Filter angegeben und mit anderen Filtern unter Verwendung des Operators `OR identifier IN (...)` verbunden werden.
+
+Das Feld *Andere Filter* in den Basis-Topologiefiltern listet all diese erweiterten Filter und die Anzahl der betroffenen Komponenten auf.
+
+[NOTE]
+====
+Das Feld *Andere Filter* gibt nur Details zu erweiterten Filtern an, die gesetzt wurden und mit Basisfiltern kompatibel sind.
+====
+
+
+==== Einschränkungen der Topologiefilterung
+
+Um die Leistung zu optimieren, wird eine Grenze für die Anzahl der Elemente festgelegt, die geladen werden können, um eine Topologievisualisierung zu erzeugen. Die Filtergrenze hat einen Standardwert von 10000 Elementen. Wenn eine xref:/use/views/k8s-filters.adoc#_basic_topology_filters[Basisfilter] oder xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[erweiterte Filterabfrage] die Filtergrenze überschreitet, wird eine Nachricht auf dem Bildschirm angezeigt und keine Topologievisualisierung wird angezeigt.
+
+Bitte beachten Sie, dass die Filtergrenze auf die Gesamtanzahl der Elemente angewendet wird, die geladen werden müssen, und nicht auf die Anzahl der Elemente, die letztendlich angezeigt werden.
+
+Im folgenden Beispiel laden wir zuerst alle Nachbarn jeder Komponente in unserer Topologie und zeigen dann nur die an, die zur `applications` Schicht gehören. Dies würde wahrscheinlich mit einem Fehler aufgrund der Filtergrenze fehlschlagen, da alle Komponenten in der Topologie geladen werden müssen.
+
+[,text]
+----
+withNeighborsOf(direction = "both", components = (name = "*"), levels = "15")
+   AND layer = "applications"
+----
+
+Um diese Topologievisualisierung erfolgreich zu erstellen, müssten wir entweder die Abfrage umschreiben, um die Anzahl der geladenen Komponenten unter der konfigurierten Filtergrenze zu halten, oder die Filtergrenze erhöhen. Durch das Filtern nur nach Komponenten in der `applications` Schicht werden wir dieselben Komponenten wie in der obigen Abfrage anzeigen, ohne zuerst alle Komponenten laden zu müssen. Diese Abfrage führt daher weniger wahrscheinlich zu einem Fehler aufgrund der Filtergrenze.
+
+[,yaml]
+----
+layer = "applications"
+----
+
+== Ereignisse filtern
+
+Das *Ansichtsfilter*-Panel auf der linken Seite der SUSE Observability UI kann verwendet werden, um die in der xref:/use/views/k8s-events-perspective.adoc[Ereignisperspektive] angezeigten Ereignisse zu filtern. Sie sind auch in der *Ereignisliste* im rechten Panel im *Ansichtszusammenfassung*-Tab und in den Detail-Tabs – *Komponentendetails* und *Direktbeziehungsdetails* enthalten.
+
+Die folgenden Ereignisfilter sind verfügbar:
+
+|===
+| Filter | Beschreibung
+
+| *Kategorie*
+| Zeige nur Ereignisse aus einer oder mehreren xref:/use/views/k8s-events-perspective.adoc#_event_category[Kategorien] an.
+
+| *Typ*
+| Klicken Sie auf das *Typ* Filterfeld, um eine Liste aller Ereignistypen zu öffnen, die für die derzeit gefilterten Komponenten im aktuellen Zeitfenster generiert wurden. Sie können einen oder mehrere Ereignistypen auswählen, um die angezeigten Ereignisse zu verfeinern.
+
+| *Quelle*
+| Ereignisse können von SUSE Observability generiert oder von einem externen Quellsystem, wie Kubernetes oder ServiceNow, durch eine Integration abgerufen werden. Klicken Sie auf das *Quelle* Filterfeld, um eine Liste aller Quellsysteme für Ereignisse zu öffnen, die für die derzeit gefilterten Komponenten im aktuellen Zeitfenster generiert wurden. Wählen Sie ein oder mehrere Quellsysteme aus, um nur diese Ereignisse zu sehen.
+
+| *Kennungen*
+| Relevante Ereigniseigenschaften werden als Tags hinzugefügt, wenn ein Ereignis aus einem externen System abgerufen wird. Zum Beispiel `status:open` oder `status:production`. Dies kann helfen, Ereignisse zu identifizieren, die für ein spezifisches Problem oder eine Umgebung relevant sind.
+|===
+
+image::k8s/k8s-filters-events.png[Ereignisfilter]

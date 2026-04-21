@@ -1,0 +1,68 @@
+= 通知を設定する
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+新しい通知を設定するための手順は次のとおりです:
+
+* <<_create_a_new_notification,新しい通知を作成する>>
+* <<_configure_when_to_notify,通知するタイミングを設定する>>
+* <<_where_to_send_notifications,通知を送信する場所を定義する>>
+
+== 新しい通知を作成する
+
+SUSE Observability UIのハンバーガーメニューの下半分にあるリンクから通知ページを開きます。これにより、すでに設定されているすべての通知の概要が表示され、そのステータスも確認できます。
+
+希望する通知がすでに存在するかどうかを確認できます。存在しない場合は、「新しい通知を追加」ボタンで新しい通知を作成してください。
+
+== 通知するタイミングを設定する
+
+image::k8s/notifications-add-new-notification.png[新しい通知を追加する]
+
+通知を設定する:
+
+. 名前 - 短いが、この通知の意図を説明する名前を選択してください。これは通知の概要での参照用です。
+. ステータス - 通知は、不要な場合やノイズが多い場合などに、一時的に無効にすることができます。
+. 通知するタイミング - 重要な健康状態は常に通知をトリガーしますが、オプションで逸脱した状態も含めることができます。
+. スコープ - 例として、デフォルトのKubernetesネームスペース内のポッドに対するすべてのモニターの健康状態が送信されます。この選択を変更するには、<<_scope,スコープ>>セクションの利用可能なフィルターを使用してください。
+
+=== スコープ
+
+可能なスコープフィルターは4つあります。デフォルトでは、各重要（およびオプションで逸脱した）健康状態に対して通知が送信されます。フィルターはこの範囲を制限するために使用されます。健康状態は、すべてのフィルターに一致する場合にのみ通知が行われます。
+
+* 次について監視します。1つ以上の特定のモニターを選択してください。選択したモニターの健康状態に対してのみ通知が送信されます。
+* モニタータグ:1つ以上のモニタータグを選択してください。選択したタグのいずれかを持つモニターの健康状態に対してのみ通知が送信されます。
+* コンポーネントタイプ:1つ以上のコンポーネントタイプを選択してください。選択したタイプのコンポーネントの健康状態に対してのみ通知が送信されます。
+* コンポーネントタグ:1つ以上のコンポーネントタグを選択してください。選択されたタグの各異なるキーごとに、一致する値を持つコンポーネントの健康状態に対してのみ通知が送信されます。
+
+.例のコンポーネントタグ
+[%collapsible]
+====
+選択したタグは [ `k8s-scope:prod-us/checkout`, `k8s-scope:prod-emea/checkout`, `team:blue` ] です。 この場合のキーは `k8s-scope` と `team` です。
+
+これらのコンポーネントが一致します：
+
+* タグ [ `k8s-scope:prod-emea/checkout`, `team:blue` ] を持つコンポーネント
+* タグ [ `k8s-scope:prod-us/checkout`, `team:blue` ] を持つコンポーネント
+
+これらのコンポーネントは一致しません：
+
+* タグ [ `k8s-scope:prod-emea/checkout` ] を持つコンポーネント
+* タグ [ `k8s-scope:prod-us/checkout`, `team:green` ] を持つコンポーネント
+* タグ [ `k8s-scope:prod-emea/carts`, `team:blue` ] を持つコンポーネント
+====
+
+== 通知はどこに送信しますか？
+
+SUSE Observability は、さまざまな外部システムにチャネルを介して通知を送信できます。サポートされているチャネルは次のとおりです：
+
+* xref:/use/alerting/notifications/channels/slack.adoc[Slack] - Slack に通知を送信します
+* xref:/use/alerting/notifications/channels/teams.adoc[Teams] - Microsoft Teams に通知を送信します
+* xref:/use/alerting/notifications/channels/webhook.adoc[Webhook] - Webhook に通知を送信します。Webhook エンドポイントは、SUSE Observability のペイロードを必要なカスタムサードパーティ API に変換できます。
+* xref:/use/alerting/notifications/channels/opsgenie.adoc[OpsGenie] - OpsGenie に通知を送信します
+
+一般的に、SUSE Observability は通知のために2種類のメッセージを送信します：
+
+. 健康状態がクリティカルまたは逸脱に変わったときの `open` メッセージ。健康状態に変化があるときにこのメッセージが繰り返されることがあります。
+. 健康状態がクリティカルまたは逸脱でなくなった場合、またはその他の理由（コンポーネントが消失した、モニターが削除されたなど）により通知が無効になった場合の `close` メッセージ。

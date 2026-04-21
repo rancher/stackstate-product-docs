@@ -1,0 +1,118 @@
+= 繰り返しスナップショット
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-10-27
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、ヘルス同期の繰り返しスナップショット整合性モデルに送信できる正確なJSONメッセージについて説明します。
+
+== JSONプロパティ: "health"
+
+ヘルスは、xref:/configure/health/send-health-data/send-health-data.adoc#_common_json_object[共通JSONオブジェクト]の`"health"`プロパティを使用してSUSE Observability Receiver APIに送信できます。
+
+[tabs]
+====
+ヘルス`repeat_snapshots`のJSONの例::
++
+--
+[,javascript]
+----
+{
+   "apiKey":"<STACKSTATE_RECEIVER_API_KEY>",
+   "collection_timestamp":1585818978,
+   "internalHostname":"lnx-343242.srv.stackstate.com",
+   "health":[
+      {
+        "consistency_model": "REPEAT_SNAPSHOTS",
+        "start_snapshot": {
+          "repeat_interval_s": 50
+          //"expiry_interval_s": 200 Optional
+        },
+        "stop_snapshot": {},
+        "stream": {
+          "urn": "urn:health:sourceId:streamId"
+          //"sub_stream_id": "subStreamId" Optional
+        },
+        "check_states": [
+          {
+            "checkStateId": "checkStateId1",
+            "message": "Server Running out of disk space",
+            "health": "Deviating",
+            "topologyElementIdentifier": "server-1",
+            "name": "Disk Usage"
+          },
+          {
+            "checkStateId": "checkStateId2",
+            "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+            "health": "critical",
+            "topologyElementIdentifier": "server-2",
+            "name": "Health monitor"
+          }
+        ]
+      }
+   ]
+}
+----
+--
+====
+
+すべてのヘルス繰り返しスナップショットデータペイロードには、以下の詳細が含まれています:
+
+* *start_snapshot* - Optional.スナップショットの開始は、`check_states`を処理する前に処理する必要があります。これにより、SUSE Observabilityは、ストリームスナップショットを以前に受信したものと比較し、スナップショットにもはや存在しないチェック状態を削除できます。スナップショットメタデータとして以下のフィールドを持ちます:
+ ** *repeat_interval_s* - 秒単位の時間。外部ソースがSUSE Observabilityにヘルスデータを送信する頻度。最大許容値は1800（30分）です。
+ ** *expiry_interval_s* - 秒単位の時間。外部チェックがSUSE Observabilityによって削除される前に、最後の更新後に待機する時間。サブストリームを使用する場合は必須です。
+* *stop_snapshot* - Optional.スナップショットの終了は、``check_states``を処理した後に処理されます。
+* *stream* - どのスナップショットと`check_states`が一緒に属するかを識別するオブジェクト。以下のフィールドがあります。
+ ** *urn* - データソースおよびストリームIDは、次の規則に従ってエンコードされたSUSE Observability xref:/configure/topology/identifiers.adoc[URN]です：`urn:health:<sourceId>:<streamId>`、ここで`<sourceId>`は外部データソースの名前で、`<streamId>`は健康データストリームの一意の識別子です。
+ ** *sub_stream_id* - Optional.ストリームのヘルスデータのサブセットの識別子です。ストリームデータが複数のエージェントによって配布および報告される場合、これにより`sub_stream_id`ごとのスナップショットライフサイクルが可能になります。
+* *check_states* - チェック状態のリストです。各チェック状態には次のフィールドがあります：
+ ** *checkStateId* - 外部システムにおけるチェック状態の識別子です。
+ ** *message* - オプションです。SUSE Observability UIに表示するメッセージです。データはマークダウンとして解釈され、外部チェック状態を生成した外部システムチェックへのリンクを含めることができます。
+ ** *health* - 次のいずれかのSUSE Observability ヘルス状態値：`Clear`、`Deviating`、`Critical`です。
+ ** *topologyElementIdentifier* - チェック状態をSUSE Observabilityトポロジ要素にバインドするために使用されます。
+ ** *name* - 外部チェック状態の名前です。
+
+== ヘルスをSUSE Observabilityに送信します。
+
+ヘルスは、HTTP POSTを介して1つのJSONメッセージで送信できます。以下の例では、単一の外部監視システムからSUSE Observabilityに2つのチェック状態を含むスナップショットが送信されます。
+
+[,bash]
+----
+curl -X POST \
+ '<STACKSTATE_RECEIVER_API_ADDRESS>' \
+ -H 'Content-Type: application/json' \
+ -d '{
+  "collection_timestamp": 1548857167,
+  "internalHostname": "local.test",
+  "health": [
+    {
+      "consistency_model": "REPEAT_SNAPSHOTS",
+      "start_snapshot": {
+        "repeat_interval_s": 300
+      },
+      "stop_snapshot": {},
+      "stream": {
+        "urn": "urn:health:sourceId:streamId"
+      },
+      "check_states": [
+        {
+          "checkStateId": "checkStateId1",
+          "message": "Server Running out of disk space",
+          "health": "Deviating",
+          "topologyElementIdentifier": "server-1",
+          "name": "Disk Usage"
+        },
+        {
+          "checkStateId": "checkStateId2",
+          "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+          "health": "critical",
+          "topologyElementIdentifier": "server-2",
+          "name": "Health monitor"
+        }
+      ]
+    }
+  ]
+}'
+----

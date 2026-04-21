@@ -1,0 +1,88 @@
+= 設定のバックアップ
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+SUSE Observability には、設定（設定とも呼ばれる）専用のバックアップメカニズムがあります。これには、インストールされたスタックパックの設定が含まれますが、ユーザーによって作成された他のカスタマイズも含まれます。例えば、無効化またはカスタマイズされたモニター、カスタムビュー、サービストークンなどです。
+
+設定のバックアップの主な利点は、非常に小さい（通常は数メガバイト程度）ため、最小限のダウンタイムで簡単かつ迅速に復元できることです。設定のバックアップが復元された後は、新しいデータが以前と同様に処理され、トポロジー、ヘルスステート、アラートが再作成されます。ただし、トポロジーの履歴（ヘルスを含む）は保持されません。その目的のために xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[StackGraph バックアップ] がありますが、これらのバックアップははるかに大きく、作成および復元に時間がかかります。
+
+設定のバックアップはデフォルトで有効になっています。デフォルトの設定では、毎晩バックアップを作成しますが、バックアップは独自のネームスペース内の永続ボリュームにのみ保存され、最新の10個のバックアップが保持されます。
+
+== 設定のバックアップの操作
+
+設定のバックアップ（および他のすべてのバックアップ）を操作するためのスクリプトは、https://github.com/StackVista/helm-charts/releases/latest[最新の SUSE Observability Helm チャートのリリース] からダウンロードできます。ダウンロードして `backup-scripts-<version>.tar.gz` を抽出して開始してください。
+
+*スクリプトを使用する前に*、`kubectl` バイナリがインストールされており、SUSE Observability がインストールされているコンテキストとネームスペースで構成されていることを確認してください。例えば、このコマンドを実行してコンテキスト `observability-cluster` とネームスペース `suse-observability` に接続します：
+
+----
+kubectl config use-context observability-cluster
+kubectl config set-context --current --namespace=suse-observability
+----
+
+バックアップと対話するためのコマンドラインツールは、すべてクラスター内に Kubernetes ジョブを作成し、そのジョブと対話することによって機能します。ツールが完了すると、ジョブは自動的に削除されます。ジョブの開始には時間がかかる場合があります（Docker イメージのプル、クラスター内でのジョブのスケジューリングなど、すべてに時間がかかります）、したがってコマンドはすぐに結果を生成しません。
+
+=== バックアップを復元する
+
+[CAUTION]
+====
+設定のバックアップを復元すると、トポロジー、ヘルスステート、アラート、およびトポロジー履歴がすべて削除されます。また、すべての以前の設定が削除され、API、UI、モニター、通知、およびトポロジーの同期にダウンタイムが必要です（数分に制限することができます）。データ収集と取り込みは、復元中もアクティブのままです。
+====
+
+
+バックアップを復元するには：
+
+. SUSE Observabilityのコンテキストとネームスペースに接続していることを確認してください。<<_working_with_configuration_backups,こちらを参照してください>>
+. 使用可能なバックアップのリストを取得します。
++
+----
+./list-configuration-backups.sh
+----
+
+. バックアップファイルのリストから、復元したいバックアップを選択します。
+. 復元は、まずStackGraphと対話するデプロイメントをスケールダウンし、その後バックアップが復元されます。これは、復元コマンドの出力を通じて確認できます。以下のコマンドでバックアップを復元します（すべてのトポロジーと設定をSUSE Observabilityから削除することを確認するために`yes`と答えてください）：
++
+----
+./restore-configuration-backup.sh sts-backup-your-choice.sty
+----
+
+. 復元が完了した後、デプロイメントは手動でスケールアップする必要があります：
++
+----
+./scale-up.sh
+----
+
+. しばらくすると、すべてのデプロイメントが実行中で準備が整い、SUSE Observabilityを再び使用できるようになります。
+
+=== 手動バックアップをトリガーします。
+
+バックアップは、サービスの中断なしにいつでも作成できます。Githubリポジトリの`backup-configuration-now.sh`スクリプトを使用して、いつでもバックアップをトリガーできます。バックアップは、バックアップの日付/時刻を含む標準の命名規則に従います。
+
+=== 設定バックアップのカスタマイズ
+
+設定バックアップはオブジェクトストレージに保存できます。これは、MinIOを設定し、トポロジー、メトリクス、イベント、およびログのバックアップを有効にすると自動的に行われます。xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_enable_backups[Kubernetesバックアップ]の指示に従ってください。
+
+デフォルトでは、365日分のバックアップが保持されます。これは、Helmの値を介して変更できます。設定バックアップを完全に無効にすることも、バックアップスケジュールをカスタマイズすることも可能です。バックアップの他の部分もカスタマイズすることができます:
+
+[,yaml]
+----
+backup:
+  configuration:
+    # backup.configuration.bucketName -- Name of the bucket to store configuration backups (needs to be a globally unique bucket when using Amazon S3).
+    bucketName: 'sts-configuration-backup'
+    # backup.configuration.maxLocalFiles -- The maximum number of configuration backup files stored on the PVC for the configuration backup (which is only of limited size, see backup.configuration.scheduled.pvc.size)
+    maxLocalFiles: 10
+    scheduled:
+      # backup.configuration.scheduled.enabled -- Enable scheduled configuration backups (if `backup.enabled` is set to `true`).
+      enabled: true
+      #_ backup.configuration.scheduled.schedule __ Cron schedule for automatic configuration backups in [Kubernetes cron schedule syntax](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#cron-schedule-syntax).
+      schedule: '0 4 * * *'
+      # backup.configuration.scheduled.backupRetentionTimeDelta -- Time to keep configuration backups in object storage. The value is passed to GNU date tool to determine a specific date, and files older than this date will be deleted.
+      backupRetentionTimeDelta: '365 days ago'
+      pvc:
+        # backup.configuration.scheduled.pvc.size -- Size of volume for settings backup in the cluster
+        size: '1Gi'
+----

@@ -1,0 +1,41 @@
+= 認証と認可のトラブルシューティング
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability セルフホスト型
+
+認証または認可が失敗する場合、通常はプロバイダーとSUSE Observabilityの設定の不一致が原因です。トラブルシューティングを容易にするために、特に認証と認可のためにSUSE Observabilityでデバッグログを有効にすることが可能です。
+
+[CAUTION]
+====
+トラブルシューティングが完了したら、すぐにデバッグログを無効にしてください。デバッグログには秘密情報や個人情報が含まれている可能性が非常に高いためです。
+====
+
+
+デバッグログを有効にするには、以下のyamlスニペットを`debug-auth.yaml`ファイルにコピー＆ペーストしてください。
+
+[,yaml]
+----
+stackstate:
+  components:
+    server:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+    api:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+----
+
+以前に使用した`helm upgrade`コマンドを実行しますが、この追加のyamlファイル（`helm upgrade .... --values debug-auth.yaml`）を含めてデバッグログを有効にします。ポッドは再起動しません。ログ設定の変更は約30秒後に自動的に読み込まれます。
+
+デバッグログを無効にするには、再度`helm upgrade ....`コマンドを実行しますが、`--values debug-auth.yaml`を省略してください。30秒後に更新されたログ設定が読み込まれ、デバッグログが停止します。
+
+
+== 権限に関する問題のトラブルシューティング
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[ユーザーとロールを確認]し、使用されている認証モデルに応じて設定を検証してください。
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[主体の権限を確認]し、使用されている認可モデルに応じて設定を検証してください。

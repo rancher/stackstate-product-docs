@@ -1,0 +1,89 @@
+= Configurando SUSE Observability para notificaciones de Slack
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability autoalojada
+
+[CAUTION]
+====
+Los usuarios de SaaS de SUSE Observability pueden utilizar notificaciones de Slack sin configuración adicional. Esta guía solo es aplicable para instalaciones de SUSE Observability autoalojadas que planean utilizar el canal de notificación de Slack.
+====
+
+
+Antes de que podáis utilizar el canal de notificación de Slack en SUSE Observability, primero debéis seguir los siguientes pasos para configurar tanto Slack como SUSE Observability:
+
+. Cread una app de Slack para SUSE Observability en vuestro espacio de trabajo
+. Configurad SUSE Observability con las credenciales de esa app de Slack.
+
+== Creando una app de Slack para SUSE Observability
+
+[NOTE]
+====
+Debéis tener los permisos en Slack para gestionar las apps de Slack para vuestro espacio de trabajo.
+====
+
+
+Id a la https://api.slack.com/apps[Página de API de Slack] y haced clic en el botón *Crear nueva app*.
+
+* Seleccionad la opción "Desde un manifiesto de app" en el diálogo que se abre.
+* Seleccionad el espacio de trabajo al que queréis enviar notificaciones y haced clic en siguiente.
+* Copiad el contenido del manifiesto de la app de Slack a continuación y pegadlo en el área de texto. Aseguraos de reemplazar los valores en `redirect_urls` con la(s) URL(s) de vuestra instancia de SUSE Observability. Haced clic en siguiente.
+* Verificad que la URL es correcta y que los "alcances del bot" listados son `channels:join, channels:read, chat:write, groups:read` y haced clic en el botón de crear para crear la app.
+* En la página de "Información básica" de la app es posible cambiar el icono (en la sección de Información de visualización), podéis reemplazarlo con, por ejemplo, el logo de SUSE Observability image:logo/stackstate-logo.png[logo de SUSE Observability,25,25].
+
+.Manifiesto de la app de Slack para SUSE Observability
+[,json]
+----
+{
+    "display_information": {
+        "name": "SUSE Observability",
+        "description": "Receive notification messages from SUSE Observability",
+        "background_color": "#000000"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "SUSE Observability",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://the.url.of.your.stackstate.installation"
+        ],
+        "scopes": {
+            "bot": [
+                "channels:join",
+                "channels:read",
+                "chat:write",
+                "groups:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+----
+
+
+== Configurad SUSE Observability con las credenciales de esa app de Slack
+
+SUSE Observability necesita ser configurado con las credenciales de la app de Slack que creasteis. Podéis hacer esto añadiendo lo siguiente al archivo `values.yaml` de vuestra instalación de SUSE Observability:
+
+[,yaml]
+----
+stackstate:
+  components:
+    all:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientId: "<app client id>"
+        secret:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientSecret: "<app client secret>"
+----
+
+Los valores `<app client id>` y `<app client secret>` se pueden encontrar en la sección "Credenciales de la app" en la página de "Información básica" de la app de Slack que creasteis. Aplicad estos cambios de configuración ejecutando el mismo comando de Helm utilizado durante la instalación de SUSE Observability (xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[para Kubernetes] o xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift]).
+
+¡Ya estáis listos para usar el canal de notificaciones de Slack!

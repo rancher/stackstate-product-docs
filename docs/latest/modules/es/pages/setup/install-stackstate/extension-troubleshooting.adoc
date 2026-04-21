@@ -1,0 +1,34 @@
+= Solución de problemas de la extensión
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-11-03
+:page-revdate: {revdate}
+:description: SUSE Observability autohospedado
+
+Esta sección proporciona pasos de solución de problemas para cualquier problema de interoperabilidad entre {stackstate-product-name} y la extensión de la interfaz de usuario de Rancher.
+
+== Recopilar un HAR (Http ARchive)
+
+Http ARchive recopila detalles sobre las solicitudes que envía el navegador a Rancher y {stackstate-product-name}.  También registra las respuestas recibidas.
+Este archivo es específico de la página/pestaña del navegador con el error.  No necesita acceso a las instancias de respaldo de Rancher o {stackstate-product-name} (aunque sus registros pueden ser útiles en una etapa posterior).
+
+* Abre la pestaña *Red* en el panel de "Herramientas para desarrolladores".  Puedes acceder a esto utilizando `F12`.  La pestaña de red muestra un registro de todas las solicitudes que se realizan.
+* Limpia el registro y haz una actualización (forzada) de la página que muestra el comportamiento problemático.
+* Ahora debería haber un gran número de solicitudes visibles tanto a Rancher como a SUSE Observability.
+* Exportar/Descargar/Guardar el HAR - diferentes navegadores utilizan diferentes nombres aquí.
+
+== El clúster no está siendo observado
+
+Para que el estado de salud del clúster sea visible en Rancher, debe haber alineación entre estas configuraciones:
+
+* El nombre (de visualización) del clúster en la interfaz de usuario de Rancher.
+* El `stackstate.cluster.name` configurado en el agente desplegado en el clúster
+* El nombre del clúster en la configuración del stackpack de Kubernetes en SUSE Observability
+
+Una discrepancia tenderá a mostrarse como "no se recibieron datos" en la vista general del clúster en Rancher.
+
+== Fallo en la conexión
+
+La configuración para SUSE Observability a veces puede no generar una conexión válida en la interfaz de usuario de Rancher debido a las siguientes razones:
+
+* El host de Rancher no está configurado como un origen permitido para SUSE Observability.  Puedes solucionar esto añadiéndolo a la lista de `stackstate.allowedOrigins` en los valores de helm, o pasando `--set stackstate.allowedOrigins={"https://<rancher-url>"}` al comando de ampliación.
+* SUSE Observability no es accesible desde el navegador. Por ejemplo, el certificado raíz no ha sido instalado.

@@ -1,0 +1,270 @@
+= Recolector de Open Telemetry
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+El recolector de OpenTelemetry ofrece una implementación independiente del proveedor para recibir, procesar y exportar datos de telemetría. Las aplicaciones instrumentadas con los SDK de Open Telemetry pueden utilizar el recolector para enviar datos de telemetría a SUSE Observability (trazas y métricas).
+
+Tus aplicaciones, cuando están configuradas con los SDK de OpenTelemetry, pueden utilizar el recolector para enviar datos de telemetría, como trazas y métricas, a SUSE Observability u otro recolector (para un procesamiento adicional). El recolector está configurado para recibir estos datos por defecto a través de OTLP, el protocolo nativo de Open Telemetry. También puede recibir datos en otros formatos proporcionados por otros SDKs de instrumentación como Jaeger y Zipkin para trazas, e Influx y Prometheus para métricas.
+
+El recolector se está ejecutando cerca de tu aplicación, en el mismo clúster de Kubernetes, en la misma máquina virtual, etc. Esto permite que los SDKs descarguen rápidamente datos al recolector, que luego puede realizar transformaciones, agrupaciones y filtrados. Puede ser utilizado por múltiples aplicaciones y permite cambios fáciles en tu pipeline de procesamiento de datos.
+
+Para guías de instalación, utiliza las diferentes xref:/setup/otel/getting-started/README.adoc[guías de inicio]. Las guías de inicio proporcionan una configuración básica del recolector para comenzar, pero con el tiempo querrás personalizarla según tus necesidades y añadir receptores, procesadores y exportadores adicionales para personalizar tu canalización de ingestión según tus necesidades.
+
+== Configuración
+
+La configuración del recolector define pipelines para procesar las diferentes señales de telemetría. Los componentes del pipeline de procesamiento pueden dividirse en varias categorías, y cada componente tiene su propia configuración. Aquí daremos una visión general de las diferentes secciones de configuración y cómo utilizarlas.
+
+=== Receptores
+
+Los receptores aceptan datos de telemetría de aplicaciones instrumentadas, aquí a través de OTLP:
+
+[,yaml]
+----
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+----
+
+Hay muchos más receptores que aceptan datos a través de otros protocolos, por ejemplo, trazas de Zipkin, o que recopilan activamente datos de varias fuentes, por ejemplo:
+
+* Métricas de host
+* Métricas de Kubernetes
+* Métricas de Prometheus (OpenMetrics)
+* Bases de datos
+
+Algunos receptores soportan las 3 señales (trazas, métricas, registros), otros solo soportan 1 o 2; por ejemplo, el receptor de Prometheus solo puede recopilar métricas. El repositorio opentelemetry-collector-contrib tiene https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver[todos los receptores] con documentación sobre su configuración.
+
+=== Procesadores
+
+Los datos de los receptores pueden ser transformados o filtrados por procesadores.
+
+[,yaml]
+----
+processors:
+  batch: {}
+----
+
+El procesador por lotes agrupa las 3 señales, mejorando la compresión y reduciendo el número de conexiones salientes. El repositorio opentelemetry-collector-contrib tiene https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[todos los procesadores] con documentación sobre su configuración.
+
+=== Exportadores
+
+Para enviar datos al backend de SUSE Observability, el recolector tiene exportadores. Hay exportadores para diferentes protocolos, basados en push o pull, y diferentes backend. Usando los protocolos OTLP también es posible utilizar otro colector como destino para un procesamiento adicional.
+
+[,yaml]
+----
+exporters:
+  # The gRPC otlp exporter
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint
+    endpoint: <otlp-suse-observability-endpoint>
+    # Use snappy compression, if no compression specified the data will be uncompressed
+    compression: snappy
+----
+
+El exportador de SUSE Observability requiere autenticación usando una clave API; para configurar eso se utiliza una <<_extensions,extensión de autenticación>>. El repositorio opentelemetry-collector-contrib tiene https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[todos los exportadores] con documentación sobre su configuración.
+
+Si el exportador gRPC no funciona para ti (ver también xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[solución de problemas]), puedes cambiar al protocolo OTLP sobre HTTP, que es ligeramente menos eficiente, usando el exportador `otlphttp` en su lugar. Reemplaza todas las referencias a `otlp/suse-observability` en la sección `pipelines` y `exporter` con `otlphttp/suse-observability` y asegúrate de actualizar la configuración del exportador a:
+
+[,yaml]
+----
+exporters:
+  # The gRPC otlp exporter
+  otlphttp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp HTTP endpoint
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Use snappy compression, if no compression specified the data will be uncompressed
+    compression: snappy
+----
+
+[CAUTION]
+====
+El punto final HTTP de OTLP para SUSE Observability es diferente del punto final de OTLP. Utiliza las xref:/setup/otel/otlp-apis.adoc[APIs de OTLP] para encontrar la URL correcta.
+====
+
+
+=== Pipeline de servicio
+
+Para cada señal de telemetría se configura un pipeline separado. Los pipelines se configuran en la sección `service.pipeline` y definen qué receptores, procesadores y exportadores deben ser utilizados en qué orden. Antes de usar un componente en el pipeline, primero debe ser definido en su sección de configuración. El procesador `batch`, por ejemplo, no tiene ninguna configuración pero aún así debe ser declarado en la sección `processors`. Los componentes que están configurados pero no se incluyen en un pipeline no estarán activos en absoluto.
+
+[,yaml]
+----
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, spanmetrics, otlp/suse-observability]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/suse-observability]
+----
+
+=== Extensiones
+
+Las extensiones no se utilizan directamente en los pipelines para procesar datos, sino que amplían las capacidades del recolector de otras maneras. Para SUSE Observability, se utiliza para configurar la autenticación mediante una clave API. Las extensiones deben definirse en una sección de configuración antes de que puedan ser utilizadas. Al igual que los componentes del pipeline, una extensión solo está activa cuando se habilita en la sección `service.extensions`.
+
+[,yaml]
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+service:
+  extensions: [ bearertokenauth ]
+----
+
+El repositorio opentelemetry-collector-contrib tiene https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension[todas las extensiones] con documentación sobre su configuración.
+
+== Transformando telemetría
+
+Hay muchos procesadores en el https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[repositorio opentelemetry-collector-contrib]. Aquí intentamos dar una visión general de los procesadores comúnmente utilizados y sus capacidades. Para más detalles y muchos más procesadores, utiliza el https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[repositorio opentelemetry-collector-contrib].
+
+=== contenidos
+
+Algunas instrumentaciones o aplicaciones pueden generar una gran cantidad de datos de telemetría que son solo ruido y no son necesarios para tu caso de uso. El https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor[procesador de filtro] puede utilizarse para descartar los datos que no necesites en el recolector, evitando así enviarlos a SUSE Observability. Por ejemplo, para eliminar todos los datos de un servicio específico:
+
+[,yaml]
+----
+processors:
+  filter/ignore-service1:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["service.name"] == "service1"
+----
+
+El procesador de filtro utiliza el https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Lenguaje de Transformación de OpenTelemetry (OTTL)] para definir los filtros.
+
+=== Añadiendo, modificando o eliminando atributos
+
+El https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor[procesador de atributos] puede cambiar atributos de spans, logs o métricas.
+
+[,yaml]
+----
+processors:
+  attributes/accountid:
+    actions:
+      - key: account_id
+        value: 2245
+        action: insert
+----
+
+El https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/resourceprocessor[procesador de recursos] puede modificar atributos de un xref:/setup/otel/concepts.adoc#_resources[recurso]. Por ejemplo, para añadir un nombre de clúster de Kubernetes a cada recurso:
+
+[,yaml]
+----
+  processors:
+    resource/add-k8s-cluster:
+      attributes:
+      - key: k8s.cluster.name
+        action: upsert
+        value: my-k8s-cluster
+----
+
+Para cambiar nombres de métricas y otra información específica de métricas, también existe el https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/metricstransformprocessor[transformador de métricas].
+
+=== Transformaciones
+
+El https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[procesador de transformación] se puede utilizar para, por ejemplo, establecer un estado de span:
+
+[,yaml]
+----
+processors:
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - set(span.status.code, STATUS_CODE_OK) where span.attributes["http.request.status_code"] == 400
+----
+
+Soporta muchas más transformaciones, como modificar el nombre del span, convertir tipos de métricas o modificar eventos de registro. Consulta su https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[readme] para todas las posibilidades. Utiliza el https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Lenguaje de Transformación de OpenTelemetry (OTTL)] para definir los filtros.
+
+== Eliminar datos sensibles
+
+El recolector es el lugar ideal para eliminar u ofuscar datos sensibles, porque se sitúa justo entre tus aplicaciones y SUSE Observability y tiene procesadores para <<_transforming_telemetry,filtrar y transformar tus datos>>. Además de las capacidades de filtrado y transformación ya discutidas, también hay un https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/redactionprocessor[procesador de redacción] disponible que puede enmascarar valores de atributos que coincidan con una lista de bloqueo. También puede eliminar atributos que no coincidan con una lista especificada de atributos permitidos; sin embargo, usar esto puede resultar rápidamente en la eliminación de la mayoría de los atributos, lo que resulta en capacidades de observabilidad muy limitadas. Ten en cuenta que no procesa atributos de recursos.
+
+Un ejemplo que solo enmascara atributos y/o valores específicos:
+
+[,yaml]
+----
+processors:
+  redaction:
+    allow_all_keys: true
+    # attributes matching the regexes on the list are masked.
+    blocked_key_patterns:
+      - ".*token.*"
+      - ".*api_key.*"
+    blocked_values: # Regular expressions for blocking values of allowed span attributes
+      - '4[0-9]{12}(?:[0-9]{3})?' # Visa credit card number
+      - '(5[1-5][0-9]{14})' # MasterCard number
+    summary: debug
+----
+
+== Probando el recolector
+
+Las guías de inicio rápido muestran cómo desplegar el colector en Kubernetes o utilizando paquetes de Linux para una configuración lista para producción. También es posible ejecutarlo, por ejemplo, para pruebas, directamente como un contenedor de Docker para probarlo:
+
+[,bash]
+----
+docker run \
+  -p 127.0.0.1:4317:4317 \
+  -p 127.0.0.1:4318:4318 \
+  -v $(pwd)/config.yaml:/etc/otelcol-contrib/config.yaml \
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
+----
+
+Esto utiliza la imagen contrib del recolector que incluye todos los componentes contribuidos (receptores, procesadores, etc.). Una versión más pequeña y limitada de la imagen también está disponible, pero solo tiene un conjunto muy limitado de componentes disponibles:
+
+[,bash]
+----
+docker run \
+  -p 127.0.0.1:4317:4317 \
+  -p 127.0.0.1:4318:4318 \
+  -v $(pwd)/config.yaml:/etc/otelcol/config.yaml \
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:latest
+----
+
+Ten en cuenta que la instalación de Kubernetes se predetermina a la distribución de Kubernetes de la imagen del recolector, `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s`, que tiene más componentes que la imagen básica, pero menos que la imagen contrib. Si te encuentras con componentes faltantes en esa imagen, puedes simplemente cambiarla para usar la imagen contrib, `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib`, en su lugar.
+
+== Solución de problemas
+
+=== Las solicitudes HTTP del exportador son demasiado grandes
+
+En algunos casos, las solicitudes HTTP para datos de telemetría pueden volverse muy grandes y pueden ser rechazadas por SUSE Observability. SUSE Observability tiene un límite de 4MB para el protocolo gRPC. Si te encuentras con límites en las solicitudes HTTP, puedes reducir el tamaño de las solicitudes cambiando el algoritmo de compresión y limitando el tamaño máximo del lote.
+
+==== Compresión de solicitudes HTTP
+
+Las guías para empezar permiten `snappy` la compresión en el recolector, esta no es la mejor compresión pero utiliza menos recursos de CPU que `gzip`. Si has eliminado la compresión, puedes volver a habilitarla, o puedes cambiar a un algoritmo de compresión que ofrezca una mejor https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configgrpc/README.md#_compression_comparison[relación de compresión]. Los mismos tipos de compresión están disponibles para los protocolos gRPC y HTTP.
+
+==== Tamaño máximo del lote
+
+Para reducir el tamaño de la solicitud HTTP, se puede añadir configuración al procesador `batch` que limite el tamaño del lote:
+
+[,yaml]
+----
+processor:
+  batch: {}
+    send_batch_size: 8192 # This is the default value
+    send_batch_max_size: 10000 # The default is 0, meaning no max size at all
+----
+
+El tamaño del lote se define en número de spans, puntos de datos métricos o registros de logs (no en bytes), por lo que puede que necesites experimentar para encontrar la configuración correcta para tu situación. Para más detalles, por favor consulta la https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md[documentación del procesador de lotes].
+
+== Recursos relacionados
+
+La documentación de Open Telemetry proporciona muchos más detalles sobre la configuración y opciones de instalación alternativas:
+
+* Configuración del recolector de Open Telemetry: https://opentelemetry.io/docs/collector/configuration/
+* Instalación del recolector en Kubernetes: https://opentelemetry.io/docs/kubernetes/helm/collector/
+* Uso del operador de Kubernetes en lugar del gráfico de Helm del recolector: https://opentelemetry.io/docs/kubernetes/operator/
+* Muestreo de Open Telemetry: https://opentelemetry.io/blog/2022/tail-sampling/

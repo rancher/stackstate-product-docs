@@ -1,0 +1,104 @@
+= Kubernetesのアノテーションを介してモニターしきい値の引数を上書きする
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+SUSE Observabilityはxref:/use/alerting/k8s-monitors.adoc[標準でモニターを提供]しており、Kubernetesクラスターで発生しうる一般的な問題の監視を行います。これらのモニターは、ほとんどのユースケースに適した特定のデフォルト引数で動作しますが、時には`threshold`や`failureState`などの一部のデフォルト引数を上書きして、動作を調整する必要があります。
+上書きを宣言するメカニズムは、どのモニターとコンポーネントに適用されるべきかを示すKubernetesリソースアノテーションを介しています。例えば、特定のサービスに対して`failureState`モニターの`Available service endpoints`を上書きし、失敗したときにデフォルトの`DEVIATING`ではなく`CRITICAL`状態を示すことができます。
+
+== ハウツー
+
+* <<_how_to_build_my_annotation,アノテーションを構築する方法>>
+* <<_what_monitors_allow_overriding_arguments,引数の上書きを許可するモニターはどれですか？>>
+* <<_build_an_override_for_a_custom_monitor,カスタムモニターの上書きを構築する>>
+
+例として、手順はKubernetes HTTPサービスの`Available service endpoints`モニターの引数を上書きします。
+
+== アノテーションを構築する方法
+
+SUSE Observabilityモニターの上書きアノテーションキーは、以下の規則に従います：
+
+----
+monitor.${owner}.stackstate.io/${monitorShorName}
+----
+
+`owner`プロパティは、誰がそのモニターを作成したかを示し、標準のモニターの場合は`kubernetes-v2`であり、`monitorShorName`プロパティはモニターのIDを表し、モニターをリストまたは検査する際にCLIから読み取ることができる`identifier`プロパティから抽出できます。
+
+----
+sts monitor list
+
+ID              | STATUS  | IDENTIFIER                                                                          | NAME                                        | FUNCTION ID     | TAGS
+8051105457030   | ENABLED | urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint | Available service endpoints                 | 233276809885571 | [services]
+----
+
+私たちの例では、識別子は`urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:service-available-endpoint`であり、`monitorShorName`は`service-available-endpoint`のように最後のセグメントに対応するため、アノテーションキーは次のようになります：
+
+[,bash]
+----
+monitor.kubernetes-v2.stackstate.io/service-available-endpoint
+----
+
+アノテーションペイロードは、以下のオプション引数を定義できるJSONオブジェクトです：
+
+* `threshold`: オプション。比較対象となる数値のしきい値です。
+* `failureState`: オプション。"CRITICAL"または"DEVIATING"のいずれかです。"CRITICAL"はSUSE Observabilityで赤として表示され、"DEVIATING"はオレンジとして表示され、異なる重大度を示します。
+* `enabled`: オプション。そのコンポーネントのヘルスステートをモニターが生成するかどうかを決定するブール値。
+
+完全なアノテーションは次のようになります：
+
+[,bash]
+----
+    monitor.kubernetes-v2.stackstate.io/service-available-endpoint: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL",
+        "enabled": true
+      }
+----
+
+== どのモニターが引数の上書きを許可しますか？
+
+* xref:/use/alerting/kubernetes-monitors.adoc#_available_service_endpoints[利用可能なサービスエンドポイント]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_limits_resourcequota[CPU制限リソースクォータ]
+* xref:/use/alerting/kubernetes-monitors.adoc#_cpu_requests_resourcequota[CPUリクエストリソースクォータ]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_limits_resourcequota[メモリ制限リソースクォータ]
+* xref:/use/alerting/kubernetes-monitors.adoc#_memory_requests_resourcequota[メモリリクエストリソースクォータ]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_disk_pressure[ノードディスクプレッシャー]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_memory_pressure[ノードメモリプレッシャー]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_pid_pressure[ノードPIDプレッシャー]
+* xref:/use/alerting/kubernetes-monitors.adoc#_node_readiness[ノードの準備状況]
+* xref:/use/alerting/kubernetes-monitors.adoc#_orphaned_persistent_volumes[孤立した永続ボリューム]（`enabled`プロパティのみ）
+* xref:/use/alerting/kubernetes-monitors.adoc#_out_of_memory_for_containers[コンテナのメモリ不足]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_5xx_error_ratio[HTTP - 5xxエラー比率]
+* xref:/use/alerting/kubernetes-monitors.adoc#_http_response_time_q95_is_above_3_seconds[HTTP - 応答時間 - Q95が3秒を超えています]
+
+== カスタムモニターの上書きを構築する
+
+xref:/use/alerting/k8s-add-monitors-cli.adoc[CLI を使用してコンポーネントにしきい値モニターを追加する]のガイドを使用して作成された任意のカスタムしきい値モニターは、引数の上書きに適しています。xref:/use/alerting/k8s-add-monitors-cli.adoc#_write_the_outline_of_the_monitor[例が示すように]、カスタムモニターの識別子は``urn:custom:monitor:{monitorShortName}``の形式で構成され、こうした識別子の上書きアノテーションキーは次のようになることが期待されます。
+
+[,bash]
+----
+monitor.custom.stackstate.io/${monitorShortName}
+----
+
+この例では識別子`urn:custom:monitor:deployment-has-replicas`を使用しているため、アノテーションキーは次のようになります。
+
+[,bash]
+----
+monitor.custom.stackstate.io/deployment-has-replicas
+----
+
+完全なアノテーションは次のようになります。
+
+[,bash]
+----
+    monitor.custom.stackstate.io/deployment-has-replicas: |-
+      {
+        "threshold": 0.0,
+        "failureState": "CRITICAL"
+        "enabled": true
+      }
+----

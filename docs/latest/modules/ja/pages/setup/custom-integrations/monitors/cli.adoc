@@ -1,0 +1,202 @@
+= CLIを使用したモニターの操作
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+{stackstate-product-name} CLIを使用して、モニターを検査、実行、変更できます。
+
+[source,bash]
+----
+sts monitor
+Manage, test and develop monitors.
+
+Usage:
+  sts monitor [command]
+
+Available Commands:
+  apply       Create or edit a monitor from STY
+  clone       Clone a monitor
+  delete      Delete a monitor
+  describe    Describe a monitor in STY format
+  disable     Disable a monitor
+  edit        Edit a monitor
+  enable      Enable a monitor
+  list        List all monitors
+  run         Run a monitor
+  status      Get the status of a monitor
+
+Use "sts monitor [command] --help" for more information about a command.
+----
+
+== モニターのデバッグ
+
+さまざまな{stackstate-product-name} CLIコマンドを使用して、モニターをデバッグできます。
+
+=== モニターの一覧表示
+
+`sts monitor`コマンドを使用すると、すべてのモニターを一覧表示できます。
+
+[,bash]
+----
+sts monitor list
+ID              | STATUS   | IDENTIFIER                                    | NAME                                          | FUNCTION ID     | TAGS
+68172545000282  | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx error rate (req/s)              | 208329585629344 | []
+                |          | 4xx-error-rate                                |                                               |                 |
+129505918833814 | DISABLED | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 4xx response time (s) (95th percent | 208329585629344 | []
+                |          | 4xx-response-time-95th-percentile             | ile)                                          |                 |
+214616421668585 | ENABLED  | urn:stackpack:aad-v2:shared:monitor:aad-http- | AAD: HTTP 5xx error rate (req/s)              | 208329585629344 | []
+                |          | 5xx-error-rate                                |                                               |                 |
+----
+
+=== モニターの説明
+
+`describe`コマンドを使用して、既存のモニターの定義を取得できます。
+
+[,bash]
+----
+sts monitor describe --id 68172545000282
+_version: 1.0.93
+nodes:
+- _type: Monitor
+  arguments:
+    telemetryQuery: sum(rate(podparty_http_requests_count{code='4xx', direction='incoming', intra_pod!='true', local_pod_ns='${tags.namespace}', __multi__="${properties.local_pod_metric_selector__+}"}[${__rate_interval}]))
+    topologyQuery: (label = "stackpack:kubernetes" and type = "service")
+  description: Consumes health states from the AAD.
+  function: urn:stackpack:aad-v2:shared:monitor-function:aad
+  id: -6
+  identifier: urn:stackpack:aad-v2:shared:monitor:aad-http-4xx-error-rate
+  intervalSeconds: 60
+  name: 'AAD: HTTP 4xx error rate (req/s)'
+  remediationHint: It's complicated.
+  status: ENABLED
+  tags: []
+timestamp: 2026-01-14T11:30:40.470998684Z[Etc/UTC]
+----
+
+=== モニターの実行
+
+モニターを実行すると、生成されるチェック状態についての情報が得られます。
+
+[,bash]
+----
+sts monitor run --id <id>
+appliedLimit: 100
+checkStates:
+  CheckStates:
+    checkStates:
+      - checkStateId: 91116839897294-preprod%1dev.preprod.stackstate.io-stackstate%1nightly-suse%1observability%1clickhouse%1shard0
+        data: '{"displayTimeSeries":[{"name":"Metric and threshold","queries":[{"query":"sum by (cluster_name, namespace, statefulset) (increase(stackstate_clickhouse_backup_successful_uploads{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}[12h]))  or  sum by (cluster_name, namespace, statefulset) (stackstate_clickhouse_backup_number_backups_remote_expected{kube_app_name=\"clickhouse\", cluster_name=\"preprod-dev.preprod.stackstate.io\", namespace=\"stackstate-nightly\", statefulset=\"suse-observability-clickhouse-shard0\"}) * 0","alias":"Number of backups execution in 12h window","_type":"MonitorDisplayQuery"},{"query":"0.0","alias":"Threshold","_type":"MonitorDisplayQuery"}],"unit":"short","_type":"MonitorDisplayTimeSeries"}],"remediationHintTemplateData":{"componentUrnForUrl":"urn:kubernetes:%2Fpreprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset%2Fsuse-observability-clickhouse-shard0","labels":{"cluster_name":"preprod-dev.preprod.stackstate.io","namespace":"stackstate-nightly","statefulset":"suse-observability-clickhouse-shard0"},"threshold":0.0},"_type":"MonitorSyncedCheckStateData"}'
+        health: CLEAR
+        name: Backup performed in the last 12 hours
+        topologyElementIdentifier: urn:kubernetes:/preprod-dev.preprod.stackstate.io:stackstate-nightly:statefulset/suse-observability-clickhouse-shard0
+...
+----
+
+
+=== モニターの有効化/無効化
+
+モニターは有効または無効にできます。有効とは、モニターが結果を生成することを意味し、無効とは、すべての出力を抑制することを意味します。以下のコマンドを使用して、有効化/無効化します。
+
+[,bash]
+----
+sts monitor disable --id 68172545000282
+✅ Monitor 68172545000282 has been disabled
+
+sts monitor enable --id 68172545000282
+✅ Monitor 68172545000282 has been enabled
+----
+
+
+=== モニターの実行詳細
+
+モニターの実行統計と、生成されたチェック状態の処理にかかる遅延は、`status`コマンドで取得できます。
+
+[,bash]
+----
+sts monitor status --id 68172545000282
+
+Monitor Health State count: 650
+Monitor Status: ENABLED
+Monitor last run: 2026-01-14 12:16:25.979 +0000 UTC
+
+Monitor Stream errors:
+No data to display.
+
+Monitor health states mapped to topology:
+HEALTHSTATE | COUNT
+CLEAR       | 522
+DEVIATING   | 0
+CRITICAL    | 0
+UNKNOWN     | 128
+
+Monitor Stream metrics:
+METRIC                                     | VALUE BETWEEN NOW AND 300 SECONDS AGO | VALUE BETWEEN 300 AND 600 SECONDS AGO | VALUE BETWEEN 600 AND 900 SECONDS AGO
+latency (Seconds)                          | 42.345412844036574                    | 44.53073394495415                     | 46.725688073394615
+messages processed (per second)            | 10.833333333333                       | 10.833333333333                       | 10.833333333333
+monitor health states created (per second) |                                       |                                       |
+monitor health states updated (per second) | 0.0033333333333333                    | 0.0033333333333333                    | 0.02
+monitor health states deleted (per second) |                                       |                                       |
+
+Monitor health states with identifier matching exactly 1 topology element: 650
+----
+
+== モニターの変更
+
+[NOTE]
+====
+推奨される作業方法は、モニター（および{stackstate-product-name}で作成された他のカスタムリソース）をYAMLファイルとしてxref:/setup/custom-integrations/overview.adoc[a StackPack]に保存することです。そこから変更を手動で適用することも、GitHub ActionsやGitLabパイプラインのようなCI/CDシステムでSUSE Observability CLIを使用して完全に自動化することも可能です。
+====
+
+=== モニターの作成
+
+YAMLファイルを適用することで、モニターを作成できます。例えば、`monitor.yaml`です。 次の形式である必要があります：
+
+[source,bash]
+----
+nodes:
+- _type: "Monitor"
+  ...
+----
+
+[NOTE]
+====
+最初の行のエントリポイント`nodes:`に注意してください。 スタックパック内のファイルには必要ありませんが、`apply`コマンドを使用する際にはそこに存在する必要があります。
+====
+
+モニターを作成または更新するには、xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI]を使用します：
+
+[,bash]
+----
+sts monitor apply -f monitor.yaml
+----
+
+モニターの結果をxref:use/alerting/k8s-add-monitors-cli.adoc#_verifying_the_results_of_a_monitor[確認する]ことができます。
+
+[CAUTION]
+====
+識別子は、モニターの一意のキーとして使用されます。識別子を変更すると、既存のものを更新するのではなく、新しいモニターが作成されます。
+====
+
+=== モニターを削除する
+
+モニターを削除するには、次のコマンドを使用します
+
+[,bash]
+----
+sts monitor delete --id <id>
+----
+
+=== モニターをライブ編集する
+
+モニターを編集するには、適用した元のファイルを編集し、再度適用します。または、`sts monitor edit`コマンドを使用して{stackstate-product-name}インスタンス内の構成されたモニターを直接編集することができます：
+
+[,bash]
+----
+sts monitor edit --id <id>
+----
+
+このコマンドの`<id>`は識別子ではなく、`Id`出力の`sts monitor list`列の番号です。
+

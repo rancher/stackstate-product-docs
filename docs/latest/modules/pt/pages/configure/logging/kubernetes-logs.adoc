@@ -1,0 +1,107 @@
+= Logs do Kubernetes
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted v5.1.x
+
+== Visão Geral
+
+Em uma configuração do Kubernetes, as funções do SUSE Observability são distribuídas entre diferentes pods e os logs de cada função são armazenados por pod e contêiner. Você pode acessar logs recentes usando `kubectl`, embora para armazenamento a longo prazo seja recomendado configurar a agregação de logs.
+
+== Pods do Kubernetes para logs
+
+Os logs do SUSE Observability são armazenados por pod e contêiner. A tabela abaixo mostra o pod a ser acessado para logs relacionados a funções específicas do SUSE Observability. Observe que os nomes reais dos pods incluirão um número ou sufixo de string aleatória (por exemplo, `stackstate-receiver-5b9d79db86-h2hkz`) e também podem incluir o nome da versão especificado quando o SUSE Observability foi implantado como um prefixo.
+
+[NOTE]
+====
+Observe que os logs armazenados nos pods serão removidos regularmente. Para acesso a longo prazo aos logs, é aconselhável que você configure <<_log_aggregation,agregação de logs>> para seu cluster Kubernetes.
+====
+
+
+|===
+| Função do SUSE Observability | Logs no pod
+
+| API (incluindo topologia, gráficos e configurações)
+| `stackstate-api`
+
+| Indexação de dados no Elasticsearch
+| `stackstate-e2es` (eventos)
+
+| Ingestão de dados
+| `stackstate-receiver`
+
+| Manipuladores de eventos
+| `stackstate-view-health`
+
+| Monitorar
+| `stackstate-checks`
+
+| Propagação de estado
+| `stackstate-state`
+
+| Sincronização
+| `stackstate-sync`
+
+| Ver estado de saúde
+| `stackstate-view-health`
+|===
+
+Você pode acessar logs em um pod específico usando o comando `kubectl logs`.
+
+Por exemplo:
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== Acesse logs recentes
+
+=== Logs de pod ou contêiner
+
+Os logs mais recentes podem ser recuperados do Kubernetes usando o comando `kubectl logs`. Verifique o <<_kubernetes_pods_for_logging,pod que você precisa monitorar>> para recuperar um log específico.
+
+Por exemplo:
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== Logs de sincronização
+
+Todos os logs de sincronização podem ser encontrados em um pod `stackstate-sync-<suffix>`. Você pode usar o nome de sincronização para localizar informações específicas de log em um instantâneo de log.
+
+Por exemplo:
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== Agregação de logs
+
+Para armazenamento a longo prazo dos dados de log do SUSE Observability, é aconselhável configurar a agregação de logs em seu cluster Kubernetes. Isso pode ser feito usando um sistema de terceiros para armazenamento, como Elasticsearch, Splunk ou Logz.io, e um transportador de logs como Logstash ou Fluentd.
+
+Para mais detalhes sobre como isso pode ser feito, verifique:
+
+* Envio de logs com https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)]
+* Uma visão geral completa de como configurar https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[agregação de logs no Elasticsearch (bitnami.com)]
+
+== Consulte também
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[Referência de comando kubectl (kubernetes.io/docs)]

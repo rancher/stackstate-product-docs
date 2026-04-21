@@ -1,0 +1,204 @@
+= Webhook
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+网络钩子是您定义和运行的自定义 HTTP 回调。每当通知被打开或关闭时，它们可以采取任何必要的行动。例如，通过在 SUSE Observability 原生不支持的工单系统中创建工单。或者简单地将通知消息写入 S3 存储桶以供将来参考。
+
+网络钩子通道以 <<_webhook_requests_and_payload,JSON over HTTP>> 的形式发送通知数据。
+
+== 配置网络钩子
+
+image::k8s/notifications-webhook-channel-configuration.png[配置网络钩子]
+
+要配置网络钩子，请填写以下字段：
+
+. URL - 输入网络钩子端点的 URL。如果 URL 包含特殊字符，则必须进行百分比编码。
+. 密钥词元 - SUSE Observability 将在每个请求中包含密钥词元，用于 <<_validate_the_requests,验证它>>。
+. 元数据 - 添加包含在有效负载中的额外键/值对。当同一端点处理多个 SUSE Observability 网络钩子并需要一些额外信息时，可以使用此功能。
+. 启用 SSL 验证 - （默认开启）启用 SSL 证书验证。仅在使用自签名证书或 SUSE Observability 不支持的证书颁发机构时禁用。
+
+最后选择 "添加通道"。网络钩子通道将出现在右侧。要测试网络钩子是否有效，请通过点击 "测试" 按钮发送测试消息。
+
+== 网络钩子请求和有效负载
+
+网络钩子通道以 HTTP POST 请求的形式发送数据。端点和有效负载在https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI规范]中有详细记录。
+
+=== 通知打开请求的示例有效负载
+
+----
+{
+    "component": {
+        "identifier": "urn:kubernetes:/k8s-demo-cluster:sock-shop:service/catalogue",
+        "link": "https://play.stackstate.com/#/components/urn%3Akubernetes%3A%2Fk8s-demo-cluster%3Asock-shop%3Aservice%2Fcatalogue?timeRange=1702624556757_1702646156757&timestamp=1702635356757",
+        "name": "catalogue",
+        "tags": [
+            "app.kubernetes.io/component:catalogue",
+            "app.kubernetes.io/instance:sock-shop",
+            "app.kubernetes.io/managed-by:Helm",
+            "app.kubernetes.io/name:sock-shop",
+            "app.kubernetes.io/version:0.3.5",
+            "cluster-name:k8s-demo-cluster",
+            "cluster-type:kubernetes",
+            "component-type:kubernetes-service",
+            "domain:business",
+            "extra-identifier:catalogue",
+            "helm.sh/chart:sock-shop",
+            "name:catalogue",
+            "namespace:sock-shop",
+            "service-type:ClusterIP",
+            "stackpack:kubernetes"
+        ],
+        "type": "service"
+    },
+    "event": {
+        "state": "CRITICAL",
+        "title": "HTTP - response time - is above 3.0 seconds",
+        "triggeredTimeMs": 1702635356757,
+        "type": "open"
+    },
+    "monitor": {
+        "identifier": "urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:http-response-time",
+        "link": "https://play.stackstate.com/#/monitors/urn%3Astackpack%3Akubernetes-v2%3Ashared%3Amonitor%3Akubernetes-v2%3Ahttp-response-time",
+        "name": "HTTP - response time - is above 3 seconds",
+        "tags": []
+    },
+    "notificationConfiguration": {
+        "identifier": "urn:system:default:notification-configuration:testing-2",
+        "link": "https://play.stackstate.com/#/notifications/urn%3Asystem%3Adefault%3Anotification-configuration%3Atesting-2",
+        "name": "Test Notification"
+    },
+    "notificationId": "836f628c-1258-4500-b1c7-23884e00f439",
+    "metadata": {
+        "team": "Team A"
+    }
+}
+----
+
+`open`有效负载中的部分包括：
+
+. 组件：通知适用的 SUSE Observability 组件。这包括组件的名称、标识符、类型和标签。它还包含一个链接，指向 SUSE Observability UI，在健康状态变化时将打开该组件。
+. 事件：触发此通知的事件。它可以是`open`或`close`类型（见下一部分）。`open`状态意味着监视器仍处于指定组件的关键（或偏离）状态。`close`状态意味着监视器之前处于打开状态，但问题已解决。状态和触发时间已包含。还包括一个`title`，这是监视器提供的关于问题的简短描述，它与组件的高亮页面中显示的标题相同，这可能与监视器名称不同且更详细。
+. 监视器：触发通知的监视器。在监视器名称旁边，还包括标签和标识符的链接。该链接将在 SUSE Observability UI 中打开监视器。
+. 通知配置：此通知的通知配置。包括名称、标识符和链接。该链接将在 SUSE Observability UI 中打开通知配置。
+. 通知 ID：此通知的唯一标识符。另见 <<_notification_life_cycle,通知生命周期>>
+. 元数据：可以在网络钩子通道上指定元数据。元数据在这里以键/值对的形式一一复制。
+
+=== 通知关闭请求的示例有效负载
+
+----
+{
+    "component": {
+        "identifier": "urn:kubernetes:/gke-demo-dev.gcp.stackstate.io:sock-shop:service/catalogue",
+        "link": "https://stac-20533-webhook-channel-management-api.preprod.stackstate.io/#/components/urn%3Akubernetes%3A%2Fgke-demo-dev.gcp.stackstate.io%3Asock-shop%3Aservice%2Fcatalogue?timeRange=1702624556757_1702646156757&timestamp=1702635356757",
+        "name": "catalogue",
+        "tags": [
+            "app.kubernetes.io/component:catalogue",
+            "app.kubernetes.io/instance:sock-shop",
+            "app.kubernetes.io/managed-by:Helm",
+            "app.kubernetes.io/name:sock-shop",
+            "app.kubernetes.io/version:0.3.5",
+            "cluster-name:gke-demo-dev.gcp.stackstate.io",
+            "cluster-type:kubernetes",
+            "component-type:kubernetes-service",
+            "domain:business",
+            "extra-identifier:catalogue",
+            "helm.sh/chart:sock-shop",
+            "name:catalogue",
+            "namespace:sock-shop",
+            "service-type:ClusterIP",
+            "stackpack:kubernetes"
+        ],
+        "type": "service"
+    },
+    "event": {
+        "reason": "HealthStateResolved",
+        "type": "close"
+    },
+    "monitor": {
+        "identifier": "urn:stackpack:kubernetes-v2:shared:monitor:kubernetes-v2:http-response-time",
+        "link": "https://stac-20533-webhook-channel-management-api.preprod.stackstate.io/#/monitors/urn%3Astackpack%3Akubernetes-v2%3Ashared%3Amonitor%3Akubernetes-v2%3Ahttp-response-time",
+        "name": "HTTP - response time - is above 3 seconds",
+        "tags": []
+    },
+    "notificationConfiguration": {
+        "identifier": "urn:system:default:notification-configuration:testing-2",
+        "link": "https://stac-20533-webhook-channel-management-api.preprod.stackstate.io/#/notifications/urn%3Asystem%3Adefault%3Anotification-configuration%3Atesting-2",
+        "name": "Test Notification"
+    },
+    "notificationId": "836f628c-1258-4500-b1c7-23884e00f439",
+    "tags": {
+        "team": "Team A"
+    }
+}
+----
+
+`close` 有效负载中的部分与 `open` 有效负载中的部分相同，除了 `event`。`type` 现在是 `close`，并且只有一个 `reason` 字段指示通知关闭的原因。此字段中的值是枚举，https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI 规范] 文档记录了可能的值。
+
+== 通知生命周期
+
+从有效负载中可以看出，每个通知都通过其 `notificationId` 唯一标识。接收同一通知的多个消息是可能的，甚至是常见的，但它们始终会根据此生命周期发送。
+
+当监视器状态更改为偏差或关键时，首先会创建通知（是否适用偏差取决于 xref:/use/alerting/notifications/configure.adoc#_configure_when_to_notify[通知设置]）。事件类型为 `open` 的消息会发送到网络钩子。
+
+当事件中的 `state` 或 `title` 发生变化时，可以更新通知。对组件和消息其他部分的更改将被包含，但单独的更改不会触发更新。通知更新还会向网络钩子发送事件类型为 `open` 的消息。该消息将具有相同的 `notificationId`，可用于更新外部系统中的数据（而不是创建新通知）。
+
+最后，当监视器状态恢复为非关键（或偏差）状态时，通知被关闭。事件类型 `close` 的消息已发送到网络钩子。这也是特定 `notificationId` 被使用的最后一次。
+
+请注意，通知可以因不同的原因而被打开和关闭，而不是健康状态变化：
+
+* 一个标签被添加到组件或监视器。这可能导致某些关键监视器健康状态符合通知配置中的选择标准，并且相应的通知将被打开。
+* 出于同样的原因，从组件或监视器中移除标签也可以关闭通知，即使健康状态仍然是关键的。
+* 对通知配置本身的更改也可能导致许多新的通知被打开或关闭。
+
+== 验证请求
+
+在通道配置中指定的密钥词元包含在 `X-StackState-Webhook-Token` 头部的网络钩子请求中。您的网络钩子端点可以检查该值以验证请求是否合法。
+
+== 重试
+
+网络钩子通道将重试通知的请求，直到收到状态 200 OK 响应（响应中的主体将被忽略）。如果网络钩子无法处理消息（例如，因为数据库在此时无法访问），它可以简单地响应 500 状态码。SUSE Observability 将在几秒钟内重新发送相同的消息，希望问题已经解决。
+
+如果通知被更新或关闭，旧消息将被丢弃，新的、已更新的消息将被发送，并会再次重试，直到成功。
+
+== 示例网络钩子
+
+要测试网络钩子的工作原理，您可以使用一段简单的 Python 脚本，它启动一个 HTTP 服务器并将接收到的有效负载写入标准输出。
+
+. 将此 Python 脚本保存为 `webhook.py`：
+```python
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+import sys
+
+class WebhookHTTPRequestHandler(BaseHTTPRequestHandler):
+
+ def do_POST(self):
+     content_len = int(self.headers.get('content-length', 0))
+     notification = json.loads(self.rfile.read(content_len))
+     print("Notification received: ", json.dumps(notification, indent = 2))
+     self.send_response(200)
+     self.end_headers()
+
+httpd = HTTPServer(('', int(sys.argv[1])), WebhookHTTPRequestHandler)
+httpd.serve_forever()
+```
+
+. 在未使用的端口上运行网络钩子服务器（例如 8000）：`python3 webhook.py 8000`：
+. 在 SUSE Observability 中配置网络钩子，使用您的网络钩子服务器的 URL：`http://webhook.example.com:8000`
+. 在网络钩子通道上点击 `test`：
+
+[NOTE]
+====
+您的网络钩子 URL 必须可以被 SUSE Observability 访问，因此 localhost 地址或本地 IP 地址是不够的。
+====
+
+
+该示例没有对请求进行身份验证，可以通过验证 <<_validate_the_requests,词元 header>> 的值来添加身份验证。
+
+与其手动实现，不如使用 https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI 规范]，通过 https://openapi-generator.tech/[OpenAPI 生成器项目] 为支持的任意语言生成服务器实现。
+
+== 相关
+
+* xref:/use/alerting/notifications/troubleshooting.adoc[查错]

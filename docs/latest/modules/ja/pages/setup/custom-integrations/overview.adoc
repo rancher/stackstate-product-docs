@@ -1,0 +1,59 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= カスタム統合の概要
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-06
+:page-revdate: {revdate}
+:description:  カスタム統合の概要
+
+[IMPORTANT]
+====
+カスタム統合は、プレプロダクションの未公開機能であり、機能が進化するにつれて破壊的な変更がある可能性があります。本番環境での使用を意図していません。ただし、非本番環境でテストすることができます。
+====
+
+== 概要
+
+カスタム統合は、Open Telemetryを活用して、さまざまなソースから{stackstate-product-name}にテレメトリデータ（メトリクス、トレース、ログ）を収集して送信します。Open Telemetryを使用することで、ユーザーはアプリケーションやサービスを計測し、パフォーマンス、信頼性、運用の健康状態についての洞察を得ることができます。
+{stackstate-product-name}側では、xref:setup/custom-integrations/otelmappings/README.adoc[Open Telemetryマッピング]が受信したテレメトリデータを処理し、必要な変換を適用し、{stackstate-product-name}内の適切なエンティティにマッピングします。xref:use/alerting/k8s-add-monitors-cli.adoc[CLIを使用してモニターを追加する]、xref:setup/custom-integrations/metric-bindings/index.adoc[メトリクスバインディング]、およびxref:setup/custom-integrations/ui-presentation/README.adoc[UIプレゼンテーション]を定義して、取り込まれたテレメトリをUIに表示し、アラートと監視を追加できます。すべては配布のためにxref:setup/custom-integrations/develop.adoc[スタックパック]にまとめられます。
+
+== 開発セットアップ
+
+カスタム統合は、{stackstate-product-name}プラットフォームのプレプロダクションデプロイメントに対して開発する必要があります。カスタム統合の開発を開始するためのプレプロダクションセットアップを取得するには、2つのオプションがあります：
+
+=== SaaSインスタンス（推奨）：
+内部のSUSEチームには、{stackstate-product-name}チームからSaaSインスタンスをリクエストすることをお勧めします。これらのインスタンスにはカスタム統合が有効になっており、少なくとも新しいリリースごとに自動的に更新され、重要なバグ修正や実験的機能の増分を含むプレリリースが提供される場合があります。
+専用のチャネル（発表予定）を通じてお問い合わせください。
+
+=== セルフホスト型：
+helmを介してインストールする際にいくつかの機能フラグを設定することで、独自のセルフホスト型{stackstate-product-name}インストールでカスタム統合を有効にできます。
+
+    . `custom_integrations_values.yaml`を生成します。このガイドでは、`$VALUES_DIR`に保存することを前提としています。
+
++
+.$VALUES_DIR/custom_integrations_values.yaml
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
++
+
+    . 生成された値と`.$VALUES_DIR/custom_integrations_values.yaml`を使用して{stackstate-product-name}のhelmチャートをデプロイします。
+
++
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/custom_integrations_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
++
+
+endif::ss-ff-stackpacks2_enabled[]

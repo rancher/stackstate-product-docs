@@ -1,0 +1,310 @@
+= クラスターの外部にSUSE Observability（監視）を公開する
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} 自己ホスト型
+
+== 概要
+
+{stackstate-product-name}はKubernetes Ingressリソースで公開できます。このページの例では、Kubernetes上で実行されているxref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_via_the_suse_observability_helm_chart[Helm for SUSE Observability]を使用してTraefikまたはNginx Ingressコントローラーの設定方法を示しています。このページでは、異なる方法でIngressトラフィックを設定する際に公開するサービス/ポートの組み合わせについても文書化しています。
+
+{stackstate-product-name}をホストしているクラスターを監視する際は、エージェントインストール中にxref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_agents_in_the_same_cluster[エージェント設定を変更することで、エージェントトラフィックをクラスター内に完全に留めることができます。
+
+== {stackstate-product-name} Helmチャートを介してIngressを構成する
+
+{stackstate-product-name} Helmチャートは、その値の中に`ingress`セクションを公開します。これはデフォルトでは無効になっています。以下の例では、TLS暗号化が有効なIngressコントローラーを構成するためにHelmチャートを使用する方法を示しています。コントローラー自体と証明書の設定は、この文書の範囲を超えていることに注意してください。
+
+{stackstate-product-name}のIngressを構成するには、以下のような内容のファイル`ingress_values.yaml`を作成してください。`MY_DOMAIN`を自分のドメイン（Ingressコントローラーにリンクされている）に置き換え、`tls-secret`の正しい名前を設定してください。正しいアノテーションを設定するために、Ingressコントローラーのドキュメントを参照してください。以下のすべてのフィールドはオプションです。たとえば、TLSを使用しない場合はそのセクションを省略できますが、{stackstate-product-name}もトラフィックを暗号化しないことに注意してください。
+
+[CAUTION]
+====
+TLSの設定は、Rancher UI拡張機能を使用するために必要であることに注意してください。
+====
+
+[tabs]
+====
+Traefik::
++
+--
+.当バージョンの注意事項
+[WARNING]
+=====
+Traefik < 3.6.3 or >= 3.6.7（Helmチャートバージョン>= 39.0.0）を使用することを確認してください。バージョン3.6.3から3.6.6には、一部のAPIエンドポイントでエラーを引き起こす問題があります。特に、コンポーネントハイライトページは、Traefikによって`400 Bad Request`エラーでAPI呼び出しがブロックされるため、読み込まれません。
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Ingress Nginxプロジェクトはhttps://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[廃止される予定です]。ユーザーはTraefikなどの代替案を検討することをお勧めします。
+=====
+
+[,text]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+----
+
+このファイルで目立つのは、許可される`proxy-body-size`を`50m`（予想されるリクエストよりも大きい）に増やすためのNginxアノテーションです。デフォルトでは、Nginxは最大`1m`のボディサイズを許可します。{stackstate-product-name} エージェントや他のデータプロバイダーは、時々はるかに大きなリクエストを送信することがあります。この理由から、Nginxまたは他のイングレスコントローラーを使用しているかどうかに関わらず、許可されるボディサイズが十分に大きいことを確認する必要があります。
+--
+====
+
+初回インストール中に生成された値ファイルで`baseUrl`を更新してください。これは{stackstate-product-name}によってエージェントの便利なインストール手順を生成するために使用されます。
+
+例では、廃止された`kubernetes.io/ingress.class`アノテーションの代わりに、https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]を指定するために`ingressClassName`フィールドを使用しています。クラスターにデフォルトのイングレスクラスが定義されている場合、イングレスクラス名フィールドは省略できます。
+例では、廃止された`kubernetes.io/ingress.class`アノテーションの代わりに、https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]を指定するために`ingressClassName`フィールドを使用しています。クラスターにデフォルトのイングレスクラスが定義されている場合、イングレスクラス名フィールドは省略できます。
+
+{stackstate-product-name}をデプロイするために`helm upgrade`コマンドを実行する際に`ingress_values.yaml`ファイルを含めてください。
+
+[,text]
+----
+helm upgrade --install \
+  --namespace "suse-observability" \
+  --values "ingress_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+このステップは、xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]がすでに実行されていることを前提としています。
+====
+
+== オープンテレメトリのためのイングレスルールを構成します。
+
+{stackstate-product-name} Helmチャートは、その値の中で`opentelemetry-collector`サービスを公開し、専用の`ingress`を作成できます。これはデフォルトでは無効になっています。`opentelemetry-collector`目的に必要なイングレスは、GRPCプロトコルをサポートする必要があります。コントローラー自体と証明書の設定は、この文書の範囲を超えていることに注意してください。
+
+{stackstate-product-name}のために`opentelemetry-collector`イングレスを構成するには、以下のような内容のファイル`ingress_otel_values.yaml`を作成してください。`MY_DOMAIN`を自分のドメイン（イングレスコントローラーにリンクされている）に置き換え、`otlp-tls-secret`の正しい名前を設定してください。正しいアノテーションを設定するために、Ingressコントローラーのドキュメントを参照してください。以下のすべてのフィールドはオプションです。たとえば、TLSを使用しない場合はそのセクションを省略できますが、{stackstate-product-name}もトラフィックを暗号化しないことに注意してください。
+
+[tabs]
+====
+Traefik::
++
+--
+.当バージョンの注意事項
+[WARNING]
+=====
+Traefik < 3.6.3 or >= 3.6.7（Helmチャートバージョン>= 39.0.0）を使用することを確認してください。バージョン3.6.3から3.6.6には、一部のAPIエンドポイントでエラーを引き起こす問題があります。特に、コンポーネントハイライトページは、Traefikによって`400 Bad Request`エラーでAPI呼び出しがブロックされるため、読み込まれません。
+=====
+
+[NOTE]
+=====
+OpenTelemetry Collector GRPCエンドポイントをTraefik経由で公開することは、{stackstate-product-name} Helmチャートバージョンv2.8.0以降でサポートされています。
+
+GRPCホストエントリは、トラフィックを正しいバックエンドサービスにルーティングするために明示的な`serviceName: suse-observability-otel-collector-grpc`を必要とすることに注意してください。
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            serviceName: suse-observability-otel-collector-grpc
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        ingressClassName: traefik
+        annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+
+Nginx Ingress::
++
+--
+[NOTE]
+=====
+Ingress Nginxプロジェクトはhttps://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[廃止される予定です]。ユーザーはTraefikなどの代替案を検討することをお勧めします。
+=====
+
+[,text]
+----
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+
+このファイルで目立つのは、許可される`proxy-body-size`を`50m`（予想されるリクエストよりも大きい）に増やすためのNginxアノテーションです。デフォルトでは、Nginxは最大`1m`のボディサイズを許可します。{stackstate-product-name} エージェントや他のデータプロバイダーは、時々はるかに大きなリクエストを送信することがあります。この理由から、Nginxまたは他のイングレスコントローラーを使用しているかどうかに関わらず、許可されるボディサイズが十分に大きいことを確認する必要があります。
+--
+====
+
+初回インストール時に生成された値ファイル内の`baseUrl`を更新することを確認してください。これは{stackstate-product-name}によってエージェントの便利なインストール手順を生成するために使用されます。
+
+例では、廃止された`kubernetes.io/ingress.class`アノテーションの代わりに、https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]を指定するために`ingressClassName`フィールドを使用しています。クラスターにデフォルトのイングレスクラスが定義されている場合、イングレスクラス名フィールドは省略できます。
+例では、廃止された`kubernetes.io/ingress.class`アノテーションの代わりに、https://kubernetes.io/docs/concepts/services-networking/ingress/#_ingress_class[ingress]を指定するために`ingressClassName`フィールドを使用しています。クラスターにデフォルトのイングレスクラスが定義されている場合、イングレスクラス名フィールドは省略できます。
+
+{stackstate-product-name}をデプロイするために`helm upgrade`コマンドを実行する際に`ingress_otel_values.yaml`ファイルを含めてください。
+
+[,text]
+----
+helm upgrade \
+  --install \
+  --namespace "suse-observability" \
+  --values "ingress_otel_values.yaml" \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+このステップは、xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_generate_baseconfig_values.yaml_and_sizing_values.yaml[Generate `baseConfig_values.yaml` and `sizing_values.yaml`]がすでに実行されていることを前提としています。
+====
+
+== 外部ツールを介して構成します。
+
+Kubernetesクラスターの外部で{stackstate-product-name}にアクセス可能にするには、その`<namespace>-stackstate-k8s-router`サービスのポート`8080`にトラフィックをルーティングするだけで十分です。{stackstate-product-name}のUIは、そのサービスのルートパス（すなわち`http://<namespace>-stackstate-k8s-router:8080`）の下で直接アクセスできますが、エージェントは`/receiver`パス（`http://<namespace>-stackstate-k8s-router:8080/receiver`）を使用します。
+
+初回インストール時に生成された値ファイル内の`baseUrl`を更新することを確認してください。これは{stackstate-product-name}によってエージェントの便利なインストール手順を生成するために使用されます。
+
+[NOTE]
+====
+Nginxや同様のHTTPサーバーをリバースプロキシとして手動で設定する際は、WebSocketもプロキシできることを確認してください。Nginxの場合、次のディレクティブを`location`ディレクティブに含めることで設定できます：
+
+[,text]
+----
+proxy_set_header Upgrade                 $http_upgrade;
+proxy_set_header Connection              "Upgrade";
+----
+
+====
+
+
+[CAUTION]
+====
+{stackstate-product-name}自体はTLS暗号化トラフィックを使用せず、TLS暗号化はイングレスコントローラーまたは外部ロードバランサーによって処理されることが期待されています。
+====
+
+
+== 同じクラスター内のエージェント
+
+{stackstate-product-name}と同じクラスターにデプロイされたエージェントは、もちろん{stackstate-product-name}が公開されている外部URLを使用できますが、Kubernetes内部ネットワークを介して{stackstate-product-name}インスタンスに直接接続するようにエージェントを設定することも可能です。そのためには、xref:/k8s-quick-start-guide.adoc[Agent Kubernetes installation]の`helm install`コマンド内の`'stackstate.url'`の値を、ルーターサービスの内部クラスターURLに置き換えます（上記も参照）：`http://<namespace>-suse-observability-router.<namespace>.svc.cluster.local:8080/receiver/stsAgent`（{stackstate-product-name}の名前空間で`<namespace>`セクションを置き換える必要があります）。
+
+
+== ルーター{stackstate-product-name}サービスポートの転送
+
+デフォルトでは、{stackstate-product-name} Helm チャートはルーター ポッドとサービスをデプロイします。このサービスはポート`8080`を公開しており、Ingressを介して公開する必要がある唯一のエントリポイントです。
+ポートフォワーディングを介して{stackstate-product-name}にアクセスすることもできます。その際、リクエストの発信元としてlocalhostを許可する必要があります。
+
+[WARNING]
+====
+* `localhost`を`stackstate.allowedOrigins`で許可することは、ポートフォワーディングを使用する際のローカル開発またはデバッグのためだけに意図されています。
+* これは*本番環境のセットアップではありません*。{stackstate-product-name}をIngress経由で公開する際には、この許可された発信元を削除してください。
+====
+
+Ingressを設定せずにUIにアクセスするには、ルーターサービスポートを転送します：
+
+[,text]
+----
+kubectl port-forward service/<helm-release-name>-suse-observability-router 8080:8080 --namespace suse-observability
+----
+
+ポートフォワーディングを介して{stackstate-product-name}にアクセスする際、ブラウザは`http://localhost:8080`をリクエストの発信元として使用します。
+この発信元からのリクエストを許可するには、Helmの値の`stackstate.allowedOrigins`リストに追加するか、Helm コマンドに直接渡します::
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --set stackstate.allowedOrigins={"http://localhost:8080"} \
+suse-observability \
+suse-observability/suse-observability
+----
+
+
+== 関連項目
+
+* https://learn.microsoft.com/en-us/azure/aks/ingress-tls?tabs=azure-cli[AKS (learn.microsoft.com)]
+* https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html[EKS公式ドキュメント]（nginxを使用しない）
+* https://aws.amazon.com/blogs/opensource/network-load-balancer-nginx-ingress-controller-eks/[EKSブログ投稿]（nginxを使用）
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]
+* https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/[Traefik Kubernetes Ingress (doc.traefik.io)]

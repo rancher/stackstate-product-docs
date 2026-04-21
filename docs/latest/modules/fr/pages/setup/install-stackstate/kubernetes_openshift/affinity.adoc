@@ -1,0 +1,202 @@
+= Configuration des valeurs d'affinité
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: {stackstate-product-name} Configuration d'affinité
+
+Les configurations d'affinité contrôlent le comportement de planification des pods dans {stackstate-product-name}. Les valeurs d'affinité aident à optimiser l'utilisation des ressources et à garantir une haute disponibilité en contrôlant où les pods sont planifiés.
+
+== Options de configuration disponibles
+
+=== Affinité des nœuds
+
+Vous pouvez utiliser l'affinité des nœuds pour planifier des pods sur des nœuds ou des groupes d'instances spécifiques, tels que des nœuds EC2 déployés dans la même zone de disponibilité.
+
+[,yaml]
+----
+affinity:
+  # Node Affinity settings - applied to all components when configured
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== Anti-affinité des pods
+
+Vous pouvez utiliser l'anti-affinité des pods pour planifier des répliques de services de données sur différents nœuds afin d'assurer une haute disponibilité. Par défaut, la planification est requise (anti-affinité stricte) et `topologyKey` est `kubernetes.io/hostname`.
+
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    # Enable required pod anti-affinity (true = hard, false = soft)
+    requiredDuringSchedulingIgnoredDuringExecution: true
+    # Topology key for pod anti-affinity
+    topologyKey: "kubernetes.io/hostname"
+----
+
+== Comportement
+
+=== Affinité des nœuds
+
+* **Lorsqu'elle est configurée** : Appliquée à tous les composants
+
+=== Anti-affinité des pods
+
+* **Lorsqu'elle est configurée** : Appliquée uniquement lorsque `sizing.profile` se termine par `-ha` (profils de haute disponibilité)
+* **Profils HA** : `150-ha`, `250-ha`, `500-ha`, `4000-ha`
+* **Composants affectés** : Tous les services de données avec état, y compris Clickhouse, Kafka, Zookeeper, VictoriaMetrics, StackGraph, Elasticsearch
+
+== Configurations d'exemple
+
+=== Affinité des nœuds de base (même zone de disponibilité) + anti-affinité stricte des pods pour un déploiement HA
+
+Supposons que vous ayez défini `sizing.profile` sur l'un des profils HA. Les valeurs ci-dessous configurent l'affinité des nœuds pour planifier les composants de {stackstate-product-name} dans la zone `us-west-2a` et imposent la planification des répliques des mêmes services de données sur différents hôtes (`affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true` par défaut).
+[,yaml]
+----
+affinity:
+  # Schedule all pods to nodes in the same AZ
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+----
+
+=== Anti-affinité des pods souple pour le déploiement HA
+Si l'imposition de la planification des services de données sur différents nœuds n'est pas souhaitable, vous pouvez configurer l'anti-affinité des pods en mode « souple » :
+[,yaml]
+----
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: false
+----
+
+== Syntaxe
+
+[tabs]
+====
+Méthode recommandée::
++
+--
+[NOTE]
+=====
+La méthode de configuration `global.suseObservability` est disponible à partir de la version `2.8.0`. Pour les versions antérieures, utilisez la méthode héritée.
+=====
+
+Ajoutez la configuration d'affinité directement dans votre fichier `values.yaml` sous `global.suseObservability.affinity` :
+
+[source,yaml]
+----
+global:
+  suseObservability:
+    # Your existing configuration
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    sizing:
+      profile: "150-ha"
+    adminPassword: "your-password"
+
+    # Affinity configuration
+    affinity:
+      # Node affinity - schedule all pods to nodes in the same AZ
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        # true = hard anti-affinity, false = soft anti-affinity
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+----
+
+Puis installez ou mettez à niveau avec une seule commande :
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+TIP: Pour les profils HA, l'anti-affinité des pods est automatiquement appliquée à tous les services de données avec état. Vous devez seulement le configurer si vous souhaitez changer le comportement par défaut.
+
+Pour plus de détails sur la migration depuis la méthode héritée, consultez le xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[guide de migration].
+--
+Méthode héritée (Cessée de la prise en charge)::
++
+--
+[WARNING]
+=====
+Cette méthode n'est plus prise en charge. Pour les nouvelles installations, utilisez la méthode recommandée ci-dessus. Pour les installations existantes utilisant cette méthode, consultez le xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[guide de migration] pour passer au nouveau format de configuration.
+=====
+
+==== Étape 1 : Créez votre fichier de valeurs d'affinité
+
+Créez un fichier de valeurs séparé avec votre configuration d'affinité souhaitée. Par exemple, enregistrez ce qui suit sous `suse-observability-values-values.yaml` :
+
+[,yaml]
+----
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+          - us-west-2a
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution: true
+----
+
+==== Étape 2 : Générez des valeurs de modèle d'affinité
+
+Exécutez la commande suivante pour générer le modèle de valeurs d'affinité :
+
+[,text]
+----
+export VALUES_DIR=.
+helm template \
+  --set license='<your license>' \
+  --set baseUrl='<suse-observability-base-url>' \
+  --set sizing.profile='<sizing.profile>' \
+  --values suse-observability-values-values.yaml \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+----
+
+==== Étape 3 : Utilisez les valeurs générées lors de l'installation de Helm
+
+Incluez les valeurs d'affinité générées dans votre installation Helm :
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+--
+====

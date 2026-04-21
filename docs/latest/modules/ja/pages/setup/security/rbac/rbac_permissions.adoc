@@ -1,0 +1,283 @@
+= 権限
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+SUSE Observability の権限により、管理者は各ユーザーまたはユーザーグループが SUSE Observability 内で実行できるアクションや、彼らの SUSE Observability UI に表示される情報を管理できます。各ユーザーのアクティブな役割に関連する機能セットのみが表示されます。ユーザーがアクセスできないアクション、情報、ページは、単に彼らの SUSE Observability UI に表示されません。
+
+[NOTE]
+====
+権限は StackGraph に保存されます。これは次のことを意味します：
+
+* 「すべてのデータをクリアする」でアップグレードを行うと、権限設定も削除されます。
+* ユーザーを完全に削除するには、StackGraph からも手動で削除する必要があります。
+====
+
+
+== SUSE Observability 権限
+
+SUSE Observability には二種類の権限があります。*システム権限*は、設定へのアクセス、クエリの実行、及びスクリプトの利用など、ユーザーの機能を制御するためのものです。*スコープ付き権限*は、監視データやSUSE Observability Viewsのような一部のリソースタイプへのアクセスを決定します。 SUSE Observability Views に対する CRUD 操作については、特定のビューまたはすべてのビューに対して付与できます。SUSE Observability の各事前定義された役割に付随する権限の詳細については、xref:/setup/security/rbac/rbac_roles.adoc#_predefined_roles[事前定義された役割] を参照してください。
+
+SUSE Observability で利用可能な権限は次のとおりです：
+
+.権限
+[cols="2,2,5"]
+|===
+|リソース |動詞 |説明
+
+|エージェント
+|get
+|接続されたエージェント
+
+|api-tokens
+|get
+|SUSE Observability CLI での認証に使用する API キー。 これはユーザーごとにユニークです。
+
+|コンポーネントアクション
+|execute
+|xref:/use/views/k8s-topology-perspective.adoc#_actions[トポロジーの視点におけるコンポーネントアクション]。
+
+|ダッシュボード
+|取得、作成、更新、削除
+|xref:/use/dashboards/dashboards.adoc[ダッシュボード]。
+
+|メトリックバインディング
+|取得、作成、更新、削除
+ifdef::ss-ff-stackpacks2_enabled[]
+|xref:/setup/custom-integrations/metric-bindings/index.adoc[メトリックの視点でデータを視覚化するためのバインディング]。
+endif::[]
+ifndef::ss-ff-stackpacks2_enabled[]
+|xref:/use/metrics/k8s-add-charts.adoc[メトリックの視点でデータを視覚化するためのバインディング]。
+endif::[]
+
+|メトリクス
+|取得^[1]^、更新
+|PromQLを使用してメトリックデータを取り込み、クエリを実行します。
+
+|モニター
+|取得、作成、更新、削除、実行
+|xref:/use/alerting/k8s-monitors.adoc[モニターでコンポーネントの健康状態を判断する]。
+
+|通知
+|取得、作成、更新、削除
+|xref:/use/alerting/notifications/configure.adoc[通知でアラートを受け取る]。
+
+|permissions
+|取得、更新
+|対象に対する権限を管理します。
+
+|スコープ付き権限
+|update^[1]^
+|スコープ付き権限を管理し、単一のクラスターからトポロジー、メトリクス、トレースへのアクセスを付与（または取り消し）します。
+
+|scripts
+|execute
+|SUSE Observability UI Analytics環境でスクリプトを実行します。
+
+|制限されたスクリプト
+|execute
+|Analytics環境でHTTPスクリプトとGremlinグラフAPIを使用します。
+
+|service-token
+|取得、作成、削除
+|xref:/setup/security/authentication/service_tokens.adoc[サービストークン]は外部サービスを認証し、データ取り込みに使用できます。
+
+|設定
+|取得、更新、ロック解除
+|設定をエクスポートまたはインポートするか、xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[ロックされた設定アイテム]のロックを解除します。
+
+|スタックパック
+|取得、更新
+|xref:/stackpacks/about-stackpacks.adoc[スタックパック]をリストまたはアップロードします。
+
+|stackpack-configurations
+|作成、更新、削除
+|xref:/stackpacks/about-stackpacks.adoc[スタックパック]を使用して統合を管理します。
+
+|sync-data
+|取得、削除
+|トポロジーとヘルス同期パイプラインを検査またはリセットします。
+
+|system-notifications
+|get
+|UIでシステム通知にアクセスします。
+
+|topic-messages
+|get
+|SUSE Observability Receiverデータにアクセスします。
+
+|トポロジー
+|get^[1]^
+|xref:/use/views/k8s-views.adoc[トポロジーのスコープ付きビューを探索する]。
+
+|トレース
+|get^[1]^
+|xref:/use/traces/k8sTs-explore-traces.adoc[トレースを探索する]。
+
+|ビュー <:so>びゅー
+|取得^[1]^^、作成、更新^[1]^、削除^[1]^
+|xref:/use/views/k8s-custom-views.adoc[カスタムビュー]を使用または管理します。
+
+|favorite-views
+|作成、削除
+|ビューから星を追加および削除します。
+
+|視覚化
+|update
+|xref:/use/views/k8s-topology-perspective.adoc#_visualization_settings[視覚化設定]を変更します。
+
+|===
+^[1]^ これは*スコープ付き権限*であり、リソース名の解釈は文脈に依存します。
+
+=== スコープ付き権限
+
+特定の権限をシステム全体に付与することも、リソースのサブセットに制限することもできます。 *リソース名*を付与することができ、これがスコープを示します。 この名前の解釈はリソースの種類に依存します。 スコープは一部の動詞にのみ適用される場合があることに注意してください。
+
+* `views` - ビューの名前
+* `topology` - 任意のコンポーネントラベル。Kubernetes環境では、例えば`cluster-name:<cluster-name>`や`k8s-scope:<cluster-name>/<namespace>`である可能性があります。
+* `metrics` - Kubernetes環境では、`k8s:<cluster-name>:\\__any__`または`k8s:<cluster-name>:<namespace>`のいずれかです。
+* `traces` - Kubernetes環境では、`k8s.cluster.name:<cluster-name>`または`k8s.scope:<cluster-name>/<namespace>`のいずれかです。
+* `scoped-permissions` - 権限が管理されるクラスターの名前です。
+
+== 権限を管理する
+
+`sts` CLIを使用してSUSE Observabilityの権限を管理できます。
+スコープ付き権限の場合、リソース名を指定できます。 指定がない場合、権限はシステム全体に付与（または取り消し）されます。
+
+[NOTE]
+====
+*重要:*SUSE Observability のすべての権限は大文字と小文字を区別します。
+====
+
+
+=== 利用可能なすべての権限をリスト表示する
+
+利用可能なすべての権限をリスト表示します：
+
+[,text]
+----
+sts rbac list-permissions
+----
+
+=== すべての主体をリスト表示する
+
+すべての主体をリスト表示します：
+
+[,text]
+----
+sts rbac describe-subjects
+
+SUBJECT                                    | SOURCE
+stackstate-admin                           | Static
+suse-observability-instance-admin          | Kubernetes
+suse-observability-agent-clusterA          | Observability
+----
+[NOTE]
+====
+`主体 `SOURCE`は、誰が主体を所有し管理しているかを示します。それは私たちのRBACソースのいずれか（Configuration|Static、Observability、Kubernetes）である可能性があります。
+
+* Configuration|Static：helmを通じてSUSE Observability構成から取得した主体
+* Observability：sts cliを介して管理される主体
+* Kubernetes：Kubernetes RoleBindingsおよびClusterRoleBindingsからRBACエージェントを介して取得した主体
+====
+
+=== ユーザーの主体をリスト表示する
+
+コンテキストに割り当てられたすべての主体をリスト表示します。最初のエントリはユーザー名およびそのユーザーが持つ可能性のある役割です:
+
+[,text]
+----
+sts user-session roles
+
+user-dkzwh
+keycloakoidc_group://suse-observability-instance-troubleshooter
+keycloakoidc_group://suse-observability-instance-observer
+keycloakoidc_group://suse-observability-cluster-observer
+keycloakoidc_group://suse-observability-instance-admin
+keycloakoidc_group://suse-observability-observer
+----
+
+ユーザーに割り当てられたすべての主体をリスト表示します。`api-token`を提供することで（管理者が権限の少ないユーザーのデバッグを支援できます）：
+
+[,text]
+----
+sts user-session roles --api-token [api-token]
+
+u-3p775e7w7l
+keycloakoidc_group://suse-observability-cluster-observer
+----
+
+=== 付与された権限を表示します
+
+特定のユーザーまたは役割に付与された権限を表示します。
+
+[,text]
+----
+> sts rbac describe-permissions --subject [role-name]
+Got subject from the following subject sources: Kubernetes
+
+PERMISSION   | RESOURCE
+get-topology | cluster-name:rbac-t2
+get-traces   | k8s.cluster.name:rbac-t2
+get-metrics  | k8s:rbac-t2:__any__
+----
+
+[NOTE]
+====
+`--subject`は、さまざまなRBACソース（Configuration、Observability、Kubernetes）で利用可能な主体のいずれかです。
+====
+
+=== 権限を付与します
+[NOTE]
+====
+`--subject`はObservabilityの主体であり、ConfigurationおよびKubernetesの主体は読み取り専用です。
+====
+
+==== ユーザーがビューを開くことを許可します
+
+ビューを開く権限を有する主体を指定します:
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-views --resource [view-name]
+----
+
+==== ユーザーがビューを作成することを許可します
+
+ビューを作成するシステム権限を有する主体を指定します:
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission create-views
+----
+
+==== ユーザーがSUSE Observability の設定を確認することを許可します。
+
+SUSE Observability の設定を確認するシステム権限を有する主体を指定します:
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-settings
+----
+
+=== 権限を取り消します
+[NOTE]
+====
+`--subject`はObservabilityの主体であり、ConfigurationおよびKubernetesの主体は読み取り専用です。
+====
+
+ビューを開くための権限を持つ主体の権限を取り消します:
+
+[,text]
+----
+sts rbac revoke --subject [role-name] --permission get-views --resource [view-name]
+----
+
+== 権限のないSUSE Observability UI
+
+以下は、権限のないユーザーに対するSUSE Observability UIの例です:
+
+image::noperm.png[権限なし]

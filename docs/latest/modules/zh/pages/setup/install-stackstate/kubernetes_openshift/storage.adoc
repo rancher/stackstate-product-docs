@@ -1,0 +1,215 @@
+= 配置存储
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 存储默认值
+
+SUSE Observability 默认情况下不在其 PVC（持久卷声明）上指定特定的存储类，对于像 EKS 和 AKS 这样的云提供商，这意味着将使用默认存储类。
+
+这些存储类的默认设置通常是在删除 PVC 时删除 PV（持久卷）。然而，即使在运行 `helm delete` 以删除 StackState 发布时，PVC 仍将保留在名称空间中，并且如果在同一名称空间中使用相同的发布名称运行 `helm install`，则将重新使用这些 PVC。
+
+要删除 PVC，可以使用 `kubectl delete pvc` 手动删除它们，或者删除整个名称空间。
+
+[NOTE]
+====
+SUSE Observability 要求底层存储基于闪存（SSD）或具有类似性能。
+====
+[NOTE]
+====
+对于生产环境，不建议使用NFS进行存储配置，因为存在数据损坏的潜在风险。
+====
+[NOTE]
+====
+如有疑问，可以运行 xref:/setup/install-stackstate/support-package-performance.adoc[性能脚本] 并将其与 xref:/setup/install-stackstate/support-package-performance.adoc#_reference_performance[参考性能] 进行比较。
+====
+
+== 自定义存储
+
+您可以自定义 Helm 图表中不同卷的 `storageClass` 和 `size` 设置。这些示例值文件展示了如何更改存储类或卷大小。这些可以合并以同时更改两者。
+对于 `size`，我们提供了针对 `HA` 和 `NonHa` 的示例，具体取决于安装过程中选择的控制文件。
+
+[tabs]
+====
+更改存储类::
++
+--
+
+[,yaml]
+----
+global:
+  # The storage class for all of the persistent volumes
+  storageClass: "standard"
+----
+
+--
+
+更改 HA 的卷大小::
++
+--
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    # Size of persistent volume for each clickhouse pod
+    size: 50Gi
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        # size of volume for each Elasticsearch pod
+        storage: 250Gi
+
+hbase:
+  hdfs:
+    datanode:
+      persistence:
+        # size of volume for HDFS data nodes
+        size: 250Gi
+
+    namenode:
+      persistence:
+        # size of volume for HDFS name nodes
+        size: 20Gi
+
+
+kafka:
+  persistence:
+    # size of persistent volume for each Kafka pod
+    size: 100Gi
+
+
+zookeeper:
+  persistence:
+    # size of persistent volume for each Zookeeper pod
+    size: 8Gi
+
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 250Gi
+victoria-metrics-1:
+  server:
+    persistentVolume:
+      size: 250Gi
+
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 2Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    state:
+      tmpToPVC:
+        volumeSize: 2Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    vmagent:
+      persistence:
+        size: 10Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 600Mi
+  stackpacks:
+    pvc:
+      size: 1Gi
+
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 1Gi
+minio:
+  persistence:
+    size: 500Gi
+----
+
+--
+更改非 HA 的卷大小::
++
+--
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    # Size of persistent volume for each clickhouse pod
+    size: 50Gi
+
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        # size of volume for each Elasticsearch pod
+        storage: 250Gi
+
+hbase:
+  stackgraph:
+    persistence:
+      # Size of persistent volume for the single stackgraph hbase pod
+      size: 100Gi
+
+kafka:
+  persistence:
+    # size of persistent volume for each Kafka pod
+    size: 100Gi
+
+
+zookeeper:
+  persistence:
+    # size of persistent volume for each Zookeeper pod
+    size: 8Gi
+
+victoria-metrics-0:
+  server:
+    persistentVolume:
+      size: 50Gi
+
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 2Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    state:
+      tmpToPVC:
+        volumeSize: 2Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 2Gi
+    vmagent:
+      persistence:
+        size: 10Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 600Mi
+  stackpacks:
+    localpvc:
+      size: 1Gi
+    pvc:
+      size: 1Gi
+
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 1Gi
+minio:
+  persistence:
+    size: 500Gi
+----
+
+--
+====
+
+[NOTE]
+====
+非 HA 示例属于最大的非 HA 实例，旨在观察 100 个节点并保留数据 2 周。
+====

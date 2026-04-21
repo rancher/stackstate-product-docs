@@ -1,0 +1,51 @@
+= Dynamische Schwellenwertmonitore
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Für Metriken, die im Laufe der Zeit erheblich variieren und von Dienst zu Dienst unterschiedlich sind, bietet ein Dynamischer Schwellenwertmonitor eine einfache und leistungsfähige Anomalieerkennung.  Er verwendet Daten von vor 1, 2 oder 3 Wochen zusätzlich zur jüngsten Vergangenheit als Kontext, um aktuelle Daten zu vergleichen.
+
+Daten aus dem "Prüfintervall" werden mit den Daten aus dem historischen Kontext unter Verwendung des Anderson-Darling-Tests verglichen.  Dies setzt nur sehr wenige Annahmen über die Datenverteilung voraus.  Der Test ist besonders empfindlich gegenüber Ausreißern an den oberen und unteren Enden der Verteilung.  Die Metrik kann glatt, sprunghaft oder ein paar "Ebenen" aufweisen – da die Datenwerte direkt verglichen werden, ohne dass ein Modell angepasst wird, ist der dynamischer Schwellenwertmonitor sehr robust.
+
+Für Metriken, die sich im Laufe der Zeit gleichmäßig verändern (z. B. auf einer Zeitskala von fünf Minuten), ist die effektive Anzahl der Datenpunkte geringer als die tatsächliche Anzahl.  Der DT kompensiert dies, sodass derselbe Monitor für eine Vielzahl von Metriken verwendet werden kann, ohne dass seine Parameter angepasst werden müssen.
+
+Es gibt ein paar Parameter, die für die Monitorfunktion eingestellt werden können:
+
+* `falsePositiveRate`: sage `!!float 1e-8` - die Empfindlichkeit des Monitors gegenüber abweichendem Verhalten.  Ein niedrigerer Wert unterdrückt mehr (falsche) Positivmeldungen, kann jedoch auch zu falschen Negativen (unentdeckte Anomalien) führen.
+* `checkWindowMinutes`: sage `10` Minuten - das Prüfintervall muss zwischen schneller Alarmierung (kleine Werte) und korrekt identifizierten Anomalien (hohe Werte) ausgewogen sein.  Eine Handvoll von Datenpunkten funktioniert in der Praxis gut.
+* `historicWindowMinutes`: sage `120` (2 Stunden) - um den aktuellen Zeitpunkt herum, aber dann vor ein oder mehreren Wochen - also von 1 Stunde vor dem aktuellen Zeitpunkt bis 1 Stunde danach.  Auch die 2 Stunden vor dem Prüfintervall werden verwendet.  Der dynamische Schwellenmonitor vergleicht die Verteilung dieser historischen Daten mit den Datenpunkten im Prüfintervall.
+* `historySizeWeeks`: sage `2` - die Anzahl der Wochen, aus denen Daten für den historischen Kontext entnommen werden.  Kann `1`, `2` oder `3` sein.
+* `removeTrend`: für Metriken, die ein Trendverhalten aufweisen (zum Beispiel die Anzahl der Anfragen), sodass der absolute Wert von Woche zu Woche variiert, kann dieser Trend (der Durchschnittswert) berücksichtigt werden.
+* `includePreviousDay`: typischerweise `false` - für Metriken, die kein wöchentliches, sondern nur ein tägliches Schema aufweisen, ermöglicht dies die Verwendung aktuellerer Daten.
+
+== Beispiel für einen Dynamischen Schwellenwertmonitor
+
+Ein Monitor, der mit der Funktion für dynamische Schwellenwerte implementiert wurde, sieht folgendermaßen aus:
+
+----
+  - _type: "Monitor"
+    name: "<name of the monitor>"
+    identifier: "urn:custom:monitor:<identifier for the monitor>"
+    status: "DISABLED"
+    description: "<description>"
+    function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+    arguments:
+      telemetryQuery:
+        query: "<metric to bind to component>"
+        unit: s
+        aliasTemplate: "<name for the metric>"
+      topologyQuery: <topology query for the components to bind to>
+      falsePositiveRate: <floating point number, e.g. !!float 1e-8>
+      checkWindowMinutes: <integer, e.g. 10>
+      historicWindowMinutes: <integer, e.g. 120>
+      historySizeWeeks: <integer: 1, 2 or 3>
+      includePreviousDay: <boolean>
+      removeTrend: <boolean>
+    intervalSeconds: 60
+    remediationHint: "<how to remediate deviating states>"
+----
+
+Der Monitor kann mit dem Leitfaden unter xref:/use/alerting/k8s-add-monitors-cli.adoc[Fügen Sie einen Schwellenwertmonitor zu Komponenten mit der Kommandozeilenschnittstelle hinzu] implementiert werden.

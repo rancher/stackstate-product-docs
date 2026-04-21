@@ -1,0 +1,107 @@
+= Kubernetes-Protokolle
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Selbstgehostet v5.1.x
+
+== Übersicht
+
+In einem Kubernetes-Setup sind die Funktionen von SUSE Observability über verschiedene Pods verteilt, und die Protokolle für jede Funktion werden pro Pod und Container gespeichert. Sie können auf die aktuellen Protokolle mit `kubectl` zugreifen, obwohl für die langfristige Speicherung empfohlen wird, eine Protokollaggregation einzurichten.
+
+== Kubernetes-Pods für Protokolle
+
+Die Protokolle von SUSE Observability werden pro Pod und Container gespeichert. Die folgende Tabelle zeigt den Pod, auf den Sie zugreifen müssen, um Protokolle zu spezifischen Funktionen von SUSE Observability zu erhalten. Bitte beachten Sie, dass die tatsächlichen Pod-Namen eine Nummer oder einen zufälligen Stringsuffix (zum Beispiel `stackstate-receiver-5b9d79db86-h2hkz`) enthalten und möglicherweise auch den bei der Bereitstellung von SUSE Observability angegebenen Release-Namen als Präfix enthalten.
+
+[NOTE]
+====
+Bitte beachten Sie, dass die auf den Pods gespeicherten Protokolle regelmäßig entfernt werden. Für den langfristigen Zugriff auf Protokolle wird empfohlen, <<_log_aggregation,Protokollaggregation>> für Ihren Kubernetes-Cluster einzurichten.
+====
+
+
+|===
+| SUSE Observability-Funktion | Protokolle auf dem Pod
+
+| API (einschließlich Topologie, Diagramme und Einstellungen)
+| `stackstate-api`
+
+| Datenindizierung in Elasticsearch
+| `stackstate-e2es` (Ereignisse)
+
+| Datenaufnahme
+| `stackstate-receiver`
+
+| Ereignis-Handler
+| `stackstate-view-health`
+
+| Monitor
+| `stackstate-checks`
+
+| Zustandsübertragung
+| `stackstate-state`
+
+| Synchronisierung
+| `stackstate-sync`
+
+| Gesundheitszustand anzeigen
+| `stackstate-view-health`
+|===
+
+Sie können auf Protokolle auf einem bestimmten Pod mit dem Befehl `kubectl logs` zugreifen.
+
+Beispiel:
+
+[,sh]
+----
+$ kubectl logs stackstate-api-0
+----
+
+== Zugriff auf aktuelle Protokolle
+
+=== Pod- oder Containerprotokolle
+
+Die aktuellsten Protokolle können mit dem `kubectl logs` Befehl von Kubernetes abgerufen werden. Überprüfen Sie den <<_kubernetes_pods_for_logging,Pod, den Sie überwachen müssen>>, um ein spezifisches Protokoll abzurufen.
+
+Beispiel:
+
+[,sh]
+----
+# Snapshot of logs for all containers of <pod-name>
+$ kubectl logs <pod-name> --all-containers=true
+
+# Stream logs for all containers of <pod-name>
+$ kubectl logs -f <pod-name> --all-containers=true
+
+# Snapshot of logs for a specific container of <pod-name>
+$ kubectl logs -c <container-name> <pod-name>
+
+# Snapshot of logs for previous terminated container of <pod-name>
+$ kubectl logs -p -c <container-name> <pod-name>
+----
+
+=== Synchronisierungsprotokolle
+
+Alle Synchronisierungsprotokolle finden Sie in einem Pod `stackstate-sync-<suffix>`. Sie können den Synchronisierungsnamen verwenden, um spezifische Protokollinformationen in einem Log-Snapshot zu finden.
+
+Beispiel:
+
+[,sh]
+----
+# Logs of the synchronization for a specific Kubernetes cluster
+$ kubectl logs stackstate-sync-0 | grep "Kubernetes - \<cluster-name\>"
+
+# Logs of the Agent synchronization
+$ kubectl logs stackstate-sync-0 | grep "Agent"
+----
+
+== Protokollaggregation
+
+Für die langfristige Speicherung von SUSE Observability-Protokolldaten wird empfohlen, die Protokollaggregation in Ihrem Kubernetes-Cluster einzurichten. Dies kann mit einem Drittanbietersystem zur Speicherung wie Elasticsearch, Splunk oder Logz.io und einem Log-Shipper wie Logstash oder Fluentd erfolgen.
+
+Für weitere Details, wie dies durchgeführt werden kann, informieren Sie sich unter:
+
+* Protokolle versenden mit https://docs.fluentd.org/container-deployment/kubernetes[Fluentd (fluentd.org)]
+* Eine vollständige Übersicht zur Einrichtung von https://docs.bitnami.com/tutorials/integrate-logging-kubernetes-kibana-elasticsearch-fluentd/[Protokollaggregation in Elasticsearch (bitnami.com)]
+
+== Siehe auch
+
+* https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands[kubectl-Befehlsreferenz (kubernetes.io/docs)]

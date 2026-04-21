@@ -1,0 +1,478 @@
+= バックアップを有効にする
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+[NOTE]
+====
+このページは {stackstate-product-name} v2.7.0 以降に適用されます。
+====
+
+== 概要
+
+{stackstate-product-name} には、AWS S3、Azure Blob Storage、または Kubernetes Persistent Volume にバックアップを保存するように構成できるビルトインバックアップメカニズムがあります。
+
+ほとんどのバックアップは、単一の Helm 値 `global.backup.enabled` で有効になります。設定のバックアップは常に有効ですが、以下の値に基づいて異なる動作をします：
+
+=== バックアップの範囲
+
+以下のデータは自動的にバックアップされる可能性があります：
+
+* *設定*（StackPacks、モニター、ビュー、トークン） - 常に有効：
+** `global.backup.enabled` が `true` の場合：バックアップは MinIO を介して構成されたストレージバックエンドに保存されます。
+** `global.backup.enabled` が `false` の場合：バックアップは専用の Kubernetes Persistent Volume に保存され、MinIO をバイパスします。
+* *トポロジーデータと設定* は StackGraph に保存されます - `global.backup.enabled` が `true` の場合に有効です。
+* *メトリクス* は {stackstate-product-name} の Victoria Metrics インスタンスに保存されます - `global.backup.enabled` が `true` の場合に有効です。
+* *テレメトリーデータ* は {stackstate-product-name} の Elasticsearch インスタンスに保存されます - `global.backup.enabled` が `true` の場合に有効です。
+* *OpenTelemetry データ* は {stackstate-product-name} の ClickHouse インスタンスに保存されます - `global.backup.enabled` が `true` の場合に有効です。
+
+=== ストレージオプション
+
+バックアップは https://min.io/[MinIO (min.io)] を使用して、ストレージバックエンドへの S3 互換ゲートウェイとして機能します。バックアップが有効になると、Helm チャートによって MinIO が自動的にデプロイされます。
+
+ビルトインの MinIO インスタンスは、バックアップを三つの場所に保存するように構成できます：
+
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[AWS S3]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Azure Blob Storage]
+* xref:/setup/data-management/backup_restore/backup_enable.adoc[Kubernetes ストレージ]
+
+== バックアップを有効にする
+
+=== AWS S3
+
+[CAUTION]
+====
+
+*暗号化*
+
+S3 バケットのバックアップを暗号化する際には、Amazon S3 管理キー（SSE-S3）を使用する必要があります。
+
+⚠️ AWS キー管理サービスに保存されている AWS KMS キー（SSE-KMS）による暗号化はサポートされていません。これにより、Elasticsearch のログに次のようなエラーが発生します：
+
+`Caused by: org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper: sdk_client_exception: Unable to verify integrity of data upload. Client calculated content hash (contentMD5: ZX4D/ZDUzZWRhNDUyZTI1MTc= in base 64) didn't match hash (etag: c75faa31280154027542f6530c9e543e in hex) calculated by Amazon S3. You may need to delete the data stored in Amazon S3. (metadata.contentMD5: null, md5DigestStream: com.amazonaws.services.s3.internal.MD5DigestCalculatingInputStream@5481a656, bucketName: suse-observability-elasticsearch-backup, key: tests-UG34QIV9s32tTzQWdPsZL/master.dat)\",`
+====
+
+
+==== 別々のS3バケットを使用する
+
+別々の AWS S3 バケット（データストアごとに1つ）への定期的なバックアップを有効にするには、Helm の `values.yaml` ファイルを使用して {stackstate-product-name} をインストールする際に、次の YAML フラグメントを追加してください：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  stackGraph:
+    bucketName: AWS_STACKGRAPH_BUCKET
+  elasticsearch:
+    bucketName: AWS_ELASTICSEARCH_BUCKET
+  configuration:
+    bucketName: AWS_CONFIGURATION_BUCKET
+victoria-metrics-0:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+victoria-metrics-1:
+  backup:
+    bucketName: AWS_VICTORIA_METRICS_BUCKET
+clickhouse:
+  backup:
+    bucketName: AWS_CLICKHOUSE_BUCKET
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+次の値を置き換えてください：
+
+* `YOUR_ACCESS_KEY`と`YOUR_SECRET_KEY`は、MinIO システムを保護するために使用される資格情報です。これらの資格情報は MinIO システムに設定され、自動バックアップ ジョブおよび復元ジョブによって使用されます。手動でMinIOシステムにアクセスする場合にも必要です。
+ ** YOUR_ACCESS_KEYは5から20の英数字で構成される必要があります。
+ ** YOUR_SECRET_KEYは8から40の英数字で構成される必要があります。
+* `AWS_ACCESS_KEY`と`AWS_SECRET_KEY`は、バックアップが保存されるS3バケットにアクセスできるIAMユーザーのAWS資格情報です。そのユーザーに添付する必要がある権限ポリシーは以下の通りです。
+* `AWS_*_BUCKET`は、バックアップが保存されるS3バケットの名前です。
++
+[Note]
+====
+AWS S3バケットの名前は、AWS全体で一意です。したがって、デフォルト名（`sts-elasticsearch-backup`、`sts-configuration-backup`、`sts-stackgraph-backup`、`sts-victoria-metrics-backup`、`sts-clickhouse-backup`）のS3バケットは、利用できない可能性があります。
+====
+
+==== プレフィックスを使用した単一のS3バケット
+
+各データストアに対して別々のバケットを使用する代わりに、異なるプレフィックスを持つ単一のS3バケットを使用できます：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: BUCKET
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: BUCKET
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: BUCKET
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: BUCKET
+    s3Prefix: clickhouse
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  s3gateway:
+    enabled: true
+    accessKey: AWS_ACCESS_KEY
+    secretKey: AWS_SECRET_KEY
+----
+
+`BUCKET`をあなたのS3バケット名に置き換えてください。異なるデータストアのバックアップは、設定された`s3Prefix`値を使用して整理されます。前のセクションの同じ`YOUR_ACCESS_KEY`、`YOUR_SECRET_KEY`、`AWS_ACCESS_KEY`、および`AWS_SECRET_KEY`の値がここにも適用されます。
+
+=== AWS S3の権限
+
+`AWS_ACCESS_KEY`および`AWS_SECRET_KEY`で特定されたIAMユーザーは、S3バケットにアクセスするために次の権限ポリシーを設定する必要があります：
+
+[,javascript]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowListMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        },
+        {
+            "Sid": "AllowWriteMinioBackupBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::AWS_STACKGRAPH_BUCKET/*",
+                "arn:aws:s3:::AWS_ELASTICSEARCH_BUCKET/*",
+                "arn:aws:s3:::AWS_VICTORIA_METRICS_BUCKET/*",
+                "arn:aws:s3:::AWS_CLICKHOUSE_BUCKET/*",
+                "arn:aws:s3:::AWS_CONFIGURATION_BUCKET"
+            ]
+        }
+    ]
+}
+----
+
+=== Azure Blob Storage
+
+==== 別々のコンテナを使用する
+
+別々の Azure Blob ストレージコンテナ（データストアごとに1つ）へのバックアップを有効にするには、Helm の `values.yaml` ファイルを使用して {stackstate-product-name} をインストールする際に、次の YAML フラグメントを追加してください：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+次の値を置き換えてください：
+
+* `AZURE_STORAGE_ACCOUNT_NAME` - https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal[Azureストレージアカウント名（learn.microsoft.com）]
+* `AZURE_STORAGE_ACCOUNT_KEY` - https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[Azureストレージアカウントキー（learn.microsoft.com）]（バックアップを保存するアカウントのキー）です。
+
+StackGraph、Elasticsearch、Victoria Metrics、およびClickHouseのバックアップは、それぞれ`sts-stackgraph-backup`、`sts-configuration-backup`、`sts-elasticsearch-backup`、`sts-victoria-metrics-backup`、`sts-clickhouse-backup`というBLOBコンテナに保存されます。これらの名前は、Helmの値`backup.stackGraph.bucketName`、`backup.elasticsearch.bucketName`、`victoria-metrics-0.backup.bucketName`、`victoria-metrics-1.backup.bucketName`、および`clickhouse.backup.bucketName`を設定することで変更できます。
+
+==== プレフィックスを持つ単一のコンテナを使用する
+
+各データストアのために別々のコンテナを使用する代わりに、異なるプレフィックスを持つ単一のAzure Blobストレージコンテナを使用できます：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+backup:
+  elasticsearch:
+    bucketName: CONTAINER
+    s3Prefix: elasticsearch
+  stackGraph:
+    bucketName: CONTAINER
+    s3Prefix: stackgraph
+  configuration:
+    bucketName: CONTAINER
+    s3Prefix: configuration
+victoria-metrics-0:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-0
+victoria-metrics-1:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: victoria-metrics-1
+clickhouse:
+  backup:
+    bucketName: CONTAINER
+    s3Prefix: clickhouse
+minio:
+  accessKey: AZURE_STORAGE_ACCOUNT_NAME
+  secretKey: AZURE_STORAGE_ACCOUNT_KEY
+  azuregateway:
+    enabled: true
+----
+
+`CONTAINER`をあなたのAzure Blobストレージコンテナ名に置き換えてください。異なるデータストアのバックアップは、設定された`s3Prefix`の値を使用して整理されます。前のセクションの同じ`AZURE_STORAGE_ACCOUNT_NAME`および`AZURE_STORAGE_ACCOUNT_KEY`の値がここにも適用されます。
+
+=== Kubernetesの永続ボリューム
+
+[CAUTION]
+====
+Kubernetesの永続ボリュームをバックアップに使用することには、重大な制限があります：
+
+* 高コスト - クラウドプロバイダーは通常、ブロックストレージ（EBS/Azure Block）を使用しており、大規模なバックアップには高額です。
+* 災害復旧なし - クラスターが削除されるとPVは破壊されます。
+* ポータブルでない - 異なるクラスターにバックアップを復元できません。
+
+**推奨:**本番環境では、AWS S3またはAzure Blob Storageを使用してください。
+====
+
+==== 基本的な設定
+
+クラスタローカルストレージへのバックアップを有効にするには、Helm の `values.yaml` ファイルを使用して {stackstate-product-name} をインストールする際に、次の YAML フラグメントを追加して MinIO を有効にしてください：
+
+[,yaml]
+----
+global:
+  backup:
+    enabled: true
+minio:
+  accessKey: YOUR_ACCESS_KEY
+  secretKey: YOUR_SECRET_KEY
+  persistence:
+    enabled: true
+----
+
+次の値を置き換えてください：
+
+* `YOUR_ACCESS_KEY`と`YOUR_SECRET_KEY` - MinIOシステムを保護するために使用される資格情報です。自動バックアップジョブと復元ジョブはそれらを使用します。MinIOストレージに手動でアクセスするためにも必要です。`YOUR_ACCESS_KEY`は5から20の英数字を含む必要があり、`YOUR_SECRET_KEY`は8から40の英数字を含む必要があります。
+
+== 構成およびトポロジーデータ（StackGraph）
+
+構成およびトポロジーデータ（StackGraph）のバックアップは完全バックアップであり、拡張子`.graph`の単一ファイルに保存されます。各ファイルには完全バックアップが含まれており、必要に応じて移動、コピー、または削除できます。
+
+=== バックアップスケジュール
+
+デフォルトでは、StackGraphのバックアップはサーバー時間の午前3時に毎日作成されます。
+
+バックアップスケジュールは、https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[Kubernetes cronスケジュール構文（kubernetes.io）]で指定されたHelm値`backup.stackGraph.scheduled.schedule`を使用して構成できます。
+
+=== バックアップ保持
+
+デフォルトでは、StackGraphのバックアップは30日間保持されます。StackGraphのバックアップは完全バックアップであるため、多くのストレージが必要になる場合があります。
+
+バックアップ保持のデルタは、GNU date `--date`引数の形式で指定されたHelm値`backup.stackGraph.scheduled.backupRetentionTimeDelta`を使用して構成できます。デフォルトは`30 days ago`です。詳細な例については、https://www.gnu.org/software/coreutils/manual/html_node/Relative-items-in-date-strings.html[日付文字列の相対項目]を参照してください。
+
+=== スケジュールされたバックアップを無効にする
+
+スケジュールされたStackGraphのバックアップを無効にするには、Helm値`backup.stackGraph.scheduled.schedule`を使用して過去の日付にバックアップスケジュールを設定してください。
+
+[,yaml]
+----
+backup:
+  stackGraph:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== 設定
+
+設定（以前の構成）には、ユーザーによって作成されたモニター、カスタムビュー、サービストークンなどの設定とともにインストールされたStackPacksのインスタンスが含まれます。
+
+設定のバックアップは軽量（通常は数メガバイトのみ）で、最小限のダウンタイムで迅速に復元できます。設定のバックアップが復元された後は、新しいデータが以前と同様に処理され、トポロジー、ヘルスステート、アラートが再作成されます。ただし、トポロジーの履歴（ヘルスを含む）は設定のバックアップには保存されません。その場合は、上記で説明したStackGraphバックアップを使用してください。
+
+[NOTE]
+====
+*設定のバックアップは常に有効です*。`global.backup.enabled`の値に関係なく：
+
+* `global.backup.enabled`が`true`のとき：設定のバックアップは、MinIOを介して設定されたストレージバックエンド（AWS S3、Azure Blob Storage、またはKubernetesの永続ボリューム）に保存されます。
+* `global.backup.enabled`が`false`のとき：設定のバックアップは、MinIOをバイパスして専用のKubernetes永続ボリュームに保存されます。
+====
+
+=== バックアップスケジュール
+
+デフォルトでは、設定のバックアップはサーバー時間の午前4時に毎日作成されます。
+
+バックアップスケジュールは、Helm値`backup.configuration.scheduled.schedule`を使用して、https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#_cron_schedule_syntax[Kubernetes cronスケジュール構文（kubernetes.io）]で指定できます。
+
+=== バックアップ保持
+
+バックアップの保持は`global.backup.enabled`の設定に依存します：
+
+**`global.backup.enabled`が`true`のとき**（MinIOを介して保存されたバックアップ）：
+
+* デフォルトでは、設定のバックアップは365日保持されます。
+* 保持を設定するには、`backup.configuration.scheduled.backupRetentionTimeDelta`を使用します。これはGNU dateの`--date`引数の形式で指定されます。デフォルトは`365 days ago`です。
+
+**`global.backup.enabled`が`false`のとき**（専用PVに保存されたバックアップ）：
+
+* デフォルトでは、最後の10個のバックアップファイルが永続ボリュームに保持されます。
+* 最大ファイル数を設定するには`backup.configuration.maxLocalFiles`を使用します（デフォルト：`10`）。
+* PVサイズを設定するには`backup.configuration.scheduled.pvc.size`を使用します（デフォルト：`1Gi`）。
+
+専用PVストレージの例の設定：
+
+[,yaml]
+----
+backup:
+  configuration:
+    maxLocalFiles: 10
+    scheduled:
+      pvc:
+        size: '1Gi'
+----
+
+=== スケジュールされたバックアップを無効にする
+
+スケジュールされた設定のバックアップを無効にするには、バックアップスケジュールを過去の遠い日付に設定し、Helmの値`backup.configuration.scheduled.schedule`を使用します：
+
+[,yaml]
+----
+backup:
+  configuration:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== メトリクス（Victoria Metrics）
+
+Victoria Metricsは、現在のメトリクスデータのスナップショットを取得し、最後のバックアップ以降の変更のみを保存することによってバックアップを作成します（増分アプローチ）。
+
+[WARNING]
+====
+*バックアップのバージョン管理の制限*
+
+Victoria Metricsのバックアップは、新しいバックアップが実行されるたびに前のバックアップを置き換えます。これは、*最新のバックアップ*にのみアクセスでき、複数のバックアップバージョンの履歴にはアクセスできないことを意味します。
+
+**重要**：バックアップが失敗したり、データが破損した場合、以前のバックアップデータが失われる可能性があります。最新の成功したバックアップのみが復元可能です。
+
+**例外**：Victoria Metricsのストレージボリュームが空にされたりリセットされた場合（例：`/storage`ディレクトリが空でマウントされるか削除される）、システムはこれを検出し、自動的に新しいバックアップシリーズを作成します。この場合、古いバックアップ（リセット前）と新しいバックアップの両方が保持され、復元可能です。
+====
+
+[NOTE]
+====
+*高可用性デプロイメント*
+
+高可用性デプロイメントでは、Victoria Metricsのインスタンスを2つ使用します（`victoria-metrics-0`と`victoria-metrics-1`）。バックアップは各インスタンスごとに独立して設定されます。
+====
+
+=== バックアップスケジュール
+
+Victoria Metricsのバックアップは1時間ごとに作成されます：
+
+* `victoria-metrics-0` - 毎時25分
+* `victoria-metrics-1` - 毎時35分
+
+=== スケジュールされたバックアップを無効にする
+
+スケジュールされたVictoria Metricsのバックアップを無効にするには、両方のインスタンスのバックアップスケジュールを過去の遠い日付に設定します：
+
+[,yaml]
+----
+victoria-metrics-0:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+victoria-metrics-1:
+  backup:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== OpenTelemetry（ClickHouse）
+
+ClickHouseは、増分バックアップとフルバックアップの両方を使用します。古いバックアップは、設定された保持ポリシーに基づいて削除されます。
+
+=== バックアップスケジュール
+
+ClickHouseのバックアップは次のように作成されます：
+
+* フルバックアップ - 毎日00:45に実行されます
+* 増分バックアップ - 毎時45分（午前3時から午前12時まで）
+
+=== バックアップ保持
+
+デフォルトでは、ツールは最後の308回のバックアップ（フルおよび増分）を保持し、これは約14日間に相当します。
+
+バックアップの保持期間は、Helmの値`clickhouse.backup.config.keep_remote`を使用して設定できます。
+
+=== スケジュールされたバックアップを無効にする
+
+スケジュールされたClickHouseバックアップを無効にするには、フルバックアップと増分バックアップの両方のスケジュールを過去の日付に設定してください：
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    scheduled:
+      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
+      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----
+
+== テレメトリーデータ（Elasticsearch）
+
+Elasticsearchのスナップショットは増分です。
+
+=== スナップショットスケジュール
+
+Elasticsearchのスナップショットは、サーバー時間の午前3時に毎日作成されます。
+
+=== スナップショットの保持期間
+
+デフォルトでは、Elasticsearchのスナップショットは30日間保持され、最小5スナップショット、最大30スナップショットが保持されます。
+
+保持時間と保持されるスナップショットの数は、以下のHelmの値を使用して設定できます：
+
+* `backup.elasticsearch.scheduled.snapshotRetentionExpireAfter`、https://www.elastic.co/guide/en/elasticsearch/reference/7.6/common-options.html#_time_units[Elasticsearchの時間単位（elastic.co）]で指定されています。
+* `backup.elasticsearch.scheduled.snapshotRetentionMinCount`
+* `backup.elasticsearch.scheduled.snapshotRetentionMaxCount`
+
+=== スケジュールされたスナップショットを無効にする
+
+スケジュールされたElasticsearchのスナップショットを無効にするには、Helmの値`backup.elasticsearch.scheduled.schedule`を使用してスナップショットスケジュールを過去の日付に設定してください：
+
+[,yaml]
+----
+backup:
+  elasticsearch:
+    scheduled:
+      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+----

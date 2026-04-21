@@ -1,0 +1,48 @@
+= Javaアプリケーション
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Java SDKはJVM上でアプリケーションを計測することをサポートしています。その結果、Javaだけでなく、KotlinやScalaなどの他のJVM言語もサポートしています。
+
+== 自動計測
+
+Javaの自動計測は、任意のJava 8以上のアプリケーションにアタッチできるJavaエージェントJARを使用します。それは、いくつかのKotlinおよびScalaライブラリを含む、多くのhttps://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md[人気のあるライブラリとフレームワーク]からテレメトリをキャプチャするために、バイトコードを動的に注入します。アプリやサービスの"`edges`"でテレメトリデータをキャプチャするために使用できます。例えば、受信リクエスト、送信HTTPコール、データベースコールなどです。
+
+自動計測はアプリケーションの変更を必要としません。設定するには、次の手順に従ってください：
+
+. opentelemetry-java-instrumentationリポジトリのhttps://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar[Releases]からhttps://github.com/open-telemetry/opentelemetry-java-instrumentation/releases[opentelemetry-javaagent.jar]をダウンロードし、アプリケーションのDockerイメージにJARファイルを含めます。JARファイルにはエージェントと計測ライブラリが含まれています。
+. アプリケーションを起動するコマンドを更新してJavaエージェントをロードするようにします。Dockerイメージのエントリポイントやコマンドを更新するか、アプリケーションのKubernetesマニフェストの`command`を更新します。`-javaagent:/path/to/opentelemetry-javaagent.jar`を追加してください：
++
+[,bash]
+----
+java -javaagent:/path/to/opentelemetry-javaagent.jar -jar myapp.jar
+----
+
+. 追加の環境変数xref:/setup/otel/languages/sdk-exporter-config.adoc[を使用してサービス名とエクスポータエンドポイント]を設定し、アプリケーションをデプロイします。
+. xref:/setup/otel/languages/verify.adoc[Verify] SUSE Observabilityがトレースやメトリクスを受信していることを確認してください。
+
+詳細については、https://opentelemetry.io/docs/languages/java/automatic/[Open Telemetryのドキュメント]を参照してください。
+
+== 手動計測
+
+手動計測は、自動計測でサポートされていないコードの部分からメトリクス、トレース、またはログが必要な場合に使用できます。例えば、サポートされていないライブラリ、社内コード、またはビジネスレベルのメトリクスです。
+
+そのデータをキャプチャするには、アプリケーションを変更する必要があります。
+
+. Open Telemetry SDKを依存関係として含めてください。
+. アプリケーションにコードを追加して、必要に応じてメトリクス、スパン、またはログをキャプチャします。
+
+これに関する詳細なドキュメントは、https://opentelemetry.io/docs/languages/java/instrumentation/[Open Telemetry Java SDK ドキュメントページ]にあります。
+
+OTLP エクスポーター（これがデフォルトです）と https://opentelemetry.io/docs/languages/java/instrumentation/#_autoconfiguration[自動構成] を使用することを確認してください。アプリケーションをデプロイする際、サービス名とエクスポーターは xref:/setup/otel/languages/sdk-exporter-config.adoc[環境変数を介して構成されます]。
+
+== SUSE Observability におけるメトリクス
+
+ifdef::ss-ff-stackpacks2_enabled[]
+例えば、ガーベジコレクターメトリクスなど、一部の Java メトリクスについて、SUSE Observability は関連コンポーネントに関するチャートを定義しています。Kubernetes では、チャートはポッドで利用可能です。xref:/setup/custom-integrations/metric-bindings/index.adoc[より多くのメトリクスのためにチャートを追加することが可能です]。これは、自動計測からのメトリクスだけでなく、手動計測からのアプリケーション固有のメトリクスにも適用されます。
+
+ifndef::ss-ff-stackpacks2_enabled[]
+例えば、ガーベジコレクターメトリクスなど、一部の Java メトリクスについて、SUSE Observability は関連コンポーネントに関するチャートを定義しています。Kubernetes では、チャートはポッドで利用可能です。xref:/use/metrics/k8s-add-charts.adoc[より多くのメトリクスのためにチャートを追加することが可能です]。これは、自動計測からのメトリクスだけでなく、手動計測からのアプリケーション固有のメトリクスにも適用されます。
+endif::[]

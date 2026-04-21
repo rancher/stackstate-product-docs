@@ -1,0 +1,51 @@
+= Monitores de Umbral Dinámico
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+Para métricas que varían significativamente con el tiempo y difieren de un servicio a otro, un Monitor de Umbral Dinámico proporciona una detección de anomalías simple y eficaz.  Utiliza datos de hace 1, 2 o 3 semanas además del pasado reciente como contexto para comparar los datos actuales.
+
+Los datos de la "ventana de verificación" se comparan con los proporcionados por el contexto histórico utilizando la prueba de Anderson-Darling.  Esto impone muy pocas suposiciones sobre la distribución de los datos.  La prueba es particularmente sensible a los valores atípicos en los extremos superior e inferior de la distribución.  La métrica puede ser suave, presentar picos o tener un par de "niveles". Dado que los valores de datos se comparan directamente, sin ningún ajuste de modelo, el monitor de umbral dinámico es muy robusto.
+
+Para métricas que varían suavemente con el tiempo (por ejemplo, en una escala de cinco minutos), el número efectivo de puntos de datos es menor que el número bruto.  El DT compensa esto, por lo que el mismo Monitor de Umbral Dinámico puede utilizarse para una amplia gama de métricas sin necesidad de ajustar sus parámetros.
+
+Hay un par de parámetros que se pueden establecer para la función del monitor:
+
+* `falsePositiveRate`: `!!float 1e-8` - la sensibilidad del monitor al comportamiento desviado.  Un valor más bajo suprime más (falsos) positivos, pero también puede llevar a falsos negativos (anomalías no detectadas).
+* `checkWindowMinutes`: `10` minutos - la ventana de verificación necesita estar equilibrada entre alertas rápidas (valores pequeños) y anomalías correctamente identificadas (valores altos).  Un puñado de puntos de datos funciona bien en la práctica.
+* `historicWindowMinutes`: `120` (2 horas) - enmarcado alrededor del tiempo actual, pero luego una o más semanas atrás - así que desde 1 hora antes del tiempo actual hasta 1 hora después.  También se utilizan las 2 horas antes de la ventana de verificación.  El monitor de umbral dinámico compara la distribución de estos datos históricos con los puntos de datos en la ventana de verificación.
+* `historySizeWeeks`: `2` - el número de semanas de las que se toman los datos para el contexto histórico.  Puede ser `1`, `2` o `3`.
+* `removeTrend`: para métricas que tienen un comportamiento de tendencia (por ejemplo, el número de solicitudes), de modo que el valor absoluto difiere de una semana a otra, esta tendencia (el valor medio) puede ser tenida en cuenta.
+* `includePreviousDay`: típicamente `false` - para métricas que no tienen un patrón semanal sino solo diario, esto permite el uso de datos más recientes.
+
+== Ejemplo de Monitor de Umbral Dinámico
+
+Un Monitor implementado utilizando la función de umbral dinámico se ve así:
+
+----
+  - _type: "Monitor"
+    name: "<name of the monitor>"
+    identifier: "urn:custom:monitor:<identifier for the monitor>"
+    status: "DISABLED"
+    description: "<description>"
+    function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+    arguments:
+      telemetryQuery:
+        query: "<metric to bind to component>"
+        unit: s
+        aliasTemplate: "<name for the metric>"
+      topologyQuery: <topology query for the components to bind to>
+      falsePositiveRate: <floating point number, e.g. !!float 1e-8>
+      checkWindowMinutes: <integer, e.g. 10>
+      historicWindowMinutes: <integer, e.g. 120>
+      historySizeWeeks: <integer: 1, 2 or 3>
+      includePreviousDay: <boolean>
+      removeTrend: <boolean>
+    intervalSeconds: 60
+    remediationHint: "<how to remediate deviating states>"
+----
+
+El monitor puede implementarse utilizando la guía en xref:/use/alerting/k8s-add-monitors-cli.adoc[Añadir un monitor de umbral a los componentes utilizando la CLI]

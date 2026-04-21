@@ -1,0 +1,197 @@
+= SUSE Observability 查询语言 (STQL)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+本页面描述了如何使用内置的 SUSE Observability 查询语言 (STQL) 来编写高级拓扑组件过滤器。STQL 查询用于在 SUSE Observability 中编写 xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[高级拓扑过滤器]。
+
+STQL 查询由 <<_component_filters,组件过滤器>> 和 <<_functions,函数>> 组成。查询输出是从完整拓扑中过滤出的一个组件或一组组件。
+
+== 组件过滤器
+
+组件过滤器在 STQL 中有两种使用方式：
+
+* 定义要包含在查询输出中的组件集。
+* 指定由内置 STQL 函数处理的组件集。
+
+=== 过滤器
+
+下面描述的过滤器可以使用可用的 <<_operators,运算符>> 组合，以实现复杂的组件选择。
+
+|===
+| 过滤器 | 默认值 | 说明
+
+| `healthstate`
+| "所有"
+| 具有指定健康状态的组件。
+
+| `label`
+| "所有"
+| 具有指定标签的组件。
+
+| `name`
+| "所有"
+| 具有指定名称的组件。
+
+| `type`
+| "所有"
+| 具有指定类型的组件。
+
+| `identifier`
+| "所有"
+| 具有指定 URN 标识符的组件。标识符过滤器仅在使用 `identifier IN (...)` 指定并与其他过滤器通过 `OR` 运算符组合时与基本过滤兼容。当集合过滤器与基本过滤兼容时，查询的组件标识符数量将在 xref:/use/views/k8s-filters.adoc#_other_filters[*其他过滤器* 框] 中报告。
+
+| `layer`
+| "所有"
+| 位于指定层中的组件。
+
+| `domain`
+| "所有"
+| 指定域中的组件。
+
+| `environment`
+| "所有"
+| 在指定环境中的组件。
+|===
+
+=== 操作员
+
+下面描述的运算符可用于 STQL 查询。请注意，布尔运算符将按照标准顺序执行：NOT、OR、AND。
+
+|===
+| 运算符 | 说明 | 示例
+
+| =
+| 相等匹配
+| `name = "cert-manager"`
+
+| !=
+| 不等匹配
+| `name != "coredns"`
+
+| IN
+| 值在子集内
+| `name in ("cert-manager", "cluster_autoscaler")`
+
+| 非
+| 否定
+| `name NOT in ("cert-manager", "cluster_autoscaler")`
+
+| AND 和 OR
+| 基于多个条件或子查询进行过滤
+| `name = "cert-manager" OR type = "deployment"`
+
+| ()
+| 使用括号对结果进行分组
+| `(name = … AND type = …) OR (…)`
+|===
+
+例如：
+
+[,yaml]
+----
+# Return all components named cert-manager or coredns regardless of type:
+  name = "cert-manager" OR name = "coredns"
+
+# Return only deployments named coredns and configmaps named kube-root-ca.crt:
+  (name = "coredns" AND type = "deployment") OR (name = "kube-root-ca.crt" AND type = "configmap")
+----
+
+=== 通配符
+
+您可以在组件过滤器中使用 `*` 作为完整通配符。无法使用通配符字符过滤部分匹配。
+
+=== 示例
+
+[,text]
+----
+# Select all components
+name = "*"
+
+# Select all components with name "etcd-manager"
+name = "etcd-manager"
+
+# Select all components in the "Containers" layer:
+layer = "Containers"
+
+# Select all components named either "etcd-manager" or "coredns" that don't have a label "cluster-name:prod.stackstate.io"
+name IN ("etcd-manager","coredns") NOT label = "cluster-name:prod.stackstate.io"
+
+# Select all components named "coredns" that don't have a label "bck" or "test"
+name = "cert-manager" NOT label in ("image_name:cert-manager/cert-manager-controller:testA", "image_name:cert-manager/cert-manager-controller:testB")
+----
+
+== 函数
+
+=== withNeighborsOf
+
+函数 withNeighborsOf 扩展了 STQL 查询输出，添加了指定方向上的连接组件。包含的拓扑级别数量最多可调整至 15。
+
+`withNeighborsOf(components=(), levels=, direction=)`
+
+为了与基本过滤兼容，该函数只能与其他过滤器使用 `OR` 运算符组合。当高级过滤器包含与基本过滤兼容的函数 `withNeighborsOf` 时，查询邻居的组件数量显示在 xref:/use/views/k8s-filters.adoc#_other_filters[*其他过滤器* 框] 中。
+
+==== 参数 / 字段
+
+|===
+| 参数 | 默认值 | 允许的值 | 说明
+
+| `components`
+| "所有"
+| 组件过滤器
+| 将返回邻居的组件，参见<<_component_filters,组件过滤器>>。
+
+| `levels`
+| 1 
+| "所有", [1:14]
+| 要包含在输出中的级别数量。使用"所有"来显示所有可用级别（最多15个）
+
+| `direction`
+| "两者"
+| "向上", "向下", "两者"
+| *向上*：仅添加依赖于指定组件的组件 *向下*：仅添加指定组件的依赖项 *两者*：将添加依赖于指定组件的组件及其依赖项。
+|===
+
+==== 示例
+
+下面的示例将返回在应用程序层中健康状态为`DEVIATING`或`CRITICAL`的所有组件。名称为"appA"或"appB"的组件及其邻居也将被包括在内。
+
+[,text]
+----
+layer = "Containers"
+  AND (healthstate = "CRITICAL" OR healthstate = "DEVIATING")
+  OR withNeighborsOf(components = (name in ("cert-manager","coredns")))
+----
+
+== 基本与高级过滤器的兼容性
+
+=== 从基本到高级过滤
+
+您可以通过在*查看过滤器*面板中选择*高级*来从基本过滤切换到高级过滤。
+
+始终可以从基本过滤切换到高级过滤。所选的基本过滤器将直接转换为STQL查询。
+
+=== 从高级到基本过滤
+
+您可以通过在*查看过滤器*面板中选择*基本*来从高级过滤切换到基本过滤。
+
+并不总是可以从高级过滤切换到基本过滤。大多数简单查询可以转换为基本过滤器，但某些高级查询与基本过滤器不兼容。
+
+* 基本过滤器不能包含不等式。
+* 基本过滤器不使用 `=`，它们总是使用 `IN` 操作符格式化。例如 `name IN ("cert-manager”)` 而不是 `name = "cert-manager”`。
+* 基本过滤器以特定方式使用 AND/OR：
+ ** 每个基本过滤器框中的所有项目都通过 *OR* 连接：`layer IN ("Containers", "Services", "Storage")`
+ ** 不同的基本过滤器框通过 *AND* 连接在一起：`layer IN ("Containers") AND domain IN ("cluster.test.stackstate.io”)`
+ ** *包含组件* 基本过滤器框 (`name`) 是例外 - 这个框通过 OR 连接到其他过滤器框：`layer IN ("Containers") AND domain IN ("cluster.test.stackstate.io") OR name IN ("cert-manager”)`
+ ** 为了与基本过滤兼容，*withNeighborsOf* 函数和 *identifier* 过滤器必须与其他过滤器通过 *OR* 连接：`layer in ("Containers") OR identifier IN ("urn:kubernetes:/cluster.test.stackstate.io:kube-system:pod/cert-manager-7749f44bb4-vspjj:container/cert-manager")`
+
+如果您尝试从高级过滤器切换到基本过滤器，而查询不兼容，SUSE Observability 将在删除不兼容的过滤器之前请求确认。为了保留过滤器，您可以选择继续使用高级过滤。
+
+== 另请参见
+
+* xref:/use/views/k8s-filters.adoc#_basic_topology_filters[基本拓扑过滤器]
+* xref:/use/views/k8s-filters.adoc#_topology_filtering_limits[拓扑过滤器限制]
+* xref:/use/views/k8s-filters.adoc[如何在 SUSE Observability UI 中过滤拓扑]

@@ -1,0 +1,89 @@
+= Slack通知のためのSUSE Observabilityの設定
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: 自己ホスト型SUSE Observability
+
+[CAUTION]
+====
+SUSE ObservabilityのSaaSユーザーは、追加の設定なしでSlack通知を使用できます。このガイドは、Slack通知チャネルを使用する予定の自己ホスト型SUSE Observabilityインストールにのみ適用されます。
+====
+
+
+SUSE ObservabilityでSlack通知チャネルを使用するには、まずSlackとSUSE Observabilityの両方を設定するために、以下の手順に従う必要があります。
+
+. ワークスペース内のSUSE Observability用のSlackアプリを作成する
+. そのSlackアプリの資格情報でSUSE Observabilityを設定します。
+
+== SUSE Observability用のSlackアプリを作成する
+
+[NOTE]
+====
+ワークスペースのSlackアプリを管理する権限が必要です。
+====
+
+
+https://api.slack.com/apps[Slack APIページ]に移動し、*新しいアプリを作成*ボタンをクリックします。
+
+* 開いたダイアログで「アプリマニフェストから」を選択します。
+* 通知を送信したいワークスペースを選択し、次へ進みます。
+* 以下のSlackアプリマニフェストの内容をコピーし、テキストエリアに貼り付けます。`redirect_urls`の値をあなたのSUSE ObservabilityインスタンスのURLに置き換えることを確認してください。次へ進みます。
+* URLが正しいこと、およびリストされている「ボットスコープ」が`channels:join, channels:read, chat:write, groups:read`であることを確認し、作成ボタンをクリックしてアプリを作成します。
+* アプリの「基本情報」ページでは、アイコン（表示情報セクション）を変更でき、例えばSUSE Observabilityのロゴimage:logo/stackstate-logo.png[SUSE Observabilityロゴ,25,25]に置き換えることができます。
+
+.SUSE Observability用のSlackアプリマニフェスト
+[,json]
+----
+{
+    "display_information": {
+        "name": "SUSE Observability",
+        "description": "Receive notification messages from SUSE Observability",
+        "background_color": "#000000"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "SUSE Observability",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://the.url.of.your.stackstate.installation"
+        ],
+        "scopes": {
+            "bot": [
+                "channels:join",
+                "channels:read",
+                "chat:write",
+                "groups:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+----
+
+
+== そのSlackアプリの資格情報でSUSE Observabilityを設定します。
+
+作成したSlackアプリの資格情報でSUSE Observabilityを設定する必要があります。これを行うには、SUSE Observability インストールの `values.yaml` ファイルに次の内容を追加します。
+
+[,yaml]
+----
+stackstate:
+  components:
+    all:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientId: "<app client id>"
+        secret:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientSecret: "<app client secret>"
+----
+
+`<app client id>`および`<app client secret>`の値は、作成したSlackアプリの「基本情報」ページの「アプリの資格情報」セクションにあります。これらの設定変更を適用するには、SUSE Observability のインストール時に使用したのと同じ Helm コマンドを実行します (xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Kubernetes] または xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift])。
+
+これで、Slack 通知チャネルを使用する準備が整いました！

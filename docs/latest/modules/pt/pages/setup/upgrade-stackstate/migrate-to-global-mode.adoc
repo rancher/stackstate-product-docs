@@ -1,0 +1,588 @@
+= Migre para o modo de configuração global
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:description: {stackstate-product-name} Auto-hospedado
+:page-toclevels: 3
+
+== Visão Geral
+
+Este guia explica como migrar da instalação legada em duas etapas usando o gráfico `suse-observability-values` para a instalação simplificada em um único gráfico usando a configuração `global.suseObservability`.
+
+[NOTE]
+====
+O método de configuração `global.suseObservability` está disponível a partir da versão `2.8.0` e agora é a abordagem de instalação recomendada. O método legado do gráfico `suse-observability-values` está descontinuado, mas continuará a funcionar para instalações existentes.
+====
+
+=== Instalação legada (Descontinuada)
+
+O antigo método de instalação exigia duas etapas:
+
+. Gere arquivos de valores usando o gráfico `suse-observability-values`
+. Instale o gráfico `suse-observability` com os valores gerados
+
+[,text]
+----
+# Step 1: Generate values
+helm template suse-observability-values suse-observability/suse-observability-values \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="150-ha" \
+  --set adminPassword="your-password" \
+  --set pullSecret.username="registry-user" \
+  --set pullSecret.password="registry-pass" \
+  > generated-values.yaml
+
+# Step 2: Install with generated values
+helm install suse-observability suse-observability/suse-observability \
+  -f generated-values.yaml \
+  -n suse-observability
+----
+
+=== Nova instalação (Recomendada)
+
+O novo método usa um único arquivo de valores com a configuração `global.suseObservability`:
+
+[,text]
+----
+helm install suse-observability suse-observability/suse-observability \
+  -f values.yaml \
+  -n suse-observability
+----
+
+== Converter antes da instalação
+
+Se você preparou parâmetros para o gráfico legado `suse-observability-values`, mas ainda não instalou, pode converter diretamente para o novo método sem criar arquivos de valores intermediários.
+
+=== Conversão direta de parâmetros
+
+Converta seu comando `helm template` para um comando `helm upgrade --install` mapeando os parâmetros:
+
+[cols="1,1"]
+|===
+| Parâmetro Antigo | Parâmetro Novo
+
+| `--set license="..."`
+| `--set global.suseObservability.license="..."`
+
+| `--set baseUrl="..."`
+| `--set global.suseObservability.baseUrl="..."`
+
+| `--set sizing.profile="..."`
+| `--set global.suseObservability.sizing.profile="..."`
+
+| `--set receiverApiKey="..."`
+| `--set global.suseObservability.receiverApiKey="..."`
+
+| `--set adminPassword="..."`
+| `--set global.suseObservability.adminPassword="..."`
+
+| `--set imageRegistry="..."`
+| `--set global.imageRegistry="..."`
+
+| `--set pullSecret.username="..."`
+| `--set global.suseObservability.pullSecret.username="..."`
+
+| `--set pullSecret.password="..."`
+| `--set global.suseObservability.pullSecret.password="..."`
+|===
+
+=== Exemplo: Antes e depois
+
+[NOTE]
+====
+Antes de executar comandos helm, certifique-se de ter a versão mais recente do gráfico:
+
+[,bash]
+----
+helm repo update
+----
+====
+
+.Comando legado (não use)
+[,bash]
+----
+export VALUES_DIR=.
+helm template \
+  --set license="YOUR-LICENSE-KEY" \
+  --set baseUrl="https://observability.example.com" \
+  --set sizing.profile="10-nonha" \
+  --set receiverApiKey="YOUR-API-KEY" \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+
+# Then: helm install with generated files...
+----
+
+.Novo comando (recomendado)
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set global.suseObservability.license="YOUR-LICENSE-KEY" \
+  --set global.suseObservability.baseUrl="https://observability.example.com" \
+  --set global.suseObservability.sizing.profile="10-nonha" \
+  --set global.suseObservability.receiverApiKey="YOUR-API-KEY" \
+  --set global.suseObservability.adminPassword='your-password' \
+  suse-observability suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* O `adminPassword` deve ser um hash bcrypt no novo método. Veja <<bcrypt-hash>> para saber como gerar um.
+* Para ambientes isolados ou registros personalizados, veja xref:/k8s-suse-rancher-prime-air-gapped.adoc[Instalando {stackstate-product-name} em Modo Isolado] para configuração adicional, incluindo as configurações `imageRegistry` e `pullSecret`.
+====
+
+=== Usando um arquivo de valores em vez disso
+
+Se você preferir usar um arquivo de valores, crie `values.yaml` com a configuração mostrada em <<_step_3_create_new_values_file>>, certifique-se de ter o gráfico mais recente com `helm repo update`, e então execute:
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values values.yaml \
+  suse-observability suse-observability/suse-observability
+----
+
+== Antes de migrar
+
+Ao executar uma migração do método de instalação legado, esteja ciente do seguinte:
+
+[CAUTION]
+====
+Este guia de migração é para usuários que estão atualmente usando o método de gráfico `suse-observability-values`. Se você estiver atualizando do StackState 6.0, siga o xref:/setup/upgrade-stackstate/migrate-from-6.adoc[guia de migração do StackState] em vez disso.
+====
+
+[NOTE]
+====
+* A migração é realizada usando um comando padrão de fazer upgrade do Helm
+* Seus dados e configurações existentes serão preservados
+* A migração pode ser realizada durante uma janela de manutenção
+* O rollback é possível usando os procedimentos padrão de rollback do Helm
+====
+
+== Etapas de migração
+
+=== Etapa 1: Faça backup da configuração atual
+
+Antes de iniciar a migração, salve seus valores do Helm existentes e quaisquer personalizações:
+
+[,text]
+----
+# Save current Helm values
+helm get values suse-observability -n suse-observability > backup-values.yaml
+
+# Save your original suse-observability-values input (if available)
+# This is typically your values file used with helm template
+
+# Backup important resources
+kubectl get secrets -n suse-observability -o yaml > backup-secrets.yaml
+----
+
+=== Etapa 2: Identifique sua configuração atual
+
+Revise sua configuração existente para identificar as seguintes configurações:
+
+* *Perfil de dimensionamento*: Verifique `sizing.profile` na sua entrada suse-observability-values
+* *Chave de licença*: Sua {stackstate-product-name} licença
+* *URL base*: A URL onde {stackstate-product-name} está acessível
+* *Senha do Admin*: A senha do admin (você também pode usar o hash bcrypt da senha, o valor para isso é `adminPasswordBcrypt`)
+* *Pull secret credentials*: Credenciais do pull secret Nome de usuário e senha do registro (se utilizado)
+* *Configurações de afinidade personalizadas*: Qualquer personalização de afinidade de nó ou anti-afinidade de pod
+
+Você pode extrair alguns desses da sua instalação atual:
+
+[,text]
+----
+# Check current values
+helm get values suse-observability -n suse-observability
+
+# The sizing profile is visible in resource configurations
+# Look for patterns like replica counts, resource limits, etc.
+----
+
+=== Entendendo valores auto-gerados vs personalizados
+
+Quando você executar `helm get values`, pode ver centenas de linhas de configuração. No entanto, a maioria delas é *auto-gerada* pelo perfil de dimensionamento e não *precisa* ser preservada manualmente no seu arquivo de valores de migração.
+
+==== O que o perfil de dimensionamento fornece automaticamente
+
+Quando você define `global.suseObservability.sizing.profile`, o gráfico configura automaticamente:
+
+* Requisitos e limites de recursos para todos os componentes (Elasticsearch, Kafka, ClickHouse, servidor, receptor, etc.)
+* Contagem de réplicas para serviços stateful
+* Tamanhos de armazenamento para volumes persistentes
+* Modo de implantação do HBase (Mono para não-HA, Distribuído para HA)
+* Configuração de divisão entre servidor e receptor
+* Configurações de HA do Victoria Metrics
+* Variáveis de ambiente (`extraEnv`) incluindo configurações `CONFIG_FORCE_*` para ajuste de desempenho
+
+==== O que você precisa preservar
+
+Preserve apenas valores que são *verdadeiramente personalizados* - configurações que você adicionou ou modificou além do que o perfil de dimensionamento fornece:
+
+[cols="1,1"]
+|===
+| Preservar (Personalizado) | Não preservar (Gerado automaticamente)
+
+| Configurações do kernel (licença, baseUrl, adminPassword, receiverApiKey)
+| Limites e solicitações de recursos
+
+| Configuração de Ingress (hosts, TLS, anotações)
+| Contagem de réplicas
+
+| Variáveis de ambiente personalizadas que você adicionou
+| Tamanhos de armazenamento
+
+| Configurações de autenticação (LDAP, OIDC)
+| Variáveis de ambiente `CONFIG_FORCE_*`
+
+| Personalizado `allowedOrigins`
+| Fatores de replicação do Kafka/Zookeeper
+
+| Ingress personalizado do coletor OpenTelemetry
+| Modo de implantação do HBase
+|===
+
+==== Exemplo: Arquivo de valores de migração mínima
+
+Seu arquivo de valores de migração deve ser *muito menor* do que a saída de `helm get values`:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    license: "YOUR-LICENSE"
+    baseUrl: "https://your-url.example.com"
+    sizing:
+      profile: "10-nonha"  # This handles all resource configuration!
+    adminPassword: "your-password"
+    receiverApiKey: "your-api-key"
+
+# Only include truly custom configurations below
+ingress:
+  enabled: true
+  ingressClassName: your-ingress-class
+  annotations:
+    # your custom annotations
+  hosts:
+  - host: your-url.example.com
+  tls:
+  - hosts:
+    - your-url.example.com
+    secretName: your-tls-secret
+----
+
+[TIP]
+====
+Se você não tiver certeza se um valor é personalizado ou gerado automaticamente, compare-o com os padrões do perfil de dimensionamento. Valores como `elasticsearch.resources`, `kafka.resources`, `stackstate.components.server.resources` e `CONFIG_FORCE_*` variáveis de ambiente são todos gerados pelo perfil e podem ser omitidos com segurança.
+====
+
+=== Etapa 3: Criar novo arquivo de valores
+
+Crie um novo `values.yaml` com a estrutura `global.suseObservability`:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    # Required: Your license key
+    license: "YOUR-LICENSE-KEY"
+
+    # Required: Base URL for {stackstate-product-name}
+    baseUrl: "https://observability.example.com"
+
+    # Required: Sizing profile
+    # Available: trial, 10-nonha, 20-nonha, 50-nonha, 100-nonha,
+    #            150-ha, 250-ha, 500-ha, 4000-ha
+    sizing:
+      profile: "150-ha"
+
+    adminPassword: "your-password"
+    # Instead of adminPassword you can provide a bcrypt hashed password
+    # Generate with: htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+    # adminPasswordBcrypt: "$2a$10$..."
+
+    # Optional: Receiver API key (auto-generated if not provided)
+    receiverApiKey: "your-receiver-api-key"
+
+    # Optional: Affinity configuration
+    # These settings apply to all infrastructure components (Elasticsearch,
+    # Kafka, ClickHouse, etc.) automatically - no need to configure per-component
+    affinity:
+      # Node affinity for all components
+      nodeAffinity: null
+
+      # Pod anti-affinity for HA profiles (infrastructure components)
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: true
+        topologyKey: "kubernetes.io/hostname"
+
+  # For air-gapped or custom registry configurations, see:
+  # xref:/k8s-suse-rancher-prime-air-gapped.adoc[Air-Gapped Installation Guide]
+----
+
+=== Etapa 4: Referência de mapeamento de configuração
+
+Use esta tabela para mapear sua configuração antiga para o novo formato:
+
+[cols="1,1"]
+|===
+| Configuração Antiga (suse-observability-values) | Nova Configuração (global.suseObservability)
+
+| `license`
+| `global.suseObservability.license`
+
+| `baseUrl`
+| `global.suseObservability.baseUrl`
+
+| `sizing.profile`
+| `global.suseObservability.sizing.profile`
+
+| `adminPassword`
+| `global.suseObservability.adminPassword`
+
+| `receiverApiKey`
+| `global.suseObservability.receiverApiKey`
+
+| `affinity.nodeAffinity`
+| `global.suseObservability.affinity.nodeAffinity`
+
+| `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+| `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+
+| `affinity.podAntiAffinity.topologyKey`
+| `global.suseObservability.affinity.podAntiAffinity.topologyKey`
+
+| `rancherUrl`
+| `stackstate.allowedOrigins` (configuração manual)
+
+| `imageRegistry` (apenas para ambientes isolados)
+| `global.imageRegistry`
+
+| `pullSecret.username` (apenas para ambientes isolados)
+| `global.suseObservability.pullSecret.username`
+
+| `pullSecret.password` (apenas para ambientes isolados)
+| `global.suseObservability.pullSecret.password`
+|===
+
+[NOTE]
+====
+Para ambientes isolados ou registros personalizados que exigem configuração `imageRegistry` e `pullSecret`, veja xref:/k8s-suse-rancher-prime-air-gapped.adoc[Instalando {stackstate-product-name} em Modo Isolado].
+====
+
+=== Etapa 5: Lidar com substituições personalizadas
+
+Se você tiver substituições personalizadas em seu arquivo de valores gerados, ainda poderá usá-las. O novo modo global fornece padrões sensatos que podem ser substituídos para cada componente:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+    license: "YOUR-LICENSE-KEY"
+    baseUrl: "https://observability.example.com"
+    adminPassword: "your-password"
+    # Global affinity - applied to all components by default
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-west-2a
+
+# Custom per-component overrides still work - they take precedence over global defaults
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 16Gi  # Override default from sizing profile
+        limits:
+          memory: 20Gi
+
+elasticsearch:
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 500Gi  # Override default storage size
+  # Override affinity for Elasticsearch specifically
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-type
+            operator: In
+            values:
+            - storage-optimized
+----
+
+=== Etapa 6: Realize o fazer upgrade
+
+Primeiro, certifique-se de ter a versão mais recente do gráfico:
+
+[,text]
+----
+helm repo update
+----
+
+Em seguida, execute o fazer upgrade:
+
+[,text]
+----
+# Dry-run first to see what will change
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml \
+  --dry-run
+
+# If everything looks good, perform the actual upgrade
+helm upgrade suse-observability suse-observability/suse-observability \
+  -n suse-observability \
+  -f values.yaml
+----
+
+=== Etapa 7: Verifique a atualização
+
+[,text]
+----
+# Check all pods are running
+kubectl get pods -n suse-observability
+
+# Check for any errors in events
+kubectl get events -n suse-observability --sort-by='.lastTimestamp' | tail -20
+
+# Verify the Helm release
+helm status suse-observability -n suse-observability
+
+# Check the applied values
+helm get values suse-observability -n suse-observability
+----
+
+[[bcrypt-hash]]
+== Senha Admin
+
+Para o método legado, o `adminPassword` foi fornecido como texto simples para o gráfico suse-observability-values, que o converteu em um hash bcrypt. No novo método, você pode fornecer o texto simples `adminPassword` para o gráfico suse-observability, ou fornecer o hash bcrypt diretamente para o gráfico suse-observability usando `adminPasswordBcrypt`.
+
+Se você precisar gerar um novo hash bcrypt:
+
+[,bash]
+----
+htpasswd -bnBC 10 "" "your-password" | tr -d ':\n'
+----
+
+== Solução de problemas
+
+=== Pods presos no estado Pending
+
+Isso geralmente indica um problema de agendamento com regras de anti-afinidade. Para clusters com nós limitados, use anti-afinidade suave:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: false  # Use soft anti-affinity
+----
+
+=== Recursos diferem da instalação anterior
+
+Os perfis de dimensionamento podem ter recomendações de recursos atualizadas. Para preservar suas configurações anteriores, adicione substituições explícitas:
+
+[,yaml]
+----
+global:
+  suseObservability:
+    sizing:
+      profile: "150-ha"
+
+# Override with your previous resource values
+stackstate:
+  components:
+    api:
+      resources:
+        requests:
+          memory: 8Gi  # Your previous value
+----
+
+=== Conflitos de estilo de configuração
+
+Não misture estilos de configuração antigos e novos. Use um dos seguintes:
+
+* `global.suseObservability.*` (novo estilo), OU
+* `stackstate.license.key`, `stackstate.baseUrl`, etc. (estilo antigo)
+
+[,text]
+----
+# Check for conflicting values
+helm get values suse-observability -n suse-observability | grep -E "license|baseUrl"
+----
+
+=== Rollback, se necessário
+
+[,text]
+----
+# List release history
+helm history suse-observability -n suse-observability
+
+# Rollback to previous revision
+helm rollback suse-observability <revision-number> -n suse-observability
+----
+
+== Principais diferenças
+
+[cols="1,1,1"]
+|===
+| Aspecto | Legado (suse-observability-values) | Novo (global.suseObservability)
+
+| Etapas de instalação
+| 2 (modelo + instalação)
+| 1 (instalação)
+
+| Gerenciamento de arquivo de valores
+| Gerado, deve ser armazenado
+| Fonte única de verdade
+
+| Atualizações de perfil
+| Regeneração manual necessária
+| Automático com fazer upgrade do gráfico
+
+| Segredo de pull
+| Subgráfico separado
+| Incorporado, auto-configurado
+
+| Victoria Metrics HA
+| Manual `enabled: true/false`
+| Auto-configurado por perfil
+
+| Configuração de afinidade
+| Gerado por componente (configurações separadas para cada serviço)
+| Configurações globais centralizadas (ainda podem ser substituídas por componente, se necessário)
+|===
+
+[NOTE]
+====
+A configuração global de afinidade fornece configurações padrão para todos os componentes de infraestrutura. Você ainda pode substituir a afinidade para componentes específicos (como Elasticsearch ou Kafka) quando necessário, definindo valores de afinidade em nível de componente. As configurações em nível de componente têm precedência sobre os padrões globais.
+====
+
+== Limpeza
+
+Após a migração bem-sucedida, você pode:
+
+. Remover os arquivos de valores gerados (eles não são mais necessários)
+. Atualizar seus scripts de implantação para usar a nova instalação em um único passo
+. Remover quaisquer referências ao gráfico `suse-observability-values` em seus pipelines de CI/CD
+
+== Consulte também
+
+* xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Guia de instalação do Kubernetes]
+* xref:/setup/upgrade-stackstate/steps-to-upgrade.adoc[Passos para fazer upgrade {stackstate-product-name}]
+* xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[Instruções de atualização específicas da versão]

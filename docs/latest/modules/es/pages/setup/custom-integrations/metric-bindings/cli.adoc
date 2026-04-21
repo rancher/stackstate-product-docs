@@ -1,0 +1,120 @@
+= Usando la CLI para enlaces de métricas
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-14
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+Puedes usar la {stackstate-product-name} CLI para inspeccionar y modificar los enlaces de métricas.  Estos se manejan como otras configuraciones utilizando el comando `sts settings`.
+
+== Inspeccionando Enlaces de Métricas
+
+=== Listando Enlaces de Métricas
+
+El comando `sts settings` puede listar todos los enlaces de métricas:
+
+[,bash]
+----
+sts settings list --type MetricBinding
+TYPE          | ID              | IDENTIFIER         | NAME               | OWNED BY           | LAST UPDATED
+MetricBinding | 190567588459765 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:pod: |                    |                    |
+              |                 | dotnet-gc-allocate |                    |                    |
+              |                 | d                  |                    |                    |
+MetricBinding | 247972504900226 | urn:stackpack:kube | .NET GC Allocated  | urn:stackpack:kube | Sun Jan 11 01:28:2
+              |                 | rnetes-v2:shared:m |                    | rnetes-v2:shared   | 8 2026 CET
+              |                 | etric-binding:depl |                    |                    |
+              |                 | oyment:dotnet-gc-a |                    |                    |
+              |                 | llocated           |                    |                    |
+MetricBinding | 109239589408271 | urn:stackpack:open | .NET GC Allocated  | urn:stackpack:open | Wed Jan 7 00:20:48
+              |                 | -telemetry:shared: |                    | -telemetry:shared  |  2026 CET
+              |                 | metric-binding:ser |                    |                    |
+              |                 | vice:dotnet-gc-all |                    |                    |
+              |                 | ocated             |                    |                    |
+...
+----
+
+=== Describiendo Enlaces de Métricas
+
+Puedes obtener la definición de un enlace de métricas existente usando el comando `describe`:
+
+[,bash]
+----
+sts settings describe --ids 190567588459765
+_version: 1.0.93
+nodes:
+- _type: MetricBinding
+  chartType: line
+  description: Bytes allocated to GC Heap
+  enabled: true
+  id: -1
+  identifier: urn:stackpack:kubernetes-v2:shared:metric-binding:pod:dotnet-gc-allocated
+  layout:
+    metricPerspective:
+      section: GC
+      tab: .NET
+      weight: 3
+  name: .NET GC Allocated
+  priority: high
+  queries:
+  - alias: allocated
+    expression: rate(process_runtime_dotnet_gc_allocations_size_bytes_total{k8s_cluster_name="${tags.cluster-name}", k8s_namespace_name="${tags.namespace}", k8s_pod_name="${name}"}[${__rate_interval}])
+  scope: (label = "stackpack:kubernetes" and type = "pod")
+  unit: bytes(IEC)
+timestamp: 2026-01-14T13:11:07.575662922Z[Etc/UTC]
+----
+
+== Modificando Enlaces de Métricas
+
+[NOTE]
+====
+La forma recomendada de trabajar es almacenar los enlaces de métricas (y cualquier otro recurso personalizado creado en {stackstate-product-name}) como archivos YAML en xref:/setup/custom-integrations/overview.adoc[a StackPack]. Desde allí, los cambios pueden aplicarse manualmente o puede ser totalmente automatizado utilizando la CLI de SUSE Observability en un sistema CI/CD como GitHub actions o GitLab pipelines.
+====
+
+=== Crear/actualizar un Enlace de Métricas
+Crea un archivo `metric-bindings.yaml` que se vea así:
+
+[source,bash]
+----
+nodes:
+- _type: MetricBinding
+  chartType: line
+  enabled: true
+  tags: {}
+  unit: short
+  name: Replica counts
+  priority: MEDIUM
+  identifier: urn:stackpack:my-stackpack:metric-binding:my-deployment-replica-counts
+  queries:
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+      alias: Total replicas
+  scope: type = "deployment" and label = "stackpack:kubernetes"
+----
+
+Usa la xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] para crear el enlace de métricas:
+
+[,bash]
+----
+sts settings apply -f metric-bindings.yaml
+----
+
+Verifica los resultados en SUSE Observability abriendo la perspectiva de métricas para una ampliación. Si no estás satisfecho con el resultado, simplemente cambia el enlace de métricas en el archivo YAML y ejecuta el comando nuevamente para actualizarlo. La lista de nodos admite agregar muchos enlaces de métricas. Simplemente añade otra entrada de enlace de métricas al array YAML usando los mismos pasos que antes.
+
+[CAUTION]
+====
+El identificador se utiliza como la clave única de un enlace de métricas. Cambiar el identificador creará un nuevo enlace de métricas en lugar de actualizar el existente.
+====
+
+=== Eliminar un enlace de métricas
+
+Finalmente, para eliminar un enlace de métricas, utiliza
+
+[,bash]
+----
+sts settings delete --ids <id>
+----
+
+El `<id>` en este comando no es el identificador, sino el número en la columna `Id` de la salida `sts settings list`.
+

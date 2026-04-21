@@ -1,0 +1,59 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= 自定义集成概述
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-06
+:page-revdate: {revdate}
+:description:  自定义集成概述
+
+[IMPORTANT]
+====
+自定义集成是一个预生产、未发布的功能，因此在功能演变过程中可能会出现重大变化。它不适用于生产环境。但可以在非生产环境中进行测试。
+====
+
+== 概述
+
+自定义集成利用开放遥测（Open Telemetry）从各种来源收集和发送遥测数据（指标、跟踪、日志）到{stackstate-product-name}。通过使用 Open Telemetry，用户可以为其应用程序和服务植入检测代码，以获取性能、可靠性和运行状况的洞察。
+在{stackstate-product-name}端，xref:setup/custom-integrations/otelmappings/README.adoc[开放遥测映射]处理传入的遥测数据，应用必要的转换，并将其映射到{stackstate-product-name}内的适当实体。xref:use/alerting/k8s-add-monitors-cli.adoc[使用 CLI 添加监视器]、xref:setup/custom-integrations/metric-bindings/index.adoc[指标绑定]和xref:setup/custom-integrations/ui-presentation/README.adoc[UI 展示]可以定义，以在 UI 中呈现摄取的遥测数据，添加警报和可观测性。所有内容都被打包成一个xref:setup/custom-integrations/develop.adoc[堆栈包]以供分发。
+
+== 开发设置
+
+自定义集成应针对{stackstate-product-name}平台的预生产部署进行开发。要获取预生产设置以开始开发自定义集成，有两个选项：
+
+=== SaaS实例（推荐）：
+对于内部SUSE团队，我们建议向{stackstate-product-name}团队请求一个SaaS实例。这些实例已启用自定义集成，并且至少在每次新版本发布时会自动更新，在某些情况下会获得包含重要Bug 修复或实验性功能增量的预发布版本。
+通过专用渠道与我们联系（待公布）。
+
+=== 自托管：
+您可以通过在使用helm安装时设置一些功能标志，在自己的自托管{stackstate-product-name}安装中启用自定义集成：
+
+    . 生成`custom_integrations_values.yaml`。本指南假设您将其保存在`$VALUES_DIR`中。
+
++
+.$VALUES_DIR/custom_integrations_values.yaml
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
++
+
+    . 使用生成的值和{stackstate-product-name}部署 helm 图表`.$VALUES_DIR/custom_integrations_values.yaml`
+
++
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/custom_integrations_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
++
+
+endif::ss-ff-stackpacks2_enabled[]

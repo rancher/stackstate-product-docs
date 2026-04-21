@@ -1,0 +1,589 @@
+= Certificats auto-signés
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-29
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergé
+
+== SUSE Observability Server
+
+=== Exposer SUSE Observability Server avec des certificats auto-signés
+
+Les composants xref:k8s-suse-rancher-prime.adoc#_installation[SUSE Observability Server] ne peuvent pas terminer SSL eux-mêmes et doivent utiliser un contrôleur d'Ingress ou un LoadBalancer protégé par SSL pour exposer le service avec HTTPS. Cette section explique comment configurer un contrôleur d'Ingress avec des certificats auto-signés.
+
+==== Utilisation du contrôleur d'Ingress avec TLS
+
+Pour exposer SUSE Observability Server en utilisant le contrôleur d'Ingress Traefik avec des certificats auto-signés, vous devez :
+
+1. Créer des secrets TLS Kubernetes à partir de votre certificat de serveur et de votre clé
+2. Configurer la ressource Ingress avec les paramètres TLS
+3. Déployer SUSE Observability Server avec Ingress activé
+
+===== Création de secrets TLS
+
+Créer des secrets TLS Kubernetes à partir de vos fichiers de certificat et de clé privée :
+
+[,bash]
+----
+# Create TLS secret for main SUSE Observability Server
+kubectl create secret tls tls-secret \
+  --cert=server.crt \
+  --key=server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP GRPC endpoint
+kubectl create secret tls otlp-tls-secret \
+  --cert=otlp-server.crt \
+  --key=otlp-server.key \
+  --namespace suse-observability
+
+# Create TLS secret for OTLP HTTP endpoint
+kubectl create secret tls otlp-http-tls-secret \
+  --cert=otlp-http-server.crt \
+  --key=otlp-http-server.key \
+  --namespace suse-observability
+----
+
+===== Configuration des valeurs Helm
+
+Créer un fichier de valeurs (par exemple, `ingress-with-tls-values.yaml`) avec la configuration d'Ingress :
+
+[tabs]
+====
+Traefik (par défaut)::
++
+--
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+      traefik.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          traefik.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+
+Nginx::
++
+--
+[NOTE]
+=====
+Le projet Ingress Nginx est https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/[en cours de retrait]. Les utilisateurs sont invités à envisager des alternatives telles que Traefik.
+=====
+
+[,yaml]
+----
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: suse-observability.MY_DOMAIN
+  tls:
+    - hosts:
+        - suse-observability.MY_DOMAIN
+      secretName: tls-secret
+
+opentelemetry-collector:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    hosts:
+      - host: otlp-suse-observability.MY_DOMAIN
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4317
+    tls:
+      - hosts:
+          - otlp-suse-observability.MY_DOMAIN
+        secretName: otlp-tls-secret
+    additionalIngresses:
+      - name: otlp-http
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+        hosts:
+          - host: otlp-http-suse-observability.MY_DOMAIN
+            paths:
+              - path: /
+                pathType: Prefix
+                port: 4318
+        tls:
+          - hosts:
+              - otlp-http-suse-observability.MY_DOMAIN
+            secretName: otlp-http-tls-secret
+----
+--
+====
+
+===== Installation avec Ingress
+
+Déployez SUSE Observability Server en utilisant la configuration Ingress :
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --values ingress-with-tls-values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+Pour des instructions d'installation complètes, consultez xref:k8s-suse-rancher-prime.adoc#_installation[Installation].
+
+=== SUSE Observability Server se connectant à des systèmes externes avec des certificats auto-signés
+
+[NOTE]
+====
+Cette section est destinée à configurer SUSE Observability Server pour faire confiance aux systèmes externes utilisant des certificats auto-signés. Cela s'applique lorsque le serveur doit établir des connexions sortantes vers des services externes (comme des webhooks) qui sont sécurisés avec des certificats auto-signés.
+====
+
+SUSE Observability Server possède plusieurs points d'interaction avec des systèmes externes. Par exemple, les gestionnaires d'événements peuvent appeler des webhooks dans d'autres systèmes. Avec la configuration par défaut, SUSE Observability Server ne pourra pas communiquer avec ces systèmes s'ils sont sécurisés par TLS avec un certificat auto-signé, ou un certificat qui n'est pas par défaut approuvé par la JVM.
+
+Pour atténuer cela, SUSE Observability Server permet la configuration d'un magasin de confiance personnalisé.
+
+=== Créez un magasin de confiance personnalisé
+
+Vous devez avoir le certificat TLS personnalisé disponible. Si vous ne l'avez pas, vous devrez xref:/use/security/self-signed-certificates.adoc#_retrieve_certificate_via_the_browser[le récupérer via le navigateur].
+
+Utilisez l'outil keytool et le fichier `cacerts` inclus dans l'installation de la JVM (Java Virtual Machine) pour convertir un fichier de certificat TLS existant au format requis par SUSE Observability Server. Vous pouvez exécuter cela sur n'importe quelle machine, quel que soit le type de système d'exploitation.
+
+Si vous n'avez pas la JVM installée sur votre ordinateur, vous pouvez également xref:/use/security/self-signed-certificates.adoc#_using_a_docker_jvm[utiliser une image Docker de la JVM] à la place.
+
+==== Utilisation d'une JVM installée
+
+Avec la JVM installée sur votre ordinateur et le certificat enregistré sous forme de fichier `site.cert`, vous pouvez créer un nouveau magasin de confiance en prenant le magasin de confiance de la JVM et en ajoutant le certificat supplémentaire.
+
+. Créez un répertoire de travail `workdir` et copiez le fichier de certificat `site.cert` dans ce répertoire.
+. Changez de répertoire vers le `workdir` et faites une copie du fichier `cacerts` de votre installation Java. `$JAVA_HOME` est une variable d'environnement qui contient l'emplacement de votre installation Java. Ceci est normalement défini lors de l'installation de Java.
++
+[,bash]
+----
+cd workdir
+cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
+----
+
+. Exécutez la commande keytool suivante pour ajouter le certificat. Le mot de passe requis est `changeit`. L'alias doit être un alias unique pour le certificat, par exemple, le nom de domaine lui-même sans aucun point.
++
+[,bash]
+----
+keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -file site.cert
+----
+
+. Le fichier de magasin `custom_cacerts` inclut désormais le certificat `site.cert`. Vous pouvez vérifier cela en recherchant l'alias dans la sortie de
++
+[,bash]
+----
+keytool -list -keystore custom_cacerts
+----
+
+==== Utilisation d'une JVM Docker
+
+Si vous n'avez pas la JVM installée sur votre ordinateur, vous pouvez utiliser une image Docker de la JVM. Le certificat doit être récupéré et enregistré sous forme de fichier `site.cert`.
+
+. Créez un répertoire de travail `workdir` et copiez le fichier de certificat `site.cert` dans ce répertoire.
+. Démarrez le conteneur Docker Java avec le `workdir` monté en tant que volume afin qu'il puisse être accessible :
++
+[,bash]
+----
+docker run -it -v `pwd`/workdir:/workdir  adoptopenjdk:11 bash
+----
+
+. Changez de répertoire vers le `workdir` et faites une copie du fichier `cacerts` :
++
+[,bash]
+----
+cd /workdir
+cp $JAVA_HOME/lib/security/cacerts ./custom_cacerts
+----
+
+. Exécutez la commande keytool suivante pour ajouter le certificat. Le mot de passe requis est `changeit`. L'alias doit être un alias unique pour le certificat, par exemple le nom de domaine lui-même sans aucun point.
++
+[,bash]
+----
+keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -file site.cert
+----
+
+. Le fichier de magasin `custom_cacerts` inclura désormais le certificat `site.cert`. Vous pouvez vérifier cela en recherchant l'alias dans la sortie de
++
+[,bash]
+----
+ keytool -list -keystore custom_cacerts
+----
+
+=== Utilisez un magasin de confiance personnalisé
+
+Le magasin de confiance et le mot de passe peuvent être spécifiés en tant que valeurs. Le magasin de confiance ne peut être spécifié que depuis la ligne de commande helm car c'est un fichier. La valeur du mot de passe est spécifiée de la même manière dans l'exemple, mais elle peut également être fournie via un fichier `values.yaml`.
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set-file 'stackstate.java.trustStore'=custom_cacerts \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*Remarque :*
+
+* La première exécution de la commande de mise à niveau helm entraînera le redémarrage des pods, ce qui peut provoquer une courte interruption de disponibilité.
+* Incluez ces arguments à chaque exécution de `helm upgrade`.
+* Le mot de passe et le magasin de confiance sont stockés en tant que secret Kubernetes.
+====
+
+
+[discrete]
+==== Magasins de confiance encodés en Base64
+
+Si nécessaire, le magasin de confiance Java peut également être configuré en passant des chaînes encodées en Base64 dans les valeurs Helm.
+
+[tabs]
+====
+Linux::
++
+--
+
+Pour utiliser un magasin de confiance encodé en base64, exécutez la commande suivante `helm upgrade` :
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set 'stackstate.java.trustStoreBase64Encoded'=$(cat custom_cacerts | base64 -w0) \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+MacOs::
++
+--
+
+Pour utiliser un magasin de confiance encodé en base64, exécutez la commande suivante `helm upgrade` :
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set 'stackstate.java.trustStoreBase64Encoded'=$(cat custom_cacerts | base64) \
+  --set 'stackstate.java.trustStorePassword'=changeit \
+suse-observability \
+suse-observability/suse-observability
+----
+
+--
+====
+
+=== Récupérer le certificat via le navigateur
+
+Le certificat peut être téléchargé directement depuis le navigateur Chrome. Les étapes peuvent varier légèrement en fonction de la version que vous utilisez :
+
+. Accédez à l'URL à partir de laquelle vous avez besoin du certificat.
+. Cliquez sur l'icône de cadenas dans la barre d'adresse.
+. Cliquez sur *Certificat*.
+. Sélectionnez *Détails*.
+. Sélectionnez *Exporter*.
+. Enregistrez en utilisant le type de fichier d'exportation par défaut (encodé en Base64 ASCII).
+
+== SUSE Observability Agent
+
+xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[SUSE Observability Agent] se connecte à SUSE Observability Server via HTTPS. Si votre serveur utilise un certificat auto-signé, vous devez configurer l'Agent pour faire confiance à ce certificat afin d'établir des connexions sécurisées.
+
+[NOTE]
+====
+Cette configuration est également requise lorsque votre serveur utilise des certificats signés par une Autorité de Certification (CA) privée. Dans ce cas, ajoutez le certificat CA privé en utilisant les mêmes méthodes décrites ci-dessous.
+====
+
+=== Configurer des certificats personnalisés
+
+Configurer des certificats personnalisés via les valeurs du graphique Helm en utilisant l'une de ces deux méthodes :
+
+==== Méthode 1 : Données PEM directes
+
+Intégrez les données du certificat directement dans votre configuration Helm :
+
+[,yaml]
+----
+global:
+  customCertificates:
+    enabled: true
+    pemData: |
+      -----BEGIN CERTIFICATE-----
+      MIIDrzCCApegAwIBAgIUDMPkLOLGJ12438MbI32eykbw2xowDQYJKoZIhvcNAQEL
+      BQAwKTEnMCUGA1UEAwwedmlsaWFrb3Yuc2FuZGJveC5zdGFja3N0YXRlLmlvMB4X
+      DTI1MDcxNzEzMjgzN1oXDTI2MDcxNzEzMjgzN1owKTEnMCUGA1UEAwwedmlsaWFr
+      b3Yuc2FuZGJveC5zdGFja3N0YXRlLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+      MIIBCgKCAQEA0MIdPOxrCpXB+F6P6NY7MyOimuViVWJGDW9ckz4mXZYCJD4iqrKS
+      Y4bP6ODO4BgWxKFElxNdwNIqhLmI7RR1MWSRo47oxwPLnqw3INlsX0t1rBp6k6zK
+      K4YY+wGdUH/keug03uMS7HxBXEmhCaMnGPj2BBfB4URc41DkFexGU/Fi1cyv0aCq
+      CgxbThN/fGSGN2evLuabk9mfw4AH3K8isQ+kS9i3O459BgDGH8yjbrWfBUdPXVx5
+      iFiYjGJjVM0pTP1dNriTc88lpajXRK++6O2gmjL9kbf0PGzRsvqqVgI07yR8uV1I
+      0MaUwM2/VJrVB6t80wBuC1Tiv+RiYmtJXwIDAQABo4HOMIHLMB0GA1UdDgQWBBSh
+      iKBCmrp8jHSCMvUnHv/Wgg7LyDAfBgNVHSMEGDAWgBShiKBCmrp8jHSCMvUnHv/W
+      gg7LyDAPBgNVHRMBAf8EBTADAQH/MHgGA1UdEQRxMG+CHnZpbGlha292LnNhbmRi
+      b3guc3RhY2tzdGF0ZS5pb4Ijb3RscC12aWxpYWtvdi5zYW5kYm94LnN0YWNrc3Rh
+      dGUuaW+CKG90bHAtaHR0cC12aWxpYWtvdi5zYW5kYm94LnN0YWNrc3RhdGUuaW8w
+      DQYJKoZIhvcNAQELBQADggEBAIuBFVqJsJImOB4thRk+FFd7UJlK1kQna9woKv23
+      ju+fpEWgZZQ0U/xGS9f3JvxCUJv8oj3HYkfPQQgtPmewATVBx2cTRpogV6JFcAo7
+      fPSLCzOuSt3c4SM1OtDnyToUaAf6YQQT4m+V4IKb6Qo0XWfCxhkuKJlOfmDtqNg/
+      uVYjfG7+KOZs+6CTJwqdIwpNDbLD+DNfo3b/c731Qa1b9o8Z8rIrNrYXj4kly3D1
+      97QiVJCL0u/fC+/KsUxq9ynAYSPgyd2CBnxnQDcq8aQATVTlAafSfk0shvucgQmJ
+      KIL9xaM3iTdvrWGtWeAiEQocsRBJM5xjqtnu0R5xDlLU/TQ=
+      -----END CERTIFICATE-----
+----
+
+==== Méthode 2 : Référence ConfigMap
+
+Créez un ConfigMap Kubernetes avec votre certificat et référencez-le dans la configuration Helm :
+
+[,yaml]
+----
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tls-config
+data:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    [Your certificate content here]
+    -----END CERTIFICATE-----
+----
+
+Référencez le ConfigMap dans votre configuration Helm :
+
+[,yaml]
+----
+global:
+  customCertificates:
+    enabled: true
+    configMapName: "tls-config"
+----
+
+=== Déployez avec des certificats personnalisés
+
+==== Utilisation de données PEM directes
+
+Pour l'approche des données PEM directes, commencez par stocker votre certificat dans une variable shell :
+
+[,bash]
+----
+export CERT_DATA=$(cat <<'EOF'
+-----BEGIN CERTIFICATE-----
+[Your certificate content here]
+-----END CERTIFICATE-----
+EOF
+)
+----
+
+Déployez SUSE Observability Agent avec la configuration du certificat :
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set-string 'stackstate.apiKey'='YOUR_API_KEY' \
+  --set-string 'stackstate.cluster.name'='YOUR_CLUSTER_NAME' \
+  --set-string 'stackstate.url'='YOUR_SUSE_OBSERVABILITY_URL' \
+  --set 'global.customCertificates.enabled'=true \
+  --set 'global.customCertificates.pemData'="$CERT_DATA" \
+  suse-observability-agent suse-observability/suse-observability-agent
+----
+
+==== Utilisation de la référence ConfigMap
+
+Pour l'approche ConfigMap, créez le ConfigMap contenant votre certificat :
+
+[,bash]
+----
+kubectl create configmap tls-config \
+  --from-file=tls.crt=your-certificate.crt \
+  --namespace suse-observability
+----
+
+Déployez SUSE Observability Agent avec la référence ConfigMap :
+
+[,bash]
+----
+helm upgrade --install \
+  --namespace suse-observability \
+  --create-namespace \
+  --set-string 'stackstate.apiKey'='YOUR_API_KEY' \
+  --set-string 'stackstate.cluster.name'='YOUR_CLUSTER_NAME' \
+  --set-string 'stackstate.url'='YOUR_SUSE_OBSERVABILITY_URL' \
+  --set 'global.customCertificates.enabled'=true \
+  --set 'global.customCertificates.configMapName'='tls-config' \
+  suse-observability-agent suse-observability/suse-observability-agent
+----
+
+== SUSE Observability CLI
+
+xref:setup/cli/cli-sts.adoc[SUSE Observability CLI] se connecte à SUSE Observability Server via HTTPS. Lorsque votre serveur utilise des certificats auto-signés ou des certificats d'une autorité de certification (CA) privée, configurez le CLI pour faire confiance à ces certificats.
+
+=== Configurez des certificats CA personnalisés
+
+Configurez des certificats CA personnalisés en utilisant l'une de ces méthodes :
+
+* **Configuration persistante** : Utilisez `sts context save` pour stocker la configuration du certificat pour les commandes futures
+* **Utilisation unique** : Ajoutez des indicateurs de certificat aux commandes CLI individuelles si nécessaire
+
+==== Méthode 1 : Chemin du fichier de certificat CA
+
+Spécifiez le chemin vers votre fichier de certificat CA encodé en PEM :
+
+[,bash]
+----
+sts context save \
+  --name staging \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-path /path/to/ca.crt
+----
+
+==== Méthode 2 : Données de certificat CA encodées en Base64
+
+Fournissez les données du certificat CA sous forme de chaîne encodée en base64 :
+
+[,bash]
+----
+sts context save \
+  --name staging \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-base64-data BASE64_ENCODED_CERTIFICATE_DATA
+----
+
+==== Utilisation des certificats CA avec d'autres commandes
+
+Utilisez les indicateurs de certificat avec n'importe quelle commande CLI pour une validation de certificat unique :
+
+[,bash]
+----
+# Using certificate file path
+sts agent list \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-path /path/to/ca.crt
+
+# Using base64-encoded certificate data
+sts settings list \
+  --url https://staging.internal \
+  --api-token YOUR_API_TOKEN \
+  --ca-cert-base64-data BASE64_ENCODED_CERTIFICATE_DATA
+----
+
+=== Priorité de configuration
+
+Lorsque les deux options de certificat sont fournies, le chemin du fichier (`--ca-cert-path`) a la priorité sur les données base64 (`--ca-cert-base64-data`).
+
+=== Stockage
+
+Les configurations de certificat sont stockées dans : `~/.config/stackstate-cli/config.yaml`
+
+[NOTE]
+====
+**Important** : L'indicateur `--skip-ssl` désactive toute vérification SSL et ignore les configurations de certificat. Utilisez toujours les options de certificat CA pour des connexions sécurisées avec des certificats personnalisés.
+====
+
+== SUSE Observability Open Telemetry
+
+=== Créez un configmap pour la CA personnalisée
+
+----
+kubectl create configmap tls-config \
+  --namespace open-telemetry \
+  --from-file=tls.crt=<your-certificate>
+----
+
+. Montez le configmap en ajoutant ce qui suit au niveau supérieur de `otel-collector.yaml` :
+
+----
+# Mounting volume for CA certificate
+extraVolumes: 
+  - name: tls-config
+    configMap:
+      items:
+        - key: tls.crt
+          path: tls.crt
+      name: tls-config
+extraVolumeMounts:
+  - mountPath: "/certs"
+    name: tls-config
+    readOnly: true
+----
+
+. Mettez à jour la configuration de l'exportateur dans le `otel-collector.yaml` pour utiliser le certificat *ca_file* en ajoutant la clé `tls.ca_file` :
+
+----
+otlp/suse-observability:
+  auth:
+    authenticator: bearertokenauth
+  # Put in your own otlp endpoint, for example suse-observability.my.company.com:443
+  endpoint: <your-endpoint>
+  compression: snappy
+  tls:
+    ca_file: /certs/tls.crt
+----
+
+. Installez (ou mettez à niveau) votre collecteur Open Telemetry.
+
+== Extension de l'interface utilisateur Rancher pour SUSE Observability
+
+Lors de l'installation de l'extension de l'interface utilisateur Rancher pour SUSE Observability (voir xref:/k8s-suse-rancher-prime.adoc#_installing_ui_extensions[Installation des extensions UI]), l'extension doit communiquer avec votre serveur SUSE Observability. Si votre serveur utilise des certificats auto-signés, l'installation de l'extension échouera.
+
+**Solution** : Ajoutez votre certificat personnalisé à Rancher avant d'installer l'extension. Suivez la documentation de Rancher : https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/custom-ca-root-certificates[configuration de certificats CA racine personnalisés^].
+
+Après avoir configuré le certificat dans Rancher, l'extension se connectera avec succès à votre SUSE Observability Server.

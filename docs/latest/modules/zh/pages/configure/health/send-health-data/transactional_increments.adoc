@@ -1,0 +1,143 @@
+= 事务元素
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-10-27
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概述
+
+本页面描述了可以发送的确切 JSON 消息，用于健康同步事务增量一致性模型。
+
+== JSON 属性："health"
+
+健康可以通过 xref:/configure/health/send-health-data/send-health-data.adoc#_common_json_object[common JSON 对象] 中的 `"health"` 属性发送到 SUSE Observability 接收器 API。
+
+[tabs]
+====
+示例健康 `transactional_increments` JSON::
++
+--
+
+[,javascript]
+----
+   "apiKey":"your api key",
+   "collection_timestamp":1585818978,
+   "internalHostname":"lnx-343242.srv.stackstate.com",
+   "events":{},
+   "metrics":[],
+   "service_checks":[],
+   "health":[
+      {
+        "consistency_model": "TRANSACTIONAL_INCREMENTS",
+        "increment": {
+              "checkpoint": {
+                  "offset": 5,
+                  "batch_index": 102
+              },
+              "previous_checkpoint": {
+                  "offset": 5,
+                  "batch_index": 100
+              }
+        },
+        "stream": {
+          "urn": "urn:health:sourceId:streamId"
+          //"sub_stream_id": "subStreamId" Optional
+        },
+        "check_states": [
+          {
+            "checkStateId": "checkStateId1",
+            "message": "Server Running out of disk space",
+            "health": "Deviating",
+            "topologyElementIdentifier": "server-1",
+            "name": "Disk Usage"
+          },
+          {
+            "checkStateId": "checkStateId2",
+            "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+            "health": "critical",
+            "topologyElementIdentifier": "server-2",
+            "name": "Health monitor"
+          },
+          {
+            "checkStateId": "checkStateId3",
+            "delete": true
+          }
+        ]
+      }
+   ],
+   "topologies":[]
+----
+
+--
+====
+
+每个健康事务增量数据负载具有以下详细信息：
+
+* *increment* - 每条消息中需要存在一个增量对象。这使得 SUSE Observability 能够跟踪完整的消息链，并能够检测到数据的重传或数据中出现意外间隙的情况。它携带以下字段作为增量元数据：
+ ** *checkpoint* - 用于提供检查点的对象，该检查点属于消息中出现的 `check_states`，它包含两个字段：
+  *** *offset* - 流媒体管道分配给消息的偏移量。例如，Kafka 偏移量。
+  *** *batch_index* - 可选。当使用单条消息来累积多个 `check_states` 时，批次索引表示消息中存在的最新索引，允许在单独的 API 调用中发送大批量。
+ ** *previous_checkpoint* - 可选。表示先前传达的检查点，在子流的第一次传输中可以为空。这使得 SUSE Observability 能够跟踪上游是否可能缺少任何数据。
+* *stream* - 一个对象，用以标识哪些快照和 `check_states` 属于同一组。它包含下列字段：
+ ** *urn* - 数据源和流 ID 编码为 SUSE Observability xref:/configure/topology/identifiers.adoc[URN]，符合以下约定：`urn:health:<sourceId>:<streamId>`，其中 `<sourceId>` 是外部数据源的名称，`<streamId>` 是健康数据流的唯一标识符。
+ ** *sub_stream_id* - 可选。流健康数据子集的标识符。当流数据由多个代理分发和报告时，这使得每个 `sub_stream_id` 都能拥有独立的快照生命周期。
+* *check_states* - 检查状态的列表。每个检查状态可以具有以下字段：
+ ** *checkStateId* - 外部系统中检查状态的标识符。
+ ** *message* - 可选。在 SUSE Observability 用户界面中显示的消息。数据将按 Markdown 格式解析，允许包含指向生成外部检查状态的外部系统检查的链接。
+ ** *health* - 以下 SUSE Observability 健康状态值之一：`Clear`、`Deviating`、`Critical`。
+ ** *topologyElementIdentifier* - 用于将检查状态绑定到 SUSE Observability 拓扑元素。
+ ** *name* - 外部检查状态的名称。
+ ** *delete* - 被解释为相关 `checkStateId` 的删除请求的标志。即使创建的其余字段存在，例如 `name, health, ...`，删除请求将优先处理。
+
+== 将健康状态发送到 SUSE Observability。
+
+健康状态可以通过 HTTP POST 以一条 JSON 消息发送。在下面的示例中，包含两个检查状态的快照从单个外部监控系统发送到 SUSE Observability。
+
+[,bash]
+----
+curl -X POST \
+ '<STACKSTATE_RECEIVER_API_ADDRESS>' \
+ -H 'Content-Type: application/json' \
+ -d '{
+  "collection_timestamp": 1548857167,
+  "internalHostname": "local.test",
+  "health": [
+    {
+      "consistency_model": "TRANSACTIONAL_INCREMENTS",
+      "increment": {
+            "checkpoint": {
+                "offset": 5,
+                "batch_index": 102
+            },
+            "previous_checkpoint": {
+                "offset": 5,
+                "batch_index": 100
+            }
+      },
+      "stream": {
+        "urn": "urn:health:sourceId:streamId"
+      },
+      "check_states": [
+        {
+          "checkStateId": "checkStateId1",
+          "message": "Server Running out of disk space",
+          "health": "Deviating",
+          "topologyElementIdentifier": "server-1",
+          "name": "Disk Usage"
+        },
+        {
+          "checkStateId": "checkStateId2",
+          "message": "Provisioning failed. [Learn more](https://www.any-link.com)",
+          "health": "critical",
+          "topologyElementIdentifier": "server-2",
+          "name": "Health monitor"
+        },
+        {
+          "checkStateId": "checkStateId3",
+          "delete": true
+        }
+      ]
+    }
+  ]
+}'
+----

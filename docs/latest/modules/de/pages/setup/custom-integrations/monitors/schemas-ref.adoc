@@ -1,0 +1,151 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schema und Referenz für Monitore
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Diese Seite beschreibt die Schemata für ein `Monitor`, zusammen mit detaillierten Erklärungen zu Konstrukten, Ausdruckssyntax und Semantik.
+
+== Schema für Monitor
+
+Ein Monitor gibt an, wie oft eine Monitorfunktion ausgeführt werden soll und mit welchen Argumenten.
+
+[,yaml]
+----
+_type: "Monitor"
+name: string
+description?: string
+function: string
+arguments:
+  <dependent on monitor function>
+intervalSeconds: integer
+remediationHint?: string
+status?: "ENABLED" | "DISABLED"       # defaults to "DISABLED"
+tags:
+  <key>: <value>
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name} muss wissen, dass dies ein Monitor ist, daher muss der Wert immer `Monitor` sein.
+* `name`: Der Name des Monitors
+* `description`: Eine Beschreibung des Monitors.
+* `function`: Eine Referenz auf die Monitorfunktion, die den Monitor ausführen wird.
+* `intervalSeconds`: Das Intervall, in dem der Monitor ausgeführt wird. Für reguläre Echtzeitmetriken wird ein Intervall von 30 Sekunden empfohlen. Für länger laufende analytische Metrikabfragen wird ein größeres Intervall empfohlen.
+* `remediationHint`: Eine Beschreibung dessen, was der Benutzer tun kann, wenn beim Monitor ein Fehler auftritt. Das Format ist Markdown, mit optionaler Verwendung von Handlebars-Variablen zur Anpassung des Hinweises basierend auf Zeitreihen oder anderen Daten (xref:use/alerting/k8s-add-monitors-cli.adoc#_write_the_remediation_hint[mehr Erklärung unten]).
+* `status`: Entweder `"DISABLED"` oder `"ENABLED"`. Bestimmt, ob der Monitor ausgeführt wird oder nicht.
+* `tags`: Fügen Sie dem Monitor Tags hinzu, um ihn in der Übersicht der Monitore Ihrer {stackstate-product-name}-Instanz, http://your-instance/#/monitors, zu organisieren.
+* `identifier`: Ein Identifikator der Form `urn:stackpack:<stackpack-name>:monitor:....`, der den Monitor eindeutig identifiziert, wenn seine Konfiguration aktualisiert wird.
+
+== Monitorfunktionen
+
+=== Schwellenwert
+
+Löst einen Gesundheitszustand aus, wenn ein gegebener Schwellenwert für eine bestimmte Metrikabfrage überschritten wird. Verschiedene Schwellenwerte können für bestimmte Ressourcen mit der xref:/use/alerting/k8s-override-monitor-arguments.adoc[Hilfe von Annotationen] festgelegt werden.
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:threshold" }}
+arguments:
+  metric:
+    query: string
+    unit: string
+    aliasTemplate: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  urnTemplate: string
+  titleTemplate: string
+----
+
+* `query`: Eine PromQL-Abfrage. Verwenden Sie den xref:/use/metrics/k8sTs-explore-metrics.adoc[metrischen Explorer] Ihrer {stackstate-product-name} Instanz, http://your-instance/#/metrics, und nutzen Sie ihn, um eine Abfrage für die interessierende Metrik zu erstellen.
+* `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, die verwendet wird, um die Y-Achse des Diagramms zu rendern. Siehe die xref:/develop/reference/k8sTs-chart-units.adoc[unterstützten Einheiten]-Referenzseite für alle Einheiten.
+* `aliasTemplate`: Ein Alias für Zeitreihen im Metrikdiagramm. Dies ist eine Vorlage, die Labels aus der Zeitreihe mit dem Platzhalter `${my_label}` ersetzen kann.
+* `comparator`: Wählen Sie eines von LTE/LT/GTE/GT, um den Schwellenwert mit der Metrik zu vergleichen. Zeitreihen, für die `<metric> <comparator> <threshold>` wahr ist, erzeugen den Fehler.
+* `threshold`: Ein numerischer Schwellenwert zum Vergleichen.
+* `failureState`: Entweder "KRITISCH" oder "ABWEICHEND". "KRITISCH" wird als rot und "ABWEICHEND" als orange in {stackstate-product-name} angezeigt, um unterschiedliche Schweregrade zu kennzeichnen.
+* `urnTemplate`: Eine Vorlage zur Konstruktion der URN der Komponente, an die das Ergebnis des Monitors xref:use/alerting/k8s-add-monitors-cli.adoc#_bind_the_results_of_the_monitor_to_the_correct_components[gebunden] wird.
+* `titleTemplate`: Ein Titel für das Ergebnis eines Monitors. Da mehrere Monitorergebnisse an dieselbe Komponente gebunden werden können, ist es möglich, Zeitreihenlabels mit dem Platzhalter `${my_label}` zu ersetzen.
+
+=== Abgeleiteter Zustand
+
+Leitet seinen Zustand von den Abhängigkeiten der Komponenten ab, deren Gesundheitszustand auf Beobachtungen basiert. Es erzeugt den kritischsten Zustand der obersten Abhängigkeiten.
+Für Details siehe die xref:/setup/custom-integrations/monitors/derived-state-monitors.adoc[Seite der abgeleiteten Zustandsmonitore].
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+arguments:
+  componentTypes: string
+----
+
+* `componentTypes`: Die Komponententypen, die zu abgeleiteten Zuständen beitragen.  Als eine einzelne Zeichenfolge von `,` (Komma) getrennten Werten angegeben
+
+=== Topologischer Schwellenwert
+
+Löst einen Gesundheitszustand aus, wenn ein gegebener Schwellenwert für eine bestimmte Metrikabfrage überschritten wird. Die Metrikabfrage kann auf den Namen, Tags und Eigenschaften der von der Topologieabfrage zurückgegebenen Komponenten verweisen. Verschiedene Schwellenwerte können für bestimmte Ressourcen mit der xref:/use/alerting/k8s-override-monitor-arguments.adoc[Hilfe von Annotationen] festgelegt werden.
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:topological-threshold"  }}
+arguments:
+  queries:
+    topologyQuery: string
+    promqlQuery: string
+    aliasTemplate: string
+    unit: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  titleTemplate: string
+----
+
+* `queries`: Die auszuführenden Abfragen
+** `topologyQuery`: STQL-Abfrage zur Auswahl von Komponenten
+** `promqlQuery`: PromQL-Abfrage, die Labels und Eigenschaften von Komponenten verwenden kann, um Zeitreihen auszuwählen
+** `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, die verwendet wird, um die Y-Achse des Diagramms zu rendern. Siehe die xref:/develop/reference/k8sTs-chart-units.adoc[unterstützten Einheiten]-Referenz für alle Einheiten.
+** `aliasTemplate`: Ein Alias für Zeitreihen im Metrikdiagramm. Dies ist eine Vorlage, die Labels aus der Zeitreihe mit dem Platzhalter `${my_label}` ersetzen kann.
+* `comparator`: Wählen Sie eines von LTE/LT/GTE/GT, um den Schwellenwert mit der Metrik zu vergleichen. Zeitreihen, für die `<metric> <comparator> <threshold>` wahr ist, erzeugen den Fehlerzustand.
+* `threshold`: Ein numerischer Schwellenwert zum Vergleichen.
+* `failureState`: Entweder "KRITISCH" oder "ABWEICHEND". "KRITISCH" wird in {stackstate-product-name} als rot und "ABWEICHEND" als orange angezeigt, um unterschiedliche Schweregrade zu kennzeichnen.
+* `titleTemplate`: Ein Titel für das Ergebnis eines Monitors. Da mehrere Monitorergebnisse an dieselbe Komponente gebunden werden können, ist es möglich, Zeitreihenlabels mit dem Platzhalter `${my_label}` zu ersetzen.
+
+=== Dynamic Threshold
+
+Warnungen, wenn der aktuelle Wert außerhalb des vorhergesagten Basislinienintervalls liegt, das dynamisch auf der Grundlage historischer Daten berechnet wird und wöchentliche sowie tägliche saisonale Muster berücksichtigt.
+Diese Überwachungsfunktion ist nur verfügbar, wenn das Stackpack für den autonomen Anomalie-Detektor installiert ist.
+
+Für Details siehe die xref:/setup/custom-integrations/monitors/dynamic-threshold-monitors.adoc[Dynamische Schwellenmonitore]-Seite.
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+arguments:
+  telemetryQuery:
+    query: string
+    unit: string
+    aliasTemplate: string
+  topologyQuery: string
+  falsePositiveRate: float
+  checkWindowMinutes: integer
+  historicWindowMinutes: integer
+  historySizeWeeks: 1 | 2 | 3 (integer)
+  includePreviousDay: boolean
+  removeTrend: boolean
+----
+
+* `telemetryQuery`: Telemetrie zur Bewertung
+** `query`: PromQL-Abfrage, die für die Basislinienbildung und Anomalieerkennung verwendet wird
+** `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, die verwendet wird, um die Y-Achse des Diagramms zu rendern. Siehe die xref:/develop/reference/k8sTs-chart-units.adoc[unterstützten Einheiten]-Referenz für alle Einheiten.
+** `aliasTemplate`: Ein Alias für Zeitreihen im Metrikdiagramm. Dies ist eine Vorlage, die Labels aus der Zeitreihe mit dem Platzhalter `${my_label}` ersetzen kann.
+* `topologyQuery`: STQL-Abfrage zur Auswahl von Komponenten
+* `falsePositiveRate`: sage `!!float 1e-8` - die Empfindlichkeit des Monitors gegenüber abweichendem Verhalten.  Ein niedrigerer Wert unterdrückt mehr (falsche) Positivmeldungen, kann jedoch auch zu falschen Negativen (unentdeckte Anomalien) führen.
+* `checkWindowMinutes`: sage `10` Minuten - das Prüfintervall muss zwischen schneller Alarmierung (kleine Werte) und korrekt identifizierten Anomalien (hohe Werte) ausgewogen sein.  Eine Handvoll von Datenpunkten funktioniert in der Praxis gut.
+* `historicWindowMinutes`: sage `120` (2 Stunden) - um den aktuellen Zeitpunkt herum, aber dann vor ein oder mehreren Wochen - also von 1 Stunde vor dem aktuellen Zeitpunkt bis 1 Stunde danach.  Auch die 2 Stunden vor dem Prüfintervall werden verwendet.  Der dynamische Schwellenmonitor vergleicht die Verteilung dieser historischen Daten mit den Datenpunkten im Prüfintervall.
+* `historySizeWeeks`: sage `2` - die Anzahl der Wochen, aus denen Daten für den historischen Kontext entnommen werden.  Kann `1`, `2` oder `3` sein.
+* `removeTrend`: für Metriken, die ein Trendverhalten aufweisen (zum Beispiel die Anzahl der Anfragen), sodass der absolute Wert von Woche zu Woche variiert, kann dieser Trend (der Durchschnittswert) berücksichtigt werden.
+* `includePreviousDay`: typischerweise `false` - für Metriken, die kein wöchentliches, sondern nur ein tägliches Schema aufweisen, ermöglicht dies die Verwendung aktuellerer Daten.
+
+endif::[]
