@@ -1,0 +1,138 @@
+= 基于文件的
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+如果无法使用外部身份验证提供程序，可以使用基于文件的身份验证。这将要求每个 SUSE Observability 用户在配置文件中预先配置。对于配置文件中针对每个用户的每一项修改，SUSE Observability 会在借助 Helm 应用这些修改后自动重启。
+
+SUSE Observability 包含多个默认角色，见下面的示例配置。每个默认角色分配的权限以及如何创建其他角色的说明可以在 xref:/setup/security/rbac/README.adoc[基于角色的访问控制 (RBAC) 文档] 中找到。
+
+== 设置基于文件的身份验证
+
+=== Kubernetes
+
+要在 Kubernetes 上配置基于文件的身份验证，需要将 SUSE Observability 用户添加到 `authentication.yaml` 文件中。例如：
+
+[tabs]
+====
+authentication.yaml::
++
+--
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-admin ]
+        - username: guest
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-guest ]
+        - username: poweruser
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-power-user ]
+        - username: troubleshooter
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-k8s-troubleshooter ]
+----
+
+--
+====
+
+按照以下步骤配置用户并应用更改：
+
+. 在 `authentication.yaml` 中 - 添加用户。应为每个用户添加以下配置（见上面的示例）：
+ ** *用户名* - 用于登录 SUSE Observability 的用户名。仅允许字母数字和 _ 字符。
+ ** *密码哈希* - 用于登录 SUSE Observability 的密码。密码以 bcrypt 哈希形式存储。
+ ** *角色* - 用户所属于的角色列表。xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[默认 SUSE Observability 角色] 为 `stackstate-admin`、`stackstate-power-user` 和 `stackstate-guest`，有关如何创建其他角色的详细信息，请参见 xref:/setup/security/rbac/rbac_roles.adoc[RBAC 角色]。
+. 将文件 `authentication.yaml` 与 SUSE Observability 安装说明中的文件 `values.yaml` 一起存储。
+. 运行 Helm 升级以应用更改：
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*注意：*
+
+* 可以使用以下命令行 `htpasswd -bnBC 10 "" <password> | tr -d ':\n'` 或使用在线工具生成 bcrypt 密码哈希。
+* 第一次运行 helm 升级命令将导致 pods 重启，这可能会导致短暂的可用性中断。
+* 在每次`helm upgrade`运行中包含`authentication.yaml`。
+* 身份验证配置存储为 Kubernetes 密钥。
+====
+
+
+按照以下步骤配置用户并应用更改：
+
+. 在 `authentication.yaml` 中 - 添加用户。应为每个用户添加以下配置（见上面的示例）：
+ ** *用户名* - 用于登录 SUSE Observability 的用户名。仅允许字母数字和 _ 字符。
+ ** *密码* - 用于登录 SUSE Observability 的密码。密码可以存储为 MD5 哈希或 bcrypt 哈希。
+ ** *角色* - 用户所属于的角色列表。xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[默认 SUSE Observability 角色] 为 `stackstate-admin`、`stackstate-power-user`、`stackstate-k8s-troubleshooter` 和 `stackstate-guest`，有关如何创建其他角色的详细信息，请参见 xref:/setup/security/rbac/rbac_roles.adoc[RBAC 角色]。
+. 重新启动 SUSE Observability 以应用更改。
+
+[NOTE]
+====
+*注意：*
+
+* 可以使用 `md5sum` 或 `md5` 命令行应用程序在 Linux 和 Mac 上生成 MD5 密码哈希。
+* 可以使用以下命令行 `htpasswd -bnBC 10 "" <password> | tr -d ':\n'` 或使用在线工具生成 bcrypt 密码哈希。
+====
+
+
+=== 使用外部 Secret
+
+当用户密码应来自外部秘密时，请遵循 xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[这些步骤]，但填写以下数据：
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  file_<username1>_password: <base64 of bcrypt of password>
+  file_<username2>_password: <base64 of bcrypt of password>
+----
+
+在登录部分的每个用户中，应向秘密中添加一条记录，填写模板。例如：
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin_user
+          roles: [ stackstate-admin ]
+
+
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+   file_admin_user_password: "base64EncryptedPass"
+----
+
+== 另请参见
+
+* xref:/setup/security/authentication/authentication_options.adoc[身份验证选项]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[预定义的 SUSE Observability 角色的权限]
+* xref:/setup/security/rbac/rbac_roles.adoc[创建 RBAC 角色]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[外部密文]

@@ -1,0 +1,508 @@
+= Restaurer des sauvegardes
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergée
+
+[NOTE]
+====
+Cette page s'applique à {stackstate-product-name} v2.7.0 ou version ultérieure.
+====
+
+== Présentation
+
+Cette page décrit comment restaurer des sauvegardes pour les magasins de données {stackstate-product-name} en utilisant la CLI de sauvegarde.
+
+[WARNING]
+====
+*Restaurer à partir d'une sauvegarde supprimera ou écrasera les données existantes. Cette opération ne peut pas être annulée.*
+
+Vérifiez toujours le nom de la sauvegarde et l'espace de noms avant de confirmer une opération de restauration.
+
+*Impact sur le flux de travail GitOps*
+Cet outil de sauvegarde modifie directement les ressources K8s dans votre cluster :
+
+- Met les StatefulSets/Déploiements à 0 réplicas
+- Ajoute des annotations pour le suivi de la restauration
+
+Ces changements entreront en conflit avec votre flux de travail GitOps car ils contournent la réconciliation basée sur Git. Les contrôleurs GitOps peuvent tenter de revenir sur ces changements lors des opérations de sauvegarde.
+*Important :* La réconciliation automatique pour le déploiement Helm SUSE Observability doit être désactivée lors de la restauration de la sauvegarde pour éviter les conflits.
+====
+
+[NOTE]
+====
+*Avant d'utiliser la CLI, assurez-vous que :*
+
+* Vous utilisez la dernière version de la CLI de sauvegarde.
+* La CLI attend un kubeconfig avec un contexte actuel vers le cluster où SUSE Observability est installé.
+====
+
+== Télécharger la CLI de sauvegarde
+
+Téléchargez la dernière version de la CLI de sauvegarde en utilisant les commandes ci-dessous pour votre plateforme. Le binaire s'appelle `sts-backup`.
+
+[tabs]
+====
+macOS (Apple Silicon)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-arm64.tar.gz
+----
+
+--
+macOS (Intel)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.darwin-x86_64.tar.gz
+----
+
+--
+Linux (ARM64)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-arm64.tar.gz
+----
+
+--
+Linux (x86_64)::
++
+--
+
+[,bash]
+----
+VERSION=$(curl -sL https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+curl -LO "https://github.com/StackVista/stackstate-backup-cli/releases/download/${VERSION}/stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz"
+tar -xzf stackstate-backup-cli-${VERSION#v}.linux-x86_64.tar.gz
+----
+
+--
+Windows (x86_64)::
++
+--
+
+[,powershell]
+----
+$VERSION = (Invoke-RestMethod -Uri "https://api.github.com/repos/StackVista/stackstate-backup-cli/releases/latest").tag_name
+Invoke-WebRequest -Uri "https://github.com/StackVista/stackstate-backup-cli/releases/download/$VERSION/stackstate-backup-cli-$($VERSION.TrimStart('v')).windows-x86_64.zip" -OutFile "stackstate-backup-cli.zip"
+Expand-Archive -Path "stackstate-backup-cli.zip" -DestinationPath "."
+----
+
+--
+====
+
+[TIP]
+====
+Pour plus de commodité, copiez le binaire `sts-backup` dans un répertoire de votre `$PATH` (par exemple, `/usr/local/bin` sur Linux/macOS) afin de pouvoir l'exécuter de n'importe où sans spécifier le chemin complet.
+====
+
+== Données de configuration et de topologie (StackGraph)
+
+=== Lister les sauvegardes StackGraph
+
+Pour lister les sauvegardes StackGraph, exécutez la commande suivante :
+
+[,bash]
+----
+sts-backup stackgraph list --namespace <NAMESPACE>
+----
+
+Remplacez `<NAMESPACE>` par l'espace de noms où {stackstate-product-name} est installé.
+
+Le résultat doit se présenter comme suit :
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Stackgraph backups in bucket 'sts-stackgraph-backup'...
+NAME                            LAST MODIFIED            SIZE
+sts-backup-20251128-0300.graph  2025-11-28 03:08:42 UTC  2GiB
+----
+
+L'horodatage lorsque la sauvegarde est effectuée fait partie du nom de la sauvegarde.
+
+
+=== Restaurer une sauvegarde StackGraph
+
+Pour restaurer une sauvegarde StackGraph, utilisez l'une des approches suivantes :
+
+==== Restaurer une sauvegarde spécifique
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== Restaurer la dernière sauvegarde
+
+[,bash]
+----
+sts-backup stackgraph restore --namespace <NAMESPACE> --latest
+----
+
+==== Options courantes
+
+* `--yes` ou `-y` - Ignorer l'invite de confirmation (utile pour l'automatisation)
+* `--background` - Exécuter la restauration en arrière-plan sans attendre la fin
+
+==== Restauration en arrière-plan
+
+Lors de l'utilisation de `--background`, la restauration s'exécute de manière asynchrone. Après avoir démarré la restauration, utilisez la commande suivante pour vérifier l'état et finaliser :
+
+[,bash]
+----
+sts-backup stackgraph check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+La commande `check-and-finalize` :
+
+* Vérifie l'état du travail de restauration
+* Avec le drapeau `--wait`, attend la fin du travail
+* Augmente automatiquement les déploiements qui ont été réduits pendant la restauration
+* Nettoie les ressources après l'achèvement
+
+[NOTE]
+====
+Si une restauration s'exécutant sans `--background` est interrompue (par exemple, par Ctrl+C), vous devez exécuter `check-and-finalize` pour augmenter les déploiements et nettoyer les ressources.
+====
+
+== Paramètres
+
+Les sauvegardes des paramètres incluent les StackPacks installés avec leur configuration et d'autres personnalisations créées par l'utilisateur, telles que des moniteurs, des vues personnalisées et des jetons de service. Les sauvegardes des paramètres sont légères (généralement seulement quelques mégaoctets) et rapides à restaurer avec un temps d'arrêt minimal.
+
+=== Lister les sauvegardes des paramètres
+
+Pour lister les sauvegardes des paramètres, exécutez la commande suivante :
+
+[,bash]
+----
+sts-backup settings list --namespace <NAMESPACE>
+----
+
+Remplacez `<NAMESPACE>` par l'espace de noms où SUSE Observability est installé.
+
+Le résultat doit se présenter comme suit :
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Settings backups in bucket 'sts-configuration-backup'...
+NAME                          LAST MODIFIED            SIZE
+sts-backup-20251128-1328.sty  2025-11-28 13:29:12 UTC  2MiB
+----
+
+L'horodatage lorsque la sauvegarde a été effectuée fait partie du nom de la sauvegarde.
+
+=== Restaurer une sauvegarde des paramètres
+
+[CAUTION]
+====
+La restauration d'une sauvegarde des paramètres supprimera également toute la topologie, y compris les états de santé, les alertes et l'historique de la topologie.
+====
+
+Pour restaurer une sauvegarde des paramètres, utilisez l'une des approches suivantes :
+
+==== Restaurer une sauvegarde spécifique
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== Restaurer la dernière sauvegarde
+
+[,bash]
+----
+sts-backup settings restore --namespace <NAMESPACE> --latest
+----
+
+==== Options courantes
+
+* `--yes` ou `-y` - Ignorer l'invite de confirmation (utile pour l'automatisation)
+* `--background` - Exécuter la restauration en arrière-plan sans attendre la fin
+
+==== Restauration en arrière-plan
+
+Lors de l'utilisation de `--background`, la restauration s'exécute de manière asynchrone. Après avoir démarré la restauration, utilisez la commande suivante pour vérifier l'état et finaliser :
+
+[,bash]
+----
+sts-backup settings check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+La commande `check-and-finalize` :
+
+* Vérifie l'état du travail de restauration
+* Avec le drapeau `--wait`, attend la fin du travail
+* Augmente automatiquement les déploiements qui ont été réduits pendant la restauration
+* Nettoie les ressources après l'achèvement
+
+[NOTE]
+====
+Si une restauration s'exécutant sans `--background` est interrompue (par exemple, par Ctrl+C), vous devez exécuter `check-and-finalize` pour augmenter les déploiements et nettoyer les ressources.
+====
+
+== Métriques (Victoria Metrics)
+
+Selon le profil, `nonha` ou `ha`, Victoria Metrics est déployé en différents modes :
+
+* *profil nonha* - Mode à nœud unique avec une instance de Victoria Metrics (`victoria-metrics-0`)
+* *profil ha* - Mode HA (miroir) avec deux instances de Victoria Metrics (`victoria-metrics-0` et `victoria-metrics-1`)
+
+=== Lister les sauvegardes de Victoria Metrics
+
+Pour lister les sauvegardes de Victoria Metrics, exécutez la commande suivante :
+
+[,bash]
+----
+sts-backup victoria-metrics list --namespace <NAMESPACE>
+----
+
+Remplacez `<NAMESPACE>` par l'espace de noms où SUSE Observability est installé.
+
+==== Sortie en mode mono-nœud (profil nonha)
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:05 UTC
+----
+
+==== Sortie en mode HA (profil ha)
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing VictoriaMetrics backups in bucket ...
+NAME ({bucket}/{instance}-{created})                           UPDATED
+sts-victoria-metrics-backup/victoria-metrics-1-20251030152500  2025-11-28 09:35:08 UTC
+sts-victoria-metrics-backup/victoria-metrics-0-20251030152500  2025-11-28 09:25:04 UTC
+
+NOTE: In HA mode, backups from both instances (victoria-metrics-0 and victoria-metrics-1) are listed.
+      The restore command accepts either backup to restore both instances.
+----
+
+En mode HA, des sauvegardes sont créées pour les deux instances avec des préfixes différents (`victoria-metrics-0` et `victoria-metrics-1`). Lors de la restauration, vous pouvez spécifier l'une ou l'autre sauvegarde - l'opération de restauration restaurera la sauvegarde sélectionnée sur les deux instances.
+
+=== Restaurer une sauvegarde de Victoria Metrics
+
+[NOTE]
+====
+Toutes les nouvelles métriques seront mises en cache par `vmagent` pendant le processus de restauration. Assurez-vous que le `vmagent` dispose de suffisamment de mémoire pour mettre en cache les métriques.
+====
+
+Pour restaurer une sauvegarde de Victoria Metrics, utilisez l'une des approches suivantes :
+
+==== Restaurer une sauvegarde spécifique
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== Restaurer la dernière sauvegarde
+
+[,bash]
+----
+sts-backup victoria-metrics restore --namespace <NAMESPACE> --latest
+----
+
+==== Options courantes
+
+* `--yes` ou `-y` - Ignorer l'invite de confirmation (utile pour l'automatisation)
+* `--background` - Exécuter la restauration en arrière-plan sans attendre la fin
+
+==== Restauration en arrière-plan
+
+Lors de l'utilisation de `--background`, la restauration s'exécute de manière asynchrone. Après avoir démarré la restauration, utilisez la commande suivante pour vérifier l'état et finaliser :
+
+[,bash]
+----
+sts-backup victoria-metrics check-and-finalize --job <JOB_NAME> --wait --namespace <NAMESPACE>
+----
+
+La commande `check-and-finalize` :
+
+* Vérifie l'état du travail de restauration
+* Avec le drapeau `--wait`, attend la fin du travail
+* Augmente automatiquement les StatefulSets qui ont été réduits pendant la restauration
+* Nettoie les ressources après l'achèvement
+
+[NOTE]
+====
+Si une restauration s'exécutant sans `--background` est interrompue (par exemple, par Ctrl+C), vous devez exécuter `check-and-finalize` pour augmenter les StatefulSets et nettoyer les ressources
+====
+
+== OpenTelemetry (ClickHouse)
+
+=== Lister les sauvegardes de ClickHouse
+
+Pour lister les sauvegardes de ClickHouse, exécutez la commande suivante :
+
+[,bash]
+----
+sts-backup clickhouse list --namespace <NAMESPACE>
+----
+
+Remplacez `<NAMESPACE>` par l'espace de noms où SUSE Observability est installé.
+
+Le résultat doit se présenter comme suit :
+
+[,bash]
+----
+Setting up port-forward to suse-observability-clickhouse-backup:7171 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Clickhouse backups...
+NAME                             CREATED              SIZE
+incremental_2025-11-28T09-45-00  2025-11-28 09:45:03  65MiB
+incremental_2025-11-28T08-45-00  2025-11-28 08:45:03  223MiB
+full_2025-11-28T00-45-00         2025-11-28 00:45:03  3GiB
+incremental_2025-11-27T23-45-00  2025-11-27 23:45:03  118MiB
+----
+
+Les noms de sauvegarde commençant par `full_` sont des sauvegardes complètes, tandis que les noms commençant par `incremental_` sont des sauvegardes incrémentielles.
+
+=== Restaurer une sauvegarde de ClickHouse
+
+[NOTE]
+====
+Le processus de restauration réduit automatiquement les charges de travail qui produisent des données (comme les exportateurs OpenTelemetry) pour éviter toute perte de données pendant la restauration.
+====
+
+Pour restaurer une sauvegarde de ClickHouse, utilisez l'une des approches suivantes :
+
+==== Restaurer une sauvegarde spécifique
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --snapshot <BACKUP_NAME>
+----
+
+==== Restaurer la dernière sauvegarde
+
+[,bash]
+----
+sts-backup clickhouse restore --namespace <NAMESPACE> --latest
+----
+
+==== Options courantes
+
+* `--yes` ou `-y` - Ignorer l'invite de confirmation (utile pour l'automatisation)
+* `--background` - Exécuter la restauration en arrière-plan sans attendre la fin
+
+==== Restauration en arrière-plan
+
+Lors de l'utilisation de `--background`, la restauration s'exécute de manière asynchrone. Après avoir démarré la restauration, utilisez la commande suivante pour vérifier l'état et finaliser :
+
+[,bash]
+----
+sts-backup clickhouse check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+La commande `check-and-finalize` :
+
+* Vérifie l'état de l'opération de restauration
+* Avec le drapeau `--wait`, attend la fin de l'opération
+* Exécute des commandes SQL post-restauration
+* Augmente automatiquement les StatefulSets qui ont été réduits pendant la restauration
+* Nettoie les ressources après l'achèvement
+
+[NOTE]
+====
+Si une restauration sans le drapeau `--background` est interrompue (par exemple, par Ctrl+C), vous devez exécuter `check-and-finalize` avec l'ID de l'opération pour augmenter les StatefulSets et nettoyer les ressources.
+====
+
+== Données de télémétrie (Elasticsearch)
+
+=== Lister les instantanés Elasticsearch
+
+Pour lister les instantanés Elasticsearch, exécutez la commande suivante :
+
+[,bash]
+----
+sts-backup elasticsearch list --namespace <NAMESPACE>
+----
+
+Remplacez `<NAMESPACE>` par l'espace de noms où SUSE Observability est installé.
+
+Le résultat doit se présenter comme suit :
+
+[,bash]
+----
+Setting up port-forward to suse-observability-elasticsearch-master-headless:9200 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Fetching snapshots from repository 'sts-backup'...
+SNAPSHOT                                         STATE    START TIME                DURATION (ms)  FAILURES
+sts-backup-20251128-1135-dpkj2dqrszo6cscpgfhrhg  SUCCESS  2025-11-28T11:35:10.967Z  329158         0
+----
+
+L'horodatage lorsque l'instantané a été pris fait partie du nom de l'instantané.
+
+=== Restaurer un instantané Elasticsearch
+
+[NOTE]
+====
+Le traitement de restauration supprime automatiquement tous les indices STS (correspondant au modèle `sts*`) avant de restaurer l'instantané. Cela inclut le passage des flux de données pour garantir une restauration propre.
+====
+
+Pour restaurer un instantané Elasticsearch, utilisez l'une des approches suivantes :
+
+==== Restaurer un instantané spécifique
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --snapshot <SNAPSHOT_NAME>
+----
+
+==== Restaurer le dernier instantané
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NAMESPACE> --latest
+----
+
+==== Options courantes
+
+* `--yes` ou `-y` - Ignorer l'invite de confirmation (utile pour l'automatisation)
+* `--background` - Exécuter la restauration en arrière-plan sans attendre la fin
+
+==== Restauration en arrière-plan
+
+Lors de l'utilisation de `--background`, la restauration s'exécute de manière asynchrone. Après avoir démarré la restauration, utilisez la commande suivante pour vérifier l'état et finaliser :
+
+[,bash]
+----
+sts-backup elasticsearch check-and-finalize --operation-id <OPERATION_ID> --wait --namespace <NAMESPACE>
+----
+
+La commande `check-and-finalize` :
+
+* Vérifie l'état de l'opération de restauration
+* Avec l'option `--wait`, attend la fin de l'opération.
+* Augmente automatiquement les déploiements qui ont été réduits pendant la restauration.
+* Nettoie les ressources après l'achèvement
+
+[NOTE]
+====
+Si une restauration sans l'option `--background` est interrompue (par exemple, par Ctrl+C), vous devez exécuter `check-and-finalize` avec l'ID de l'opération (nom de l'instantané) pour augmenter les déploiements et nettoyer les ressources.
+====

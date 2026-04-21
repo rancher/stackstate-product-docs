@@ -1,0 +1,41 @@
+= Solucionar problemas de autenticación y autorización
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+Cuando la autenticación o autorización falla, suele deberse a un desajuste en la configuración del proveedor y SUSE Observability. Para facilitar la resolución de problemas, es posible habilitar el registro de borrado en SUSE Observability específicamente para la autenticación y autorización.
+
+[CAUTION]
+====
+Desactiva el registro de borrado tan pronto como termines con la resolución de problemas, porque es muy probable que el registro de borrado contenga secretos y/o información personal.
+====
+
+
+Para habilitar el registro de borrado, copia y pega el siguiente fragmento de yaml en un archivo `debug-auth.yaml`.
+
+[,yaml]
+----
+stackstate:
+  components:
+    server:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+    api:
+      additionalLogging: |
+        <logger name="org.pac4j.core.engine" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.profile.creator" level="DEBUG"/>
+        <logger name="org.pac4j.oidc.credentials.authenticator" level="DEBUG"/>
+----
+
+Ahora ejecuta el comando `helm upgrade` que usaste antes, pero incluye este archivo yaml adicional (así que `helm upgrade .... --values debug-auth.yaml`) para habilitar el registro de borrado. No se reiniciarán pods, los cambios en la configuración del registro se cargarán automáticamente después de unos 30 segundos.
+
+Para desactivar el registro de borrado, ejecuta el comando `helm upgrade ....` de nuevo, pero omite el `--values debug-auth.yaml`. Después de 30 segundos, se carga la configuración actualizada del registro y el registro de borrado termina.
+
+
+== Resolución de problemas con permisos
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Inspecciona los sujetos de usuario] (usuario y roles) y verifica la configuración dependiendo del modelo de autenticación que se esté utilizando.
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[Inspecciona un permiso de sujeto] y verifica la configuración dependiendo del modelo de autorización que se esté utilizando.

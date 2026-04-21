@@ -1,0 +1,91 @@
+= OpenMetrics
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Visão Geral
+
+O SUSE Observability Agent V2 pode ser configurado para recuperar métricas de um endpoint OpenMetrics e enviá-las para o SUSE Observability.
+
+== Configuração
+
+=== Instalação
+
+A verificação OpenMetrics está incluída no [Agent V2 StackPack].
+
+=== Configuração
+
+Para habilitar a integração OpenMetrics e começar a coletar dados de métricas de um endpoint OpenMetrics, a verificação OpenMetrics deve ser configurada no SUSE Observability Agent V2. A configuração da verificação fornece todos os detalhes necessários para o Agente se conectar ao seu endpoint OpenMetrics e recuperar as métricas disponíveis.
+
+[tabs]
+====
+Kubernetes, OpenShift::
++
+--
+
+. Implante o Agente em seu cluster Kubernetes ou OpenShift.
+. Adicione as anotações abaixo ao lançar um pod que expõe métricas via um endpoint OpenMetrics. Adicione o seguinte:
+ ** **+++<CONTAINER_NAME>+++** - o nome do contêiner que expõe o OpenMetrics. É possível processar múltiplos endpoints em um único pod (é por isso que há uma lista no JSON).+++</CONTAINER_NAME>+++
+ ** *prometheus_url* - o caminho (geralmente apenas `metrics`) e a porta na qual o endpoint OpenMetrics é exposto.
+ ** *namespace* - todas as métricas coletadas aqui receberão isso como um prefixo separado por pontos.
+ ** *metrics* - use `["*"]` para coletar todas as métricas disponíveis. Também é possível especificar uma lista de métricas a serem buscadas. Isso deve ser uma string representando o nome da métrica ou um mapeamento para renomear a métrica``<EXPOSED_METRIC>:<SENT_METRIC>``
++
+[,yaml]
+----
+ ...
+ metadata:
+   annotations:
+     ad.stackstate.com/<CONTAINER_NAME>.check_names: '["openmetrics"]'
+     ad.stackstate.com/<CONTAINER_NAME>.init_configs: '[{}]'
+     ad.stackstate.com/<CONTAINER_NAME>.instances: |
+       [
+         {
+           "prometheus_url": "http://%%host%%:<METRICS_PORT>/<METRICS_PATH>",
+           "namespace": "<METRICS_NAMESPACE>",
+           "metrics": ["*"]
+         }
+       ]
+ ...
+ # This already exists in the pod spec, the container name needs to match the container that is exposing the openmetrics endpoint
+ spec:
+   containers:
+    - name: <CONTAINER_NAME>
+ ...
+----
+. Você também pode adicionar configurações e filtros opcionais:
+ ** *prometheus_metrics_prefix* - prefixo a ser adicionado às métricas OpenMetrics expostas.
+ ** *health_service_check* - envie uma verificação de serviço `<NAMESPACE>.prometheus.health` relatando a saúde do endpoint OpenMetrics. Padrão `true`.
+ ** *label_to_hostname* - substitua o nome do host pelo valor de um rótulo.
+ ** *label_joins* - selecione uma métrica e recupere seu rótulo por meio de um mapeamento 1:1.
+ ** *labels_mapper* - renomear rótulos. O formato é `<LABEL_TO_RENAME>: <NEW_LABEL_NAME>`.
+ ** *type_overrides* - substitua um tipo no payload do OpenMetrics ou defina o tipo para uma métrica não tipada (essas seriam ignoradas por padrão). Os `<METRIC_TYPE>` suportados são `gauge`, `count` e `rate`. O formato é `<METRIC_NAME>: <METRIC_TYPE>`.
+ ** *tags* - lista de tags para anexar a cada métrica, evento e verificação de serviço emitidos por esta integração.
+ ** *send_histograms_buckets* - enviar o bucket de histogramas. Padrão `true`.
+ ** *send_monotonic_counter* - defina como `true` para converter contadores em uma taxa (note que duas execuções são necessárias para produzir o primeiro resultado). Defina como `false` para enviar contadores como um contador monotônico. Padrão `true`.
+ ** *exclude_labels* - lista de rótulos a serem excluídos.
+ ** *prometheus_timeout* - defina um tempo limite para a consulta OpenMetrics.
+ ** *ssl_cert* - Se seu endpoint OpenMetrics estiver seguro, insira o caminho para o certificado e especifique a chave privada no parâmetro `ssl_private_key`, ou forneça o caminho para um arquivo contendo tanto o certificado quanto a chave privada.
+ ** *ssl_private_key* - necessário se o certificado vinculado em `ssl_cert` não incluir a chave privada. Observe que a chave privada do seu certificado local deve estar não criptografada.
+ ** *ssl_ca_cert* - o caminho para a CA confiável usada para gerar certificados personalizados.
+ ** *extra_headers* - um dicionário mapeando nomes de cabeçalhos HTTP para seus valores correspondentes a serem enviados em consultas para o endpoint OpenMetrics. Os valores podem incluir dinamicamente variáveis de ambiente usando a sintaxe `%%env_VARIABLE%%`. Por exemplo, `"Authorization: Bearer %%env_TOKEN%%"` substitui automaticamente o valor da variável de ambiente `TOKEN`.
+. Aguarde o Agente coletar dados do endpoint OpenMetrics e enviá-los para o SUSE Observability.
+
+--
+====
+
+== Dados coletados
+
+=== Métricas
+
+Por padrão, todas as métricas são recuperadas do endpoint OpenMetrics especificado. Para otimizar o desempenho, um máximo de 2000 métricas serão recuperadas. Se a verificação estiver tentando recuperar mais de 2000 métricas, adicione um filtro `metrics` à <<_configuration,configuração>> para garantir que todas as métricas importantes possam ser recuperadas dentro do limite.
+
+As métricas recuperadas não serão mapeadas automaticamente para elementos de topologia, mas podem ser navegadas usando o xref:/use/metrics/k8sTs-explore-metrics.adoc[inspector de telemetria] e eventualmente xref:/use/metrics/k8s-add-charts.adoc[adicionadas a componentes via um vínculo de métrica].
+
+=== Eventos
+
+A integração OpenMetrics não recupera nenhum dado de eventos.
+
+=== Traços
+
+A integração OpenMetrics não recupera dados de traços.

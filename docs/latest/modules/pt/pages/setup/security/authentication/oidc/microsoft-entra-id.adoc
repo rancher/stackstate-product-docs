@@ -1,0 +1,60 @@
+= Microsoft Entra ID
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Auto-hospedado
+:experimental:
+
+== Criando um aplicativo no Entra ID
+
+. Registre um aplicativo no Entra ID seguindo https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app?tabs=client-secret[este guia]
+ .. Como nome de exibição, você pode usar, por exemplo, `SUSE Observability`
+ .. Selecione a plataforma `Web` e especifique a URL de redirecionamento: `https://<your-stackstate-installation>/loginCallback?client_name=StsOidcClient`
+ .. Ao adicionar credenciais, use as credenciais `client secret` e certifique-se de armazenar o segredo
+. As outras seções na seção `Prepare for development` não são obrigatórias, mas para uma instalação em produção, você deve segui-las para definir um proprietário e possivelmente pré-aprovar certos escopos (veja a próxima seção para os escopos que SUSE Observability solicitará)
+. Por fim, certifique-se de que SUSE Observability receberá os grupos de um usuário (necessário para autorização) adicionando a reivindicação de grupos ao registro do aplicativo usando https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims?tabs=appui#_configure_groups_optional_claims[este guia]. Selecione quais tipos de grupos você deseja expor, o restante deste documento assume que você não personalizou as propriedades do token e SUSE Observability recebe o ID do grupo.
+
+== Configurando SUSE Observability
+
+Usando as informações do registro do aplicativo, crie um novo arquivo `authentication.yaml` para SUSE Observability:
+
+----
+stackstate:
+  authentication:
+    oidc:
+      # The client id is in the list of essentials on the overview page of the App registration
+      clientId: "<Application (client) ID>"
+      secret: "<Application (client) secret>"
+      # The Directory (Tenant) ID is in the list of essentials on the overview page of the App registration
+      discoveryUri: "https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0/.well-known/openid-configuration"
+      jwsAlgorithm: RS256
+      scope: ["openid", "email", "profile", "offline_access"]
+      jwtClaims:
+        usernameField: "email"
+        groupsField: groups
+    roles:
+      guest: []
+      powerUser: []
+      admin: [ "aaaaaaaa-bbbb-1111-2222-aabbccddeeff", "eeeeeeeeee-bbbb-1111-2222-aabbccddeeff" ]
+      k8sTroubleshooter: []
+----
+
+Obtenha os valores para:
+
+* ID do aplicativo (cliente): na seção Essenciais na página de Visão Geral do registro do aplicativo
+* Segredo do aplicativo (cliente): criado na etapa 1 da seção anterior e salvo em algum lugar
+* ID do diretório (inquilino): na seção Essenciais na página de Visão Geral do registro do aplicativo
+* Os IDs dos grupos para os diferentes papéis: no Entra ID admin, navegue até menu:Identidade[Todos os Grupos]. Os IDs dos grupos estão na segunda coluna rotulada como `Object Id`. Decida quais grupos do Entra ID devem ter qual nível de permissões e atribua-os aos seus respectivos papéis no exemplo yaml acima (removendo os 2 IDs de grupo de exemplo).
+
+Agora, reimplante o SUSE Observability com o comando helm utilizado para instalar, mas agora inclua o novo arquivo `authentication.yaml`, `helm upgrade ... --values authentication.yaml`. Certifique-se de sempre incluir este arquivo agora ao atualizar.
+
+=== Escopos utilizados
+
+SUSE Observability está configurado para solicitar 4 escopos:
+
+* openid, para autenticação
+* email, para identificar usuários
+* profile, para poder solicitar o arquivo de controle do usuário que contém os grupos dos usuários
+* offline_access, para poder manter um usuário logado por mais tempo sem reautenticação e permitir que o usuário use os tokens da API do SUSE Observability.
+
+Para mais detalhes, veja https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-permissions-and-consent[Permissões e consentimento na plataforma de identidade da Microsoft (learn.microsoft.com)].

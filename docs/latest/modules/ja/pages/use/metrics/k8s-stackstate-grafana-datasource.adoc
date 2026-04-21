@@ -1,0 +1,86 @@
+= SUSE ObservabilityをGrafanaのデータソースとして使用する
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE ObservabilityをGrafanaのデータソースとして利用してください
+
+SUSE ObservabilityはGrafanaのデータソースとして使用できます。これにより、SUSE Observabilityのデータを可視化するためのツールとしてGrafanaを使用できるようになります。これは、既存のダッシュボードを引き続き利用する場合に便利です。SUSE ObservabilityはPrometheus互換のAPIを公開しているため、Grafanaでhttps://grafana.com/docs/grafana/latest/datasources/prometheus[Prometheusデータソース]を使用してSUSE Observabilityに接続できます。これにより、SUSE Observabilityは他のPrometheus互換のソリューションでも使用可能になります。
+
+== 前提条件
+
+SUSE ObservabilityをGrafanaのデータソースとして追加する前に、SUSE Observabilityと認証するためのServiceTokenをセットアップする必要があります。SUSE Observabilityでは、この目的のために専用のロールを作成し、適切な権限を割り当てることを推奨しています。
+
+これをSUSE Observability CLIを介して行うことができます：
+
+[,sh]
+----
+> sts rbac create-subject --subject grafana
+✅ Created subject 'grafana'
+> sts rbac grant --subject grafana --permission get-metrics
+✅ Granted permission 'get-metrics' on 'system' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | system
+----
+
+これにより、SUSE Observability内に`grafana`という新しい役割が作成され、`get-metrics`の権限が付与されます。この役割のためにサービストークンを作成できます：
+
+[,sh]
+----
+> sts service-token create --name grafana --roles grafana
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+xref:/setup/security/authentication/service_tokens.adoc[ServiceTokensの管理について学ぶ]。
+
+返されたServiceTokenは、SUSE Observabilityとの認証に使用できます。これで、SUSE ObservabilityをGrafanaのデータソースとして追加できます。
+
+== Grafanaで新しいSUSE Observabilityデータソースを作成する
+
+作成したServiceTokenを使用して、SUSE ObservabilityをGrafanaのデータソースとして追加できます。これを行うには、GrafanaのUIに移動し、データソース設定ページに移動します。`Add data source`ボタンをクリックし、データソースのリストから`Prometheus`を選択します。
+
+image::k8s/k8s-grafana-new-datasource.png[Grafanaの新しいデータソース]
+
+データソース設定ページで、次の設定詳細を入力してください：
+
+* *名前*:SUSE Observability
+* *URL*: `https://<tenant-name>.app.stackstate.io/prometheus`
+* *カスタムHTTPヘッダー*
+ ** *ヘッダ*: `X-API-Key`
+ ** *値*: `<service-token>`
+
+image::k8s/k8s-grafana-datasource.png[Grafanaデータソース設定]
+
+データソースを保存するには、`Save & Test`ボタンをクリックしてください。設定が正しければ、緑色の`Data source is working`メッセージが表示されるはずです。
+
+== メトリクスへのアクセスを制限する
+
+xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC]を使用する場合、クラスターまたはネームスペースレベルでメトリクスへのアクセスを付与することが可能です。
+
+クラスターからすべてのメトリクスへのアクセスを付与するには：
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:YOUR_CLUSTER:__any__
+✅ Granted permission 'get-metrics' on 'k8s:YOUR_CLUSTER:__any__' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----
+
+ネームスペースからすべてのメトリクスへのアクセスを付与するには：
+[,sh]
+----
+> sts rbac grant --subject grafana --permission get-metrics --resource k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+✅ Granted permission 'get-metrics' on 'k8s:OTHER_CLUSTER:SINGLE_NAMESPACE' to subject 'grafana'
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:SINGLE_NAMESPACE
+----
+
+対象に付与されたすべての権限を確認する：
+[,sh]
+----
+> sts rbac describe-permissions --subject grafana
+Got subject from the following subject sources: Observability
+
+PERMISSION  | RESOURCE
+get-metrics | k8s:OTHER_CLUSTER:YOUR_NAMESPACE
+get-metrics | k8s:YOUR_CLUSTER:__any__
+----

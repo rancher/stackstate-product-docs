@@ -1,0 +1,74 @@
+= La prise en charge du protocole Open Telemetry par SUSE Observability
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observability prend en charge 2 versions du protocole OTLP, la version `grpc` (également appelée OTLP) et `http/protobuf` (également appelée OTLP sur HTTP). Dans la configuration du collecteur, vous pouvez choisir quel exportateur utiliser, mais assurez-vous de configurer l'URL correcte pour SUSE Observability. La version `grpc` du protocole est préférée, elle permet des charges utiles plus importantes et un débit plus élevé. Mais en cas de mauvaise prise en charge de `grpc` dans votre infrastructure, vous pouvez passer à la version HTTP. Voir aussi xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[dépannage]
+
+== SUSE Cloud Observability
+
+Les points de terminaison pour SUSE Cloud Observability sont :
+
+* OTLP : `otlp-<your-suse-observability>.app.stackstate.io:443` (sans le schéma d'URL)
+* OTLP sur HTTP : `https://otlp-http-<your-suse-observability>.app.stackstate.io` (avec le schéma d'URL : `https`)
+
+== SUSE Observability auto-hébergée
+
+Pour une installation auto-hébergée, vous devez activer l'un des points de terminaison, ou les deux, en configurant l'ingress pour SUSE Observability comme xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_rule_for_open_telemetry[décrit ici].
+
+Lorsque SUSE Observability fonctionne dans le même cluster que le collecteur, vous pouvez également l'utiliser sans ingress en utilisant les points de terminaison de service, cependant cela n'est possible qu'en utilisant le protocole HTTP :
+
+* OTLP sur HTTP : `http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4318`
+
+Assurez-vous de définir `insecure: true` dans la configuration du collecteur (voir la section suivante) pour permettre l'utilisation de points de terminaison HTTP simples au lieu de HTTPS. 
+
+Le protocole GRPC ne prend pas en charge l'envoi de credentials sur une connexion non sécurisée, par conséquent, vous ne pouvez l'utiliser qu'en combinaison avec une configuration d'ingress sécurisée.
+
+== Configuration du collecteur
+
+=== Protocole OTLP
+
+Les exemples dans la configuration du collecteur utilisent le protocole OTLP comme ceci :
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+    endpoint: <otlp-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+=== Protocole OTLP sur HTTP
+
+Pour utiliser le protocole OTLP sur HTTP, utilisez plutôt l'exportateur `otlphttp`. Mettez également à jour toutes les références d'exportateur dans vos pipelines de `otlp/suse-observability` à `otlphttp/suse-observability` ! Utilisez une fonction de recherche/remplacement pour vous assurer de changer toutes les occurrences.
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlphttp/stackstate:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp-http endpoint, for example https://otlp-http-suse-observability.my.company.com:443
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable TLS entirely:
+    #  insecure: true
+    # To disalbe certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+D'autres options de configuration sont disponibles pour contrôler précisément les exigences et le comportement de l'exportateur. Par exemple, il est également possible d'utiliser un certificat racine CA personnalisé ou d'activer les certificats clients. Consultez la documentation de l'https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlpexporter/README.md[exportateur OTLP] pour les détails.

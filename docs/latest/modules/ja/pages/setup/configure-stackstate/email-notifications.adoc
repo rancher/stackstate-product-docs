@@ -1,0 +1,49 @@
+= Eメール通知用SUSE Observabilityの設定
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+[CAUTION]
+====
+SUSE ObservabilityのSaaSユーザーは、追加の設定なしでEメール通知を使用できます。このガイドは、Eメール通知チャネルを使用する予定の自己ホスト型SUSE Observabilityインストールにのみ適用されます。
+====
+
+
+SUSE ObservabilityでEメール通知チャネルを使用する前に、まず以下の手順に従う必要があります：
+
+== SUSE ObservabilityをSMTP設定で構成する
+
+SUSE Observabilityは、SMTPサーバーに接続するための資格情報で設定する必要があります。これを行うには、SUSE Observability インストールの `values.yaml` ファイルに次の内容を追加します。
+
+[,yaml]
+----
+stackstate:
+  email:
+    enabled: true
+    sender: "<stackstate@example.com>"
+    server:
+      host: "<smtp.example.com>"
+      auth:
+        username: "<user name>"
+        password: "<user password>"
+----
+
+これは、SMTPサーバーのポート`587`を使用し、`STARTTLS`コマンドを使用して安全な接続を確立します。これらはカスタマイズ可能な他のすべてのオプションです：
+
+[,yaml]
+----
+stackstate:
+  email:
+    additionalProperties:
+      # Add needed Java email properties for your mail server (use string values), defaults are:
+      "mail.smtp.auth": "true"
+      "mail.smtp.starttls.enable": "true"
+    server:
+      protocol: smtp
+      port: 587
+----
+
+=== 外部シークレットを使用する
+
+ユーザー名とパスワードを値として提供できない場合は、外部シークレットから取得する必要があります。xref:/setup/security/external-secrets.adoc#_getting_username_and_password_for_email_sending_from_an_external_secret[これらの手順]に従ってください。

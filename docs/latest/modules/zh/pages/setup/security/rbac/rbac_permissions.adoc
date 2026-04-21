@@ -1,0 +1,283 @@
+= 权限
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+SUSE Observability 的权限允许管理员管理每个用户或用户组在 SUSE Observability 中可以执行的操作，以及在其 SUSE Observability 用户界面中显示的信息。仅会呈现与每个用户的活动角色相关的功能集。用户没有访问权限的操作、信息和页面在其 SUSE Observability 用户界面中不会显示。
+
+[NOTE]
+====
+权限存储在 StackGraph 中。这意味着：
+
+* 如果您执行带有“清除所有数据”的升级，权限设置也将被移除。
+* 要完全删除一个用户，必须手动将其从 StackGraph 中移除。
+====
+
+
+== SUSE Observability 权限
+
+SUSE Observability 中有两种类型的权限。*系统权限* 作用于用户能力，例如访问设置、查询执行和脚本编写。*范围权限* 决定对可观测性数据和某些资源类型（如 SUSE Observability 视图）的访问。 对于 SUSE Observability 视图的 CRUD 操作，这些权限可以针对特定视图或所有视图授予。有关 SUSE Observability 中每个预定义角色附加权限的详细信息，请参见 xref:/setup/security/rbac/rbac_roles.adoc#_predefined_roles[预定义角色]。
+
+在 SUSE Observability 中可用的权限如下：
+
+.权限
+[cols="2,2,5"]
+|===
+|资源 |动词 |说明
+
+|代理
+|获取
+|已连接的代理
+
+|api-tokens
+|获取
+|用于与 SUSE Observability CLI 进行身份验证的 API 密钥。 每个用户都是唯一的。
+
+|组件操作
+|execute
+|xref:/use/views/k8s-topology-perspective.adoc#_actions[拓扑视角中的组件操作]。
+
+|仪表板
+|获取、创建、更新、删除
+|xref:/use/dashboards/dashboards.adoc[仪表板]。
+
+|指标绑定
+|获取、创建、更新、删除
+ifdef::ss-ff-stackpacks2_enabled[]
+|xref:/setup/custom-integrations/metric-bindings/index.adoc[在指标视角中可视化数据的绑定]。
+endif::[]
+ifndef::ss-ff-stackpacks2_enabled[]
+|xref:/use/metrics/k8s-add-charts.adoc[在指标视角中可视化数据的绑定]。
+endif::[]
+
+|指标
+|获取^[1]^、更新
+|使用 PromQL 导入和查询指标数据
+
+|监视器
+|获取、创建、更新、删除、执行
+|xref:/use/alerting/k8s-monitors.adoc[通过监控确定组件健康状况]。
+
+|通知
+|获取、创建、更新、删除
+|xref:/use/alerting/notifications/configure.adoc[通过通知获取警报]。
+
+|permissions
+|获取、更新
+|管理主题的权限。
+
+|scoped-permissions
+|update^[1]^
+|管理范围权限，授予（或撤销）对单个集群的拓扑、指标和追踪的访问权限。
+
+|scripts
+|execute
+|在 SUSE Observability UI 分析环境中执行脚本。
+
+|受限脚本
+|execute
+|在分析环境中使用 HTTP 脚本和 Gremlin 图 API。
+
+|service-token
+|获取、创建、删除
+|xref:/setup/security/authentication/service_tokens.adoc[服务词元] 用于验证外部服务，并可用于数据摄取。
+
+|设置
+|获取、更新、解锁
+|导出或导入设置或解锁 xref:/stackpacks/about-stackpacks.adoc#_locked_configuration_items[锁定的配置项]。
+
+|堆栈包
+|获取、更新
+|列出或上传 xref:/stackpacks/about-stackpacks.adoc[堆栈包]。
+
+|stackpack-configurations
+|创建、更新、删除
+|使用 xref:/stackpacks/about-stackpacks.adoc[堆栈包] 管理集成。
+
+|sync-data
+|获取、删除
+|检查或重置拓扑和健康同步管道。
+
+|system-notifications
+|获取
+|在用户界面中访问系统通知
+
+|主题消息
+|获取
+|访问 SUSE Observability Receiver 数据。
+
+|拓扑
+|get^[1]^
+|xref:/use/views/k8s-views.adoc[探索拓扑范围视图]。
+
+|追踪
+|get^[1]^
+|xref:/use/traces/k8sTs-explore-traces.adoc[探索追踪]。
+
+|视图
+|获取^[1]^、创建、更新^[1]^、删除^[1]^
+|使用或管理xref:/use/views/k8s-custom-views.adoc[自定义视图]。
+
+|favorite-views
+|创建、删除
+|从视图中添加和去除星标。
+
+|可视化
+|update
+|更改xref:/use/views/k8s-topology-perspective.adoc#_visualization_settings[可视化设置]。
+
+|===
+^[1]^ 这是一个*范围权限*，资源名称的解释取决于上下文
+
+=== 范围权限
+
+您可以授予某些权限在系统范围内，或者可以将其限制在资源的子集。 您可以给它们一个*资源名称*，这表示范围。 此名称的解释取决于资源的类型。 请注意，范围可能仅适用于某些动词。
+
+* `views` - 视图的名称
+* `topology` - 任何组件标签。在Kubernetes环境中，这可以是，例如，`cluster-name:<cluster-name>`或`k8s-scope:<cluster-name>/<namespace>`
+* `metrics` - 在Kubernetes环境中，可以是`k8s:<cluster-name>:\\__any__`或`k8s:<cluster-name>:<namespace>`
+* `traces` - 在Kubernetes环境中，可以是`k8s.cluster.name:<cluster-name>`或`k8s.scope:<cluster-name>/<namespace>`
+* `scoped-permissions` - 管理权限的集群名称
+
+== 管理权限
+
+您可以使用 `sts` CLI 管理 SUSE Observability 权限。
+对于范围权限，可以指定资源名称。 如果未指定，则权限将在系统范围内被授予（或撤销）。
+
+[NOTE]
+====
+*重要说明:*SUSE Observability 中的所有权限都是区分大小写的。
+====
+
+
+=== 列出所有可用权限
+
+列出所有可用权限：
+
+[,text]
+----
+sts rbac list-permissions
+----
+
+=== 列出所有主题
+
+列出所有主题：
+
+[,text]
+----
+sts rbac describe-subjects
+
+SUBJECT                                    | SOURCE
+stackstate-admin                           | Static
+suse-observability-instance-admin          | Kubernetes
+suse-observability-agent-clusterA          | Observability
+----
+[NOTE]
+====
+`主题 `SOURCE` 显示谁拥有和管理该主题。它可以是我们的 RBAC 源之一（配置|静态、可观测性、Kubernetes）
+
+* 配置|静态：通过 Helm 从 SUSE Observability 配置获取的主题
+* 可观测性：通过 sts cli 管理的主题
+* Kubernetes：通过 Kubernetes RoleBindings 和 ClusterRoleBindings 从 RBAC 代理获取的主题
+====
+
+=== 列出用户的主题
+
+列出分配给上下文的所有主题，显示的第一个条目是用户名，以及用户可能拥有的角色：
+
+[,text]
+----
+sts user-session roles
+
+user-dkzwh
+keycloakoidc_group://suse-observability-instance-troubleshooter
+keycloakoidc_group://suse-observability-instance-observer
+keycloakoidc_group://suse-observability-cluster-observer
+keycloakoidc_group://suse-observability-instance-admin
+keycloakoidc_group://suse-observability-observer
+----
+
+列出分配给用户的所有主题，通过提供他们的 `api-token`（有助于管理员调试权限较少的用户）：
+
+[,text]
+----
+sts user-session roles --api-token [api-token]
+
+u-3p775e7w7l
+keycloakoidc_group://suse-observability-cluster-observer
+----
+
+=== 显示授予的权限
+
+显示授予特定用户或角色的权限。
+
+[,text]
+----
+> sts rbac describe-permissions --subject [role-name]
+Got subject from the following subject sources: Kubernetes
+
+PERMISSION   | RESOURCE
+get-topology | cluster-name:rbac-t2
+get-traces   | k8s.cluster.name:rbac-t2
+get-metrics  | k8s:rbac-t2:__any__
+----
+
+[NOTE]
+====
+`--subject` 可以是不同 RBAC 源（配置、Observability、Kubernetes）中可用的任何主题
+====
+
+=== 授予权限
+[NOTE]
+====
+`--subject` 可以是 Observability 主题，配置和 Kubernetes 主题为只读
+====
+
+==== 允许用户打开视图
+
+授予具有权限的主题打开视图：
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-views --resource [view-name]
+----
+
+==== 允许用户创建视图
+
+授予具有系统权限的主题创建视图：
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission create-views
+----
+
+==== 允许用户检查 SUSE Observability 设置
+
+授予具有系统权限的主题检查 SUSE Observability 设置：
+
+[,text]
+----
+sts rbac grant --subject [role-name] --permission get-settings
+----
+
+=== 撤销权限
+[NOTE]
+====
+`--subject` 可以是 Observability 主题，配置和 Kubernetes 主题为只读
+====
+
+撤销主题打开视图的权限：
+
+[,text]
+----
+sts rbac revoke --subject [role-name] --permission get-views --resource [view-name]
+----
+
+== 没有权限的 SUSE Observability UI
+
+以下是没有任何权限的用户的 SUSE Observability UI 的示例：
+
+image::noperm.png[没有权限]

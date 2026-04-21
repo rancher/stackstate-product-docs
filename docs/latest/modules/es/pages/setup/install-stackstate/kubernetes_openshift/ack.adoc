@@ -1,0 +1,73 @@
+= Notas de instalación del Servicio de Contenedores de Alibaba Cloud para Kubernetes (ACK)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Tamaño mínimo del volumen
+
+El Servicio de Contenedores de Alibaba Cloud para Kubernetes (ACK) impone un tamaño mínimo de volumen de *20 GiB* para las PersistentVolumeClaims (PVCs) basadas en disco. Al desplegar en ACK, las Persistent Volume Claims (pvc) deben solicitar *al menos 20Gi* de almacenamiento. No cumplir con el mínimo de 20Gi puede resultar en problemas de aprovisionamiento de volumen y fallos durante el despliegue de Helm.
+
+Proporcionamos un conjunto dedicado de valores de Helm que ajusta todos los tamaños de volumen para cumplir con este requisito. Si estáis instalando en ACK, utilizad este archivo durante la instalación:
+
+[,yaml]
+----
+# ack-values.yaml
+zookeeper:
+  persistence:
+    size: 20Gi
+hbase:
+  tephra:
+    persistence:
+      size: 20Gi
+stackstate:
+  components:
+    checks:
+      tmpToPVC:
+        volumeSize: 20Gi
+    healthSync:
+      tmpToPVC:
+        volumeSize: 20Gi
+      localpvc:
+        size: 20Gi
+    state:
+      tmpToPVC:
+        volumeSize: 20Gi
+    sync:
+      tmpToPVC:
+        volumeSize: 20Gi
+    vmagent:
+      persistence:
+        size: 20Gi
+    workloadObserver:
+      persistence:
+        size: 20Gi
+  features:
+    storeTransactionLogsToPVC:
+      volumeSize: 20Gi
+  stackpacks:
+    localpvc:
+      size: 20Gi
+    pvc:
+      size: 20Gi
+backup:
+  configuration:
+    scheduled:
+      pvc:
+        size: 20Gi
+----
+
+Por favor, cread un archivo separado para los valores específicos de ACK y utilizadlo durante la instalación. Por ejemplo, si seguís xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[la documentación de instalación de Kubernetes] y guardáis los valores anteriores en un archivo llamado `ack-values.yaml`, podréis instalar SUSE Observability con:
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+  --values ack-values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----

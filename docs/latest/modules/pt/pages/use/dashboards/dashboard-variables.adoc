@@ -1,0 +1,118 @@
+= Variáveis do painel
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-11-24
+:page-revdate: {revdate}
+:description: Use variáveis para criar painéis dinâmicos.
+
+Ao configurar variáveis para um painel, você pode criar painéis com widgets dinâmicos. As variáveis permitem a reutilização de uma única definição de painel para diferentes casos de uso. 
+
+== Visualizando variáveis do painel
+Na barra de navegação superior, use o menu suspenso ao lado do botão "Salvar..." e clique em "Editar variáveis do painel".
+
+image::dashboards/open-variables-drawer.png[Adicionando todos os itens fixados]
+
+=== Variáveis incorporadas
+Existem variáveis que são incorporadas em {stackstate-product-name}. Os nomes dessas variáveis são reservados, e não é permitido atribuir os mesmos nomes às suas próprias variáveis.
+
+Para visualizar todas as variáveis incorporadas, clique no acordeão intitulado "Variáveis PromQL do SUSE Observability".
+
+== Adicionando uma nova variável
+
+. Abra o painel "Editar variáveis do painel". 
+. Clique no botão "Adicionar variável" para abrir um segundo painel onde você pode configurar a nova variável.
+
+image::dashboards/variable-drawer-example.png[Um exemplo de variável]
+
+Os campos de configuração para uma variável são os seguintes:
+
+|===
+| Nome do campo | Descrição
+
+| Nome
+| O identificador de nome da variável. Este é o nome que você pode <<using-variables, usar em campos compatíveis>>.
+
+| Exibir etiqueta
+| Um nome amigável para a variável que é exibido no painel ao <<selecting-variables, selecionar a variável>>. Isso ajuda você a identificar a variável.
+
+| Descrição
+| Uma descrição para entender o propósito da variável. Essa descrição é exibida no painel "Editar variáveis do painel".
+
+| Tipo
+| O tipo da variável.
+|===
+
+== Tipos de variável
+=== Variável de texto
+
+Uma variável de texto contém texto simples. Você pode definir um valor inicial e tornar a variável somente leitura.
+
+=== Variável de lista
+
+Uma variável de lista tem valores possíveis que são definidos pelo campo "Fonte". Cada tipo de fonte fornece campos adicionais que permitem restringir os valores possíveis para a variável.
+
+|===
+| Tipo de fonte | Campos de fonte
+
+| Nomes de rótulos de métrica
+| Insira zero ou mais seletores de séries para refinar quais nomes de rótulos de métrica estão presentes.
+
+| Valores de rótulos de métrica
+| Insira um nome de rótulo de métrica e zero ou mais seletores de séries para refinar quais valores de rótulos de métrica estão presentes.
+
+| Metric PromQL
+| Digite uma consulta PromQL personalizada e um nome de rótulo. Os valores possíveis resultantes são os valores para o nome de rótulo fornecido.
+
+| Lista estática
+| Digite um ou mais pares de rótulo e valor para construir uma lista estática de valores possíveis.
+|===
+
+À medida que você altera o tipo de fonte e seus campos relacionados, a pré-visualização no lado direito do painel será atualizada com os novos valores possíveis.
+
+
+==== Configurações comuns de variáveis de lista
+
+Todas as fontes de variáveis de lista também têm as seguintes configurações comuns:
+
+|===
+| Nome do campo | Descrição
+
+| Classificar
+| Classifique os valores na lista. Por exemplo, alfabeticamente ou numericamente.
+
+| Permitir múltiplos valores
+| Permitir que os usuários selecionem mais de um valor por vez.
+
+| Ativar "Incluir Tudo"
+| Adiciona um item para selecionar todos os valores na lista que o usuário vê. Você pode opcionalmente especificar um valor personalizado para este item ou deixá-lo ser gerado automaticamente. 
+|===
+
+== Usando variáveis [[using-variables]]
+Uma vez que uma variável é definida, ela pode ser usada para preencher vários campos no painel:
+
+* Outras variáveis
+* Nome e descrição do widget
+* Campos de link do widget: URL, Nome e Dica
+* Campos de consulta do widget: Expressão PromQL, álias e passo mínimo
+* Editor do widget Markdown
+
+Para usar uma variável em um campo compatível, utilize o nome da variável envolto em `${}` (por exemplo, `$\{my_variable}`). O valor da variável é interpolado.
+
+=== Como as variáveis são interpoladas
+As variáveis de texto são interpoladas como a string que está escrita na caixa de texto da variável.
+
+Da mesma forma, as variáveis de lista que não permitem múltiplos valores nem "Incluir Tudo" são interpoladas como o valor do item selecionado na lista.
+
+As variáveis de lista que permitem múltiplos valores são interpoladas como um grupo de captura de expressão regular dos valores selecionados (por exemplo `(value_1|value_2)`), independentemente de uma ou várias opções serem selecionadas.
+
+As variáveis de lista que têm a opção "Incluir Tudo" habilitada e selecionada para essa variável serão interpoladas como:
+* O valor personalizado se definido, ou
+* Um grupo de captura de expressão regular gerado de todos os valores possíveis (por exemplo `(value_1|value_2|value_3)`)
+
+Você pode usar o correspondedor de expressão regular PromQL `=~` ao consumir variáveis que são interpoladas como grupos de captura de expressão regular.
+
+== Selecionando variáveis [[selecting-variables]]
+As variáveis são listadas na parte superior do painel, ao lado do seletor de intervalo de tempo. Apenas as primeiras variáveis são exibidas. Para ver o restante das variáveis, utilize o menu suspenso "Mais".
+
+Clique em uma variável para abrir seu seletor e selecionar os valores que deseja mostrar no painel.
+
+À medida que você seleciona diferentes valores, os widgets que utilizam a variável reagirão às mudanças.

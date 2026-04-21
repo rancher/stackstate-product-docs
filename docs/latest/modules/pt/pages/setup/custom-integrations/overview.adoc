@@ -1,0 +1,59 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Visão Geral das Integrações Personalizadas
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-06
+:page-revdate: {revdate}
+:description:  Visão Geral das Integrações Personalizadas
+
+[IMPORTANT]
+====
+As Integrações Personalizadas são um recurso em pré-produção, não lançado, e, portanto, podem sofrer mudanças drásticas à medida que o recurso evolui. Não é destinado ao uso em produção. Mas pode ser testado em ambientes que não são de produção.
+====
+
+== Visão Geral
+
+As integrações personalizadas utilizam o Open Telemetry para coletar e enviar dados de telemetria (métricas, rastreamentos, logs) de várias fontes para {stackstate-product-name}. Ao usar o Open Telemetry, os usuários podem instrumentar seus aplicativos e serviços para obter insights sobre desempenho, confiabilidade e saúde operacional.
+No lado de {stackstate-product-name}, o xref:setup/custom-integrations/otelmappings/README.adoc[Mapeamentos do Open Telemetry] processa os dados de telemetria recebidos, aplica as transformações necessárias e os mapeia para as entidades apropriadas dentro de {stackstate-product-name}. xref:use/alerting/k8s-add-monitors-cli.adoc[Adicionar monitores usando a CLI], xref:setup/custom-integrations/metric-bindings/index.adoc[vínculos de métricas] e xref:setup/custom-integrations/ui-presentation/README.adoc[apresentação na UI] podem ser definidos para apresentar a telemetria ingerida na UI, adicionar alertas e observabilidade. Tudo é agrupado em um xref:setup/custom-integrations/develop.adoc[stackpack] para distribuição.
+
+== Configuração de desenvolvimento
+
+As Integrações Personalizadas devem ser desenvolvidas contra uma implantação em pré-produção da plataforma {stackstate-product-name}. Para obter uma configuração em pré-produção para começar a desenvolver sua integração personalizada, existem duas opções:
+
+=== Instância SaaS (Recomendada):
+Para equipes internas da SUSE, recomendamos solicitar uma instância SaaS da equipe {stackstate-product-name}. Essas instâncias têm Integrações Personalizadas habilitadas e são atualizadas automaticamente pelo menos a cada novo lançamento, em alguns casos, receberão pré-lançamentos contendo correções de bugs importantes ou incrementos em recursos experimentais.
+Entre em contato conosco pelo canal dedicado (a ser anunciado).
+
+=== Auto-Hospedado:
+Você pode habilitar Integrações Personalizadas em sua própria instalação {stackstate-product-name} auto-hospedada definindo algumas flags de recurso ao instalar via helm:
+
+    . Gere o `custom_integrations_values.yaml`. Este guia assume que você o salva em `$VALUES_DIR`.
+
++
+.$VALUES_DIR/custom_integrations_values.yaml
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
++
+
+    . Implante o gráfico helm {stackstate-product-name} com os valores gerados mais o `.$VALUES_DIR/custom_integrations_values.yaml`.
+
++
+.helm_deploy.sh
+[,text]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
+    --values $VALUES_DIR/custom_integrations_values.yaml \
+    suse-observability \
+    suse-observability/suse-observability
+----
++
+
+endif::ss-ff-stackpacks2_enabled[]

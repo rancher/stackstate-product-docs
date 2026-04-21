@@ -1,0 +1,144 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Fehlerbehebung bei Open Telemetry-Mappings
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-11-26
+:page-revdate: {revdate}
+:description:  Fehlerbehebung bei Open Telemetry-Mappings
+
+== Übersicht
+
+Die xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI] kann verwendet werden, um die Synchronisierung einer Open Telemetry-Topologie zu überprüfen und Probleme zu beheben, die verhindern könnten, dass Topologiedaten korrekt erfasst und in {stackstate-product-name} angezeigt werden. Diese Seite beschreibt die allgemeinen Schritte zur Fehlerbehebung, die beim Debuggen eines solchen Problems zu beachten sind.
+
+== Allgemeine Schritte zur Fehlerbehebung
+
+. xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_list_open_telemetry_component_mappings[Überprüfen Sie, ob das Open Telemetry-Mapping existiert].
+** Wenn keine Mappings vorhanden sind, überprüfen Sie die Installation des Open Telemetry-Stackpacks.
+. Wenn Komponenten oder Beziehungen eines bestimmten Typs fehlen, xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc#_show_an_open_telemetry_component_or_relation_mappings_status[rufen Sie den Status des Mappings ab].
+** Überprüfen Sie die Latenzmetriken, um festzustellen, ob Daten fließen oder ob es eine Fehlkommunikation zwischen dem Open Telemetry-Collector und der Plattform gibt.
+** Beheben Sie die gemeldeten Mapping-Fehler, da diese verhindern, dass einige Topologieelemente synchronisiert werden.
+** Eine potenzielle Quelle für Mappings, die "stillschweigend" nicht wie erwartet verarbeitet werden, könnten die Bedingungen/Filter sein, die im Eingabefeld angewendet werden. Wenn beispielsweise eine Bedingung falsch ist, gibt es keinen Fehler - aber das Mapping wird "übersprungen".
+
+== Nützliche CLI-Befehle
+
+=== Liste der Open Telemetry-Komponenten-Mappings
+
+Gibt eine Liste aller aktuellen Open Telemetry-Mappings zurück.
+
+[,sh]
+----
+$ sts otel-component-mapping list
+NAME                   | IDENTIFIER
+Database               | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:database
+Function Component     | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:function
+Host Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:host
+Kubernetes Namespace   | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:namespace
+Kubernetes Pod         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:pod
+OTel Service Component | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service-instance
+OTel Service Instance  | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+Task Component         | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:task 
+----
+
+=== Liste der Open Telemetry-Beziehungs-Mappings
+
+Gibt eine Liste aller aktuellen Open Telemetry-Beziehungs-Mappings zurück.
+
+[,sh]
+----
+$ sts otel-relation-mapping list
+NAME                                               | IDENTIFIER
+Database Relation                                  | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+Executes Relation (Function)                       | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-function
+Executes Relation (Host)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-host
+Executes Relation (Task)                           | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:executes-task
+Kubernetes to OTEL Relation                        | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:kubernetes-to-otel
+OTel Async Relation (Consumer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-consumer-peer
+OTel Async Relation (Producer -> Consumer)         | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-consumer
+OTel Async Relation (Producer -> Peer)             | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:asynchronous-producer-peer
+OTel Synchronous Relation                          | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:synchronous
+OTel service instance provided-by service relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:provided-by
+----
+
+
+=== Zeigt den Status eines Open Telemetry-Komponenten- oder Beziehungs-Mappings an
+
+Der Befehl zum Status des Open Telemetry-Komponenten-Mappings gibt die aggregierte Latenz, Durchsatzmetriken und die Anzahl der erstellten Topologieelemente zurück. Dies ist hilfreich, um zu debuggen, warum ein bestimmter Teil der Topologie lange braucht, um synchronisiert zu werden. Die Ausgabe enthält einen Abschnitt `Mapping errors`, der auf Probleme hinweist, die beim Anwenden der Mapping-Regeln auf die Open Telemetry-Daten auftreten.
+
+[,sh]
+----
+$ sts otel-component-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+
+
+Otel Component Mapping:
+NAME                  | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+OTel Service Instance | urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service | 9          | 0
+
+
+Otel Component Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 44.45    | 44.45         | 41.19
+----
+
+Analog dazu gibt es einen Status für das Open Telemetry-Beziehungs-Mapping.
+[,sh]
+----
+$ sts otel-relation-mapping status --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+
+
+Otel Relation Mapping:
+NAME              | IDENTIFIER                                                           | COMPONENTS | RELATIONS
+Database Relation | urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database | 0          | 2
+
+
+Otel Relation Mapping Metrics:
+METRIC          | 500S AGO | 500-1000S AGO | 1000-1500S AGO
+latency seconds | 43.404   | 43.404        | 39.978
+
+
+Otel Relation Mapping Errors:
+No otel relation mapping errors found.
+----
+
+=== Zeigen Sie die vollständige Open Telemetry-Komponente oder das Mapping an.
+
+Um die vollständige Mapping-Definition für eine Komponente oder ein Beziehungs-Mapping schnell anzuzeigen, verwenden Sie den Befehl `get`:
+
+[,sh]
+----
+$ sts otel-component-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Output omitted for brevity
+----
+
+Oder für Beziehungs-Mappings:
+
+[,sh]
+----
+$ sts otel-relation-mapping get --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Output omitted for brevity
+----
+
+=== Bearbeiten Sie ein Open Telemetry-Komponenten- oder Beziehungs-Mapping.
+
+Wenn Sie Probleme in der Mapping-Definition bemerken, bearbeiten Sie diese direkt mit dem Befehl `edit`. Dies öffnet das Mapping in Ihrem Standard-Texteditor.
+
+[,sh]
+----
+$ sts otel-component-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-component-mapping:service
+# Opens the mapping in your default text editor
+----
+
+Oder für Beziehungs-Mappings:
+
+[,sh]
+----
+$ sts otel-relation-mapping edit --identifier urn:stackpack:open-telemetry-2:shared:otel-relation-mapping:database
+# Opens the mapping in your default text editor
+----
+
+Wenn das Mapping geändert wurde, werden die Änderungen angewendet, wenn Sie den Editor speichern und verlassen.
+
+[NOTE]
+====
+Denken Sie daran, die Mapping-Definitionen in Ihren StackPack-Quell-Dateien zu aktualisieren, um sie mit Änderungen, die über die CLI vorgenommen wurden, synchron zu halten.
+====
+
+endif::ss-ff-stackpacks2_enabled[]

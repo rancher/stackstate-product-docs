@@ -1,0 +1,80 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= メトリックバインディングのスキーマおよびリファレンス
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、`MetricBinding`のスキーマと、構造、式の構文および意味に関する詳細な説明を提供します。
+
+== メトリックバインディングのスキーマ
+
+各メトリックバインディング：
+
+* 適用可能なコンポーネントを選択します
+* データを取得するためのPromQLクエリテンプレートを定義します
+* 結果のデータがどのように表示されるべきかを指定します
+* チャートを表示するための適切な場所を選択するためのレイアウトヒントを含みます
+
+[,yaml]
+----
+_type: "MetricBinding"
+name: string
+chartType: "line"                     # "line" is the only type for now
+unit?: string
+scope: string                         # Topology scope - components to bind to
+enabled: boolean                      # default: true
+description?: string
+valuation?: "higher-is-better" | "lower-is-better"
+priority?: "HIGH" | "MEDIUM" | "LOW" | "NONE"    # deprecated
+queries:
+  - _type: "MetricBindingQuery"
+    expression: string                # promql query
+    alias: string                     # name in legend
+    componentIdentifierTemplate?: string    # URN template for linking
+    primary?: boolean                 # is this query the primary one
+tags:
+  <key>: <value>
+layout?:                              # where should chart be shown
+  metricPerspective?:                 # the metrics perspective for a component
+    tab: string
+    section: string
+    weight?: integer
+  componentHighlight?:                # highlight perspective of a component
+    section: string
+    weight?: integer
+  componentSummary?:                  # summary - supporting panel on the right
+    weight?: integer
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name}はこれがメトリックバインディングであることを知る必要があるため、値は常に`MetricBinding`である必要があります
+* `name`:メトリックバインディングの名前
+* `chartType`: {stackstate-product-name}は異なるチャートタイプ（`line`、`bar`など）をサポートしますが、現在サポートされているのは`line`のみです
+* `unit`:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を表示するために使用されます。すべての単位については、xref:/develop/reference/k8sTs-chart-units.adoc[サポートされている単位]を参照してください
+* `scope`:メトリックバインディングのトポロジースコープ、これはこのメトリックバインディングが表示されるコンポーネントを選択するトポロジークエリです
+* `enabled`:メトリックバインディングを保持するが、ユーザーに表示しないようにするには`false`に設定します
+* `description`:オプションの説明、名前の上にマウスを置いたときに表示されます
+* `valuation`:高い値または低い値が「良い」かどうか
+* `priority`: [非推奨] `HIGH`、`MEDIUM`、または`LOW`のいずれか。コンポーネント上のメトリックの主なソート順（ここで言及されている順序）、二次ソート順は`name`です。
+* `queries`:メトリックバインディングのチャートに表示するクエリのリスト（xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[PromQLクエリの作成]を参照）
+** `expression`:（テンプレート化された）PromQLクエリ
+** `alias`:凡例におけるクエリの名前
+** `componentIdentifierTemplate`:クエリの結果として得られる時系列のラベルで埋められた関連コンポーネントの識別子のテンプレート
+** `primary`:このクエリは主要なものですか
+* `tags`:ユーザーインターフェースでメトリックを整理するために使用され、`{}`を使用して空のままにすることができます
+* `layout`:異なる視点ビューでチャートをグループ化する方法、例えばxref:/use/views/k8s-metrics-perspective.adoc[メトリックの視点]で
+** `metricPerspective` - `Metrics Perspective`に表示するメトリックを定義します。メトリックはタブにグループ化され、その後セクションに分けられます。
+*** `tab` - タブ名。タブはアルファベット順にソートされます
+*** `section` - セクション名。セクションはアルファベット順にソートされます
+*** `weight` - セクション内のメトリックは主に重み（昇順）で、次に名前（アルファベット順）でソートされます
+** `componentHighlight` - `Component Highlight`に表示するメトリックを定義します。メトリックはセクションにグループ化されます。
+*** `section` - セクション名。セクションはアルファベット順にソートされます。
+*** `weight` - セクション内のメトリックは主に重み（昇順）で、次に名前（アルファベット順）でソートされます。
+** `componentSummary` - コンポーネント選択時に`Components details`サイドバーに表示するメトリックを指定します。このプロパティが定義されている場合にのみチャートが表示されます。
+*** `weight` - これはチャートの重みを表します。チャートは重みの昇順でソートされ、最初の3つのチャートが表示されます。
+* `identifier`:メトリックバインディングの一意の識別子として使用されるURN（ユニバーサルリソース識別子）。`urn:stackpack:<stackpack-name>:metric-binding:` から始めなければならず、残りはすべてのメトリックバインディングの中でユニークである限り、自由形式です。
+
+endif::ss-ff-stackpacks2_enabled[]

@@ -1,0 +1,132 @@
+= Repräsentativbefragung
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Sampling wird verwendet, um das Volumen der Daten, die an SUSE Observability exportiert werden, zu reduzieren, während die Qualität der Telemetriedaten so wenig wie möglich beeinträchtigt wird. Der Hauptgrund für die Anwendung von Sampling ist die Kostenreduzierung (für Netzwerk, Speicher usw.).
+
+Wenn Ihre Anwendungen wenig Daten generieren, ist kein Sampling erforderlich und es kann sogar den Einblick beeinträchtigen, da es an ausreichenden Telemetriedaten mangelt. Wenn Ihre Anwendung jedoch ein signifikantes Verkehrsaufkommen hat, zum Beispiel mehr als 1000 Spans pro Sekunde, kann es bereits sinnvoll sein, Sampling anzuwenden.
+
+Es gibt 2 Haupttypen von Sampling: Head Sampling und Tail Sampling.
+
+== Head Sampling
+
+Head Sampling trifft die Sampling-Entscheidung (ob die Daten exportiert werden sollen oder nicht) so früh wie möglich. Daher kann die Entscheidung nicht auf dem gesamten Trace basieren, sondern nur auf den sehr begrenzten Informationen, die verfügbar sind. Der otel Collector hat den https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor[probabilistischen Sampling-Prozessor], der das Consistent Probability Sampling implementiert. Der Sampler ist konfigurierbar und trifft eine Sampling-Entscheidung basierend auf der Trace-ID (nützlich für Traces) oder auf einem Hash eines Attributs (nützlich für Logs). Dies stellt sicher, dass alle Spans für einen Trace immer entweder gesampelt oder nicht gesampelt werden, und Sie werden vollständige Traces in SUSE Observability haben.
+
+Die Vorteile des Head Sampling sind:
+
+* Einfach zu verstehen
+* Effizient
+* Einfach zu konfigurieren
+
+Ein Nachteil ist jedoch, dass es unmöglich ist, Sampling-Entscheidungen für einen gesamten Trace zu treffen, zum Beispiel um alle fehlgeschlagenen Traces zu erfassen und nur eine kleine Auswahl der erfolgreichen Traces zu berücksichtigen.
+
+Um Head Sampling zu aktivieren, konfigurieren Sie den Prozessor und fügen Sie ihn in die Pipelines ein. Dieses Beispiel wendet Sampling an, wobei 1 von 4 Traces basierend auf der Trace-ID ausgewählt wird:
+
+[,yaml]
+----
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+----
+
+== Tail Sampling
+
+Tail Sampling verschiebt die Sampling-Entscheidung, bis ein Trace (fast) vollständig ist. Dies ermöglicht dem Tail-Sampler, Sampling-Entscheidungen basierend auf dem gesamten Trace zu treffen, zum Beispiel um immer alle fehlgeschlagenen und/oder langsamen Traces zu erfassen. Es gibt viele weitere Möglichkeiten, wie das Sampling basierend auf spezifischen Attributen oder der Teilnahme an Diensten.
+
+Der OpenTelemetry Collector bietet einen https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[Tail-Sampling-Prozessor] an, der verwendet werden kann, um Tail-Sampling-Richtlinien anzuwenden.
+
+Der Hauptvorteil des Tail-Samplings ist die zusätzliche Flexibilität, die es bei der Entscheidungsfindung über das Sampling basierend auf vollständigen Trace-Daten bietet, anstatt auf den teilweisen Informationen, die beim Erstellen einzelner Spans verfügbar sind.
+
+
+[WARNING]
+====
+Obwohl vorteilhaft, hat das Tail-Sampling die folgenden Nachteile:
+
+* Schwieriger zu konfigurieren und zu verstehen.
+* Muss zustandsbehaftet sein, um die Spans für Traces zu speichern, bis eine Sampling-Entscheidung getroffen wird.
+* Daher auch (viel) mehr Ressourcenverbrauch.
+* Der Sampler könnte nicht mithalten und benötigt zusätzliche Überwachung und Skalierung dafür.
+====
+
+Um Tail-Sampling zu aktivieren, konfigurieren Sie den Prozessor und fügen Sie ihn in die Pipelines ein.
+
+[,yaml]
+----
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+    - name: rate-limited-composite
+      type: composite
+      composite:
+        max_total_spans_per_second: 500
+        policy_order: [errors, slow-traces, rest]
+        composite_sub_policy:
+        - name: errors
+          type: status_code
+          status_code:
+            status_codes: [ ERROR ]
+        - name: slow-traces
+          type: latency
+          latency:
+            threshold_ms: 1000
+        - name: rest
+          type: always_sample
+        rate_allocation:
+        - policy: errors
+          percent: 33
+        - policy: slow-traces
+          percent: 33
+        - policy: rest
+          percent: 34
+----
+
+Das Beispiel zeigt:
+
+* Maximal 500 Spans pro Sekunde.
+* alle Spans in Traces, die Fehler aufweisen, bis zu 33% des Maximums.
+* alle Spans in Traces, die langsamer als 1 Sekunde sind, bis zu 33% des Maximums.
+* andere Spans bis zur maximal erlaubten Rate.
+
+Für weitere Details zu den Konfigurationsoptionen und verschiedenen Richtlinien verwenden Sie das https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[Tail-Sampling-Readme].
+
+Es ist jedoch nicht vollständig "einrichten und vergessen". Wenn der Ressourcenverbrauch zu steigen beginnt, müssen Sie skalieren, um mehrere Collector zu verwenden, um das Tail-Sampling zu bewältigen, was dann auch https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[Routing] erfordert, um den Verkehr basierend auf der Trace-ID zu leiten.
+
+== Sampling von Traces in Kombination mit Span-Metriken.
+
+Im Abschnitt "Erste Schritte" enthält die Collector-Konfiguration kein Sampling. Beim Hinzufügen von Sampling möchten wir darauf achten, die Metriken, die aus den Traces berechnet werden, so genau wie möglich zu halten. Insbesondere das Tail-Sampling kann zu sehr verzerrten Metriken führen, da typischerweise die relative Anzahl der Fehler viel höher ist. Um dies zu vermeiden, teilen wir die Traces-Pipeline in mehrere Teile und verbinden sie mit dem Forward-Connector. Ändern Sie die Konfiguration, um den zusätzlichen Connector und den Sampling-Prozessor einzuschließen. Und ändern Sie die Pipelines wie hier gezeigt:
+
+[,yaml]
+----
+connectors:
+  # enable the forwarder
+  forward:
+processors:
+  # Configure the probabilistic sampler to sample 25% of the traffic
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: "proportional"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [forward]
+    traces/spanmetrics:
+      receivers: [forward]
+      processors: []
+      exporters: [spanmetrics]
+    traces/sampling:
+      receivers: [forward]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, otlp/stackstate]
+    metrics:
+      receivers: [otlp, spanmetrics, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlp/stackstate]
+----
+
+Das Beispiel verwendet den probabilistischen Sampler, der so konfiguriert ist, dass 25% des Traffics gesampelt werden. Sie möchten wahrscheinlich den Prozentsatz für Ihre Situation anpassen oder stattdessen zum <<_tail_sampling,Tail-Sampler>> wechseln. Die Pipeline-Einrichtung ist die gleiche für den Tail-Sampler, ersetzen Sie einfach den Verweis auf die `probabilistic_sampler` durch `tail_sampling`.

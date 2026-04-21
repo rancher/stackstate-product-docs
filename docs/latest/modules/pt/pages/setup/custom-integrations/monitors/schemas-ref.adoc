@@ -1,0 +1,151 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Esquema e referência para monitores
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Visão Geral
+
+Esta página descreve os esquemas para um `Monitor`, juntamente com explicações detalhadas sobre construções, sintaxe de expressões e semântica.
+
+== Esquema para monitor
+
+Um monitor especifica com que frequência uma função de monitor deve ser executada e com quais argumentos.
+
+[,yaml]
+----
+_type: "Monitor"
+name: string
+description?: string
+function: string
+arguments:
+  <dependent on monitor function>
+intervalSeconds: integer
+remediationHint?: string
+status?: "ENABLED" | "DISABLED"       # defaults to "DISABLED"
+tags:
+  <key>: <value>
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name} precisa saber que isso é um monitor, então o valor sempre precisa ser `Monitor`
+* `name`: O nome do monitor
+* `description`: Uma descrição do monitor.
+* `function`: Uma referência à função de monitor que executará o monitor.
+* `intervalSeconds`: O intervalo em que o monitor é executado. Para métricas em tempo real regulares, 30 segundos é o recomendado. Para consultas de métricas analíticas de longa duração, um intervalo maior é recomendado.
+* `remediationHint`: Uma descrição do que o usuário pode fazer quando o monitor falha. O formato é markdown, com uso opcional de variáveis handlebars para personalizar a dica com base em séries temporais ou outros dados (xref:use/alerting/k8s-add-monitors-cli.adoc#_write_the_remediation_hint[mais explicação abaixo]).
+* `status`: Ou `"DISABLED"` ou `"ENABLED"`. Determina se o monitor será executado ou não.
+* `tags`: Adicione tags ao monitor para ajudar a organizá-los na visão geral dos monitores da sua instância {stackstate-product-name}, http://your-instance/#/monitors
+* `identifier`: Um identificador do formato `urn:stackpack:<stackpack-name>:monitor:....` que identifica exclusivamente o monitor ao atualizar sua configuração.
+
+== Funções de Monitor
+
+=== Limite
+
+Aciona um estado de saúde quando um determinado limite é excedido para uma consulta de métrica especificada. Limiares diferentes podem ser definidos em recursos específicos com a xref:/use/alerting/k8s-override-monitor-arguments.adoc[ajuda de anotações].
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:threshold" }}
+arguments:
+  metric:
+    query: string
+    unit: string
+    aliasTemplate: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  urnTemplate: string
+  titleTemplate: string
+----
+
+* `query`: Uma consulta PromQL. Use o xref:/use/metrics/k8sTs-explore-metrics.adoc[explorador de métricas] da sua {stackstate-product-name} instância, http://your-instance/#/metrics, e utilize-o para construir a consulta para a métrica de interesse.
+* `unit`: A unidade dos valores na série temporal retornada pela consulta ou consultas, usada para renderizar o eixo Y do gráfico. Consulte a referência de xref:/develop/reference/k8sTs-chart-units.adoc[unidades suportadas] para todas as unidades.
+* `aliasTemplate`: Um álias para séries temporais no gráfico de métricas. Este é um modelo que pode substituir rótulos da série temporal usando o `${my_label}` espaço reservado.
+* `comparator`: Escolha um dos LTE/LT/GTE/GT para comparar o limiar com a métrica. Séries temporais para as quais `<metric> <comparator> <threshold>` é verdadeiro produzirão o estado de falha.
+* `threshold`: Um limiar numérico para comparar.
+* `failureState`: Ou "CRÍTICO" ou "DESVIANTE". "CRÍTICO" aparecerá como vermelho em {stackstate-product-name} e "DESVIANTE" como laranja, para denotar diferentes severidades.
+* `urnTemplate`: Um modelo para construir o urn do componente a que um resultado do monitor será xref:use/alerting/k8s-add-monitors-cli.adoc#_bind_the_results_of_the_monitor_to_the_correct_components[vinculado a].
+* `titleTemplate`: Um título para o resultado de um monitor. Como múltiplos resultados de monitor podem se vincular ao mesmo componente, é possível substituir rótulos de séries temporais usando o `${my_label}` espaço reservado.
+
+=== Estado Derivado
+
+Deriva seu estado das dependências dos componentes cuja saúde é baseada em observações. Produz o estado mais crítico das dependências mais altas.
+Para mais detalhes, consulte a página xref:/setup/custom-integrations/monitors/derived-state-monitors.adoc[Monitores de Estado Derivado].
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:derived-state-monitor" }}
+arguments:
+  componentTypes: string
+----
+
+* `componentTypes`: Os tipos de componentes que contribuem para estados derivados.  Especificado como uma única string de `,` valores separados por vírgula
+
+=== Limite Topológico
+
+Aciona um estado de saúde quando um determinado limite é excedido para uma consulta de métrica especificada. A consulta métrica pode referenciar o nome, tags e propriedades dos componentes retornados pela consulta de topologia. Limiares diferentes podem ser definidos em recursos específicos com a xref:/use/alerting/k8s-override-monitor-arguments.adoc[ajuda de anotações].
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:common:monitor-function:topological-threshold"  }}
+arguments:
+  queries:
+    topologyQuery: string
+    promqlQuery: string
+    aliasTemplate: string
+    unit: string
+  comparator: GTE | GT | LTE | LT     # how to compare metric value to threshold
+  threshold: double
+  failureState: CRITICAL | DEVIATING | UNKNOWN
+  titleTemplate: string
+----
+
+* `queries`: As consultas a serem executadas
+** `topologyQuery`: Consulta STQL para selecionar componentes
+** `promqlQuery`: Consulta PromQL que pode usar rótulos e propriedades dos componentes para selecionar séries temporais
+** `unit`: A unidade dos valores na série temporal retornada pela consulta ou consultas, usada para renderizar o eixo Y do gráfico. Consulte a referência de xref:/develop/reference/k8sTs-chart-units.adoc[unidades suportadas] para todas as unidades.
+** `aliasTemplate`: Um álias para séries temporais no gráfico de métricas. Este é um modelo que pode substituir rótulos da série temporal usando o `${my_label}` espaço reservado.
+* `comparator`: Escolha um dos LTE/LT/GTE/GT para comparar o limiar com a métrica. Séries temporais para as quais `<metric> <comparator> <threshold>` é verdadeiro produzirão o estado de falha.
+* `threshold`: Um limiar numérico para comparar.
+* `failureState`: Ou "CRÍTICO" ou "DESVIANTE". "CRÍTICO" aparecerá como vermelho em {stackstate-product-name} e "DESVIANTE" como laranja, para denotar diferentes severidades.
+* `titleTemplate`: Um título para o resultado de um monitor. Como múltiplos resultados de monitor podem se vincular ao mesmo componente, é possível substituir rótulos de séries temporais usando o `${my_label}` espaço reservado.
+
+=== Limite Dinâmico
+
+Alertas quando o valor atual está fora do intervalo de base previsto, que é calculado dinamicamente com base em dados históricos, levando em conta padrões sazonais semanais e diários.
+Esta função de monitoramento está disponível apenas quando o pacote de detecção de anomalias autônomas está instalado.
+
+Para mais detalhes, veja a página xref:/setup/custom-integrations/monitors/dynamic-threshold-monitors.adoc[Monitores de Limite Dinâmico].
+
+[,yaml]
+----
+function: {{ get "urn:stackpack:aad-v2:shared:monitor-function:dt" }}
+arguments:
+  telemetryQuery:
+    query: string
+    unit: string
+    aliasTemplate: string
+  topologyQuery: string
+  falsePositiveRate: float
+  checkWindowMinutes: integer
+  historicWindowMinutes: integer
+  historySizeWeeks: 1 | 2 | 3 (integer)
+  includePreviousDay: boolean
+  removeTrend: boolean
+----
+
+* `telemetryQuery`: telemetria para avaliar
+** `query`: Consulta PromQL que é usada para estabelecer a linha de base e detecção de anomalias
+** `unit`: A unidade dos valores na série temporal retornada pela consulta ou consultas, usada para renderizar o eixo Y do gráfico. Consulte a referência de xref:/develop/reference/k8sTs-chart-units.adoc[unidades suportadas] para todas as unidades.
+** `aliasTemplate`: Um álias para séries temporais no gráfico de métricas. Este é um modelo que pode substituir rótulos da série temporal usando o `${my_label}` espaço reservado.
+* `topologyQuery`: Consulta STQL para selecionar componentes
+* `falsePositiveRate`: diga `!!float 1e-8` - a sensibilidade do monitor ao comportamento desviado.  Um valor mais baixo suprime mais (falsos) positivos, mas também pode levar a falsos negativos (anomalias não percebidas).
+* `checkWindowMinutes`: diga `10` minutos - a janela de verificação precisa ser equilibrada entre alertas rápidos (valores pequenos) e anomalias corretamente identificadas (valores altos).  Um punhado de pontos de dados funciona bem na prática.
+* `historicWindowMinutes`: diga `120` (2 horas) - delimitado em torno do tempo atual, mas então uma ou mais semanas atrás - então de 1 hora antes do tempo atual até 1 hora depois.  Além disso, as 2 horas antes da janela de verificação são utilizadas.  O monitor de limite dinâmico compara a distribuição desses dados históricos com os pontos de dados na janela de verificação.
+* `historySizeWeeks`: diga `2` - o número de semanas que os dados são retirados para contexto histórico.  Pode ser `1`, `2` ou `3`.
+* `removeTrend`: para métricas que apresentam comportamento de tendência (por exemplo, número de solicitações), de modo que o valor absoluto difira de semana para semana, essa tendência (o valor médio) pode ser considerada.
+* `includePreviousDay`: tipicamente `false` - para métricas que não têm um padrão semanal, mas apenas um diário, isso permite o uso de dados mais recentes.
+
+endif::[]

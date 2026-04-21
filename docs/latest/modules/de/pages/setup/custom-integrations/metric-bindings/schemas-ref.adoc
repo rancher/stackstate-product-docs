@@ -1,0 +1,80 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Schema und Referenz für Metrikbindungen
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Diese Seite beschreibt die Schemata für ein `MetricBinding`, zusammen mit detaillierten Erklärungen zu Konstrukten, Ausdruckssyntax und Semantik.
+
+== Schema für Metrikbindung
+
+Jede Metrikbindung:
+
+* Wählt Komponenten aus, auf die sie angewendet werden kann
+* Definiert PromQL-Abfragevorlagen zum Abrufen von Daten
+* Spezifiziert, wie die resultierenden Daten gerendert werden müssen
+* Enthält Layout-Hinweise zur Auswahl eines geeigneten Ortes in der Benutzeroberfläche, um das Diagramm anzuzeigen
+
+[,yaml]
+----
+_type: "MetricBinding"
+name: string
+chartType: "line"                     # "line" is the only type for now
+unit?: string
+scope: string                         # Topology scope - components to bind to
+enabled: boolean                      # default: true
+description?: string
+valuation?: "higher-is-better" | "lower-is-better"
+priority?: "HIGH" | "MEDIUM" | "LOW" | "NONE"    # deprecated
+queries:
+  - _type: "MetricBindingQuery"
+    expression: string                # promql query
+    alias: string                     # name in legend
+    componentIdentifierTemplate?: string    # URN template for linking
+    primary?: boolean                 # is this query the primary one
+tags:
+  <key>: <value>
+layout?:                              # where should chart be shown
+  metricPerspective?:                 # the metrics perspective for a component
+    tab: string
+    section: string
+    weight?: integer
+  componentHighlight?:                # highlight perspective of a component
+    section: string
+    weight?: integer
+  componentSummary?:                  # summary - supporting panel on the right
+    weight?: integer
+identifier?: string
+----
+
+* `_type`: {stackstate-product-name} muss wissen, dass dies eine Metrikbindung ist, daher muss der Wert immer `MetricBinding` sein
+* `name`: Der Name für die Metrikbindung
+* `chartType`: {stackstate-product-name} unterstützt verschiedene Diagrammtypen (`line`, `bar` usw.), derzeit wird nur `line` unterstützt
+* `unit`: Die Unit der Werte in der Zeitreihe, die durch die Abfrage oder Abfragen zurückgegeben wird, die verwendet wird, um die Y-Achse des Diagramms zu rendern. Siehe die xref:/develop/reference/k8sTs-chart-units.adoc[unterstützten Units]-Referenz für alle Units
+* `scope`: Der Topologie-Bereich der Metrikbindung, eine Topologie-Abfrage, die die Komponenten auswählt, auf denen diese Metrikbindung angezeigt wird
+* `enabled`: Auf `false` setzen, um die Metrikbindung beizubehalten, sie jedoch nicht den Benutzern anzuzeigen
+* `description`: Optionale Beschreibung, die beim Überfahren des Namens angezeigt wird
+* `valuation`: Ob höhere oder niedrigere Werte "besser" sind
+* `priority`: [Veraltet] Eines von `HIGH`, `MEDIUM` oder `LOW`. Hauptsortierreihenfolge für Metriken auf einer Komponente (in der Reihenfolge, in der sie hier erwähnt werden), die sekundäre Sortierreihenfolge ist die `name`.
+* `queries`: Eine Liste von Abfragen, die im Diagramm für die Metrikbindung angezeigt werden sollen (siehe xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[Schreiben von PromQL-Abfragen])
+** `expression`: Die (vorlagenbasierte) PromQL-Abfrage
+** `alias`: Name für die Abfrage in der Legende
+** `componentIdentifierTemplate`: Vorlage für den Bezeichner der zugehörigen Komponente, gefüllt mit Labels der Zeitreihen, die aus der Abfrage resultieren
+** `primary`: Ist diese Abfrage die primäre?
+* `tags`: Wird verwendet, um Metriken in der Benutzeroberfläche zu organisieren, kann leer gelassen werden mit `{}`
+* `layout`: Wie man Diagramme in verschiedenen Perspektivansichten gruppiert, z.B. in xref:/use/views/k8s-metrics-perspective.adoc[Metrik-Perspektive]
+** `metricPerspective` - Definiert Metriken, die auf `Metrics Perspective` angezeigt werden sollen. Metriken sind in Registerkarten und dann in Abschnitte gruppiert.
+*** `tab` - Registerkartenname. Registerkarten sind alphabetisch sortiert
+*** `section` - Abschnittsname. Abschnitte sind alphabetisch sortiert
+*** `weight` - Metriken innerhalb eines Abschnitts sind primär nach Gewicht (aufsteigend) und sekundär nach Name (alphabetisch) sortiert
+** `componentHighlight` - Definiert Metriken, die auf `Component Highlight` angezeigt werden sollen. Metriken sind in Abschnitten gruppiert.
+*** `section` - Abschnittsname. Abschnitte sind alphabetisch sortiert
+*** `weight` - Metriken innerhalb eines Abschnitts sind primär nach Gewicht (aufsteigend) und sekundär nach Name (alphabetisch) sortiert
+** `componentSummary` - Gibt die Metriken an, die in der `Components details` Seitenleiste bei der Auswahl der Komponente angezeigt werden sollen. Diagramme erscheinen nur, wenn diese Eigenschaft definiert ist.
+*** `weight` - Dies stellt das Gewicht des Diagramms dar. Diagramme werden aufsteigend nach Gewicht sortiert und anschließend werden die ersten drei Diagramme angezeigt.
+* `identifier`: Eine URN (universeller Ressourcenbezeichner), die als eindeutiger Bezeichner der Metrikbindung verwendet wird. Es muss mit `urn:stackpack:<stackpack-name>:metric-binding:` beginnen, der Rest ist im Freiformat, solange er unter allen Metrikbindungen einzigartig ist.
+
+endif::ss-ff-stackpacks2_enabled[]

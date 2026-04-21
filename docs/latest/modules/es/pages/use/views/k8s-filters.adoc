@@ -1,0 +1,143 @@
+= Filtros
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+El menú de *Filtros* en la esquina superior derecha de la interfaz de vista te permite filtrar los componentes (topología) y eventos que se muestran en una vista. Una vez aplicados, los filtros afectarán el contenido de todas las perspectivas en una vista.
+
+image::k8s/k8s-filters.png[Filtros de vista]
+
+== Filtrar topología
+
+Los filtros de topología se pueden utilizar para seleccionar un subconjunto de componentes de topología que se mostrarán en cualquiera de las perspectivas disponibles. Mientras que el filtro de eventos es el mismo para todos los tipos de vista, los filtros de topología dependen del tipo de vista en la que te encuentres. Leer más:
+
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_kubernetes_views[Filtros de topología en vistas de Kubernetes]
+* xref:/use/views/k8s-filters.adoc#_topology_filters_on_other_view_types[Filtros de topología en otros tipos de vista]
+
+=== Filtros de topología en vistas de Kubernetes
+
+En las xref:/use/views/k8s-views.adoc[vistas de Kubernetes], los filtros de topología están limitados a un pequeño conjunto de filtros básicos que persisten en todas las vistas de Kubernetes: `clusters` y / o `namespaces`. Los filtros de topología persistentes para las vistas de Kubernetes se colocan fuera del menú regular `filters` en la interfaz y no son interdependientes entre sí (por ejemplo, seleccionar un clúster *no* actualiza automáticamente el filtro `namespaces` para reflejar solo los espacios de nombres de ese clúster).
+
+image::k8s/k8s-filters-kube-topology.png[Filtros de topología de Kubernetes]
+
+=== Filtros de topología en otros tipos de vista
+
+Para otros tipos de vista, puedes explorar tu topología utilizando filtros de topología básicos o avanzados. También puede leer:
+
+* xref:/use/views/k8s-filters.adoc#_basic_topology_filters[Filtros de topología básicos]
+* xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[Filtros de topología avanzados]
+* xref:/use/views/k8s-filters.adoc#_topology_filtering_limits[Límites de filtrado de topología]
+
+==== Filtros de topología básicos
+
+La principal forma de filtrar la topología es utilizando los filtros básicos disponibles. Cuando estableces un filtro, la perspectiva abierta se actualizará para mostrar solo la visualización o los datos del subconjunto de tu topología que coincide con el filtro. Establecer múltiples filtros reducirá aún más tu búsqueda. Puedes establecer más de un valor para cada filtro para ampliar tu búsqueda.
+
+|===
+| Filtro | Descripción
+
+| Capas, Dominios, Entornos y Tipos de componentes
+| Filtra por los detalles del componente incluidos cuando los componentes son importados o creados.
+
+| Salud del componente
+| Solo incluye componentes con el estado de salud nombrado según lo informado por la verificación de salud asociada.
+
+| Etiquetas de componente
+| Solo incluye componentes con una etiqueta específica.
+
+| Incluir componentes
+| Los componentes nombrados aquí se incluirán en la topología *además de* los componentes devueltos de otros filtros.
+|===
+
+Para filtrar la topología utilizando filtros básicos, haz clic en el menú *Filtros* en la esquina superior derecha de la interfaz y selecciona *Cambiar a básico* bajo la pestaña vertical *Topología*.
+
+image::k8s/k8s-filters-basic-topology.png[Filtros básicos de topología]
+
+==== Filtros avanzados de topología
+
+Puedes usar el xref:/develop/reference/k8sTs-stql_reference.adoc[Lenguaje de Consulta de Observabilidad de SUSE (STQL)] incorporado para construir un filtro de topología avanzado que se centre en un área específica de tu topología.
+
+Para filtrar la topología utilizando una consulta STQL, haz clic en el menú *Filtros* en la esquina superior derecha de la interfaz y selecciona *Cambiar a STQL* bajo la pestaña vertical *Topología*.
+
+El ejemplo de consulta STQL a continuación devolverá componentes que coincidan con las siguientes condiciones:
+
+* En el *Dominio* `security check`
+* Y tiene un estado de *Salud* de `Clear` o `Deviating`
+* O es el *Componente* con el nombre `ai_engine`
+
+[,yaml]
+----
+(domain IN ("security check") AND healthstate IN ("CLEAR", "DEVIATING")) OR name IN ("ai_engine")
+----
+
+image::k8s/k8s-filters-advanced-topology.png[Filtros de topología avanzados]
+
+==== Compatibilidad de filtros básicos y avanzados
+
+Puedes alternar entre filtrado básico y avanzado seleccionando *Cambiar a básico* o *Cambiar a STQL* en la pestaña vertical *Topología* del menú *Filtros*.
+
+Siempre es posible cambiar de filtrado básico a avanzado. Los filtros básicos seleccionados se convertirán directamente en una consulta STQL. Para consultas simples, también es posible cambiar de filtrado avanzado a básico. Sin embargo, algunas consultas avanzadas no son compatibles con filtros básicos.
+
+➡️ xref:/develop/reference/k8sTs-stql_reference.adoc#_compatibility_basic_and_advanced_filters[Aprende más sobre la compatibilidad de filtros de topología básicos y avanzados]
+
+==== Otros filtros
+
+Los filtros avanzados que se enumeran a continuación son compatibles con el filtrado básico, pero no se pueden establecer ni ajustar como un filtro básico.
+
+* *withNeighborsOf* - cuando un filtro avanzado incluye la función xref:/develop/reference/k8sTs-stql_reference.adoc#_withneighborsof[withNeighborsOf], el número de componentes cuyos vecinos se consultan se muestra en el cuadro *Otros filtros*. Para ser compatible con el filtrado básico, una función `withNeighborsOf` debe unirse a otros filtros utilizando un operador `OR`.
+* *identifier* - cuando un filtro avanzado selecciona componentes por xref:/develop/reference/k8sTs-stql_reference.adoc#_filters[identifier], el número de identificadores de componentes consultados se informa en el cuadro *Otros filtros*. Para ser compatible con el filtrado básico, un filtro `identifier` debe especificarse y unirse a otros filtros utilizando el operador `OR identifier IN (...)`.
+
+El cuadro *Otros filtros* en los filtros de topología básicos lista todos estos filtros avanzados y el número de componentes afectados.
+
+[NOTE]
+====
+El cuadro *Otros filtros* solo proporciona detalles de los filtros avanzados que se han establecido y son compatibles con el filtrado básico.
+====
+
+
+==== Límites de filtrado de topología
+
+Para optimizar el rendimiento, se impone un límite a la cantidad de elementos que se pueden cargar para producir una visualización de topología. El límite de filtrado tiene un valor predeterminado de 10000 elementos. Si una xref:/use/views/k8s-filters.adoc#_basic_topology_filters[consulta de filtro básico] o xref:/use/views/k8s-filters.adoc#_advanced_topology_filters[consulta de filtro avanzado] excede el límite de filtrado, se mostrará un mensaje en pantalla y no se mostrará ninguna visualización de topología.
+
+Ten en cuenta que el límite de filtrado se aplica a la cantidad total de elementos que deben ser *cargados* y no a la cantidad de elementos que finalmente se mostrarán.
+
+En el ejemplo a continuación, primero CARGAMOS todos los vecinos de cada componente en nuestra topología y luego MOSTRAMOS solo los que pertenecen a la capa `applications`. Esto probablemente fallaría con un error de límite de filtrado, ya que requiere que todos los componentes en la topología estén cargados.
+
+[,text]
+----
+withNeighborsOf(direction = "both", components = (name = "*"), levels = "15")
+   AND layer = "applications"
+----
+
+Para producir con éxito esta visualización de topología, necesitaríamos reescribir la consulta para mantener el número de componentes cargados por debajo del límite de filtrado configurado, o aumentar el límite de filtrado. Al filtrar solo los componentes en la capa `applications`, MOSTRAREMOS los mismos componentes que la consulta anterior, sin necesidad de CARGAR primero todos los componentes. Por lo tanto, esta consulta es menos probable que resulte en un error de límite de filtrado.
+
+[,yaml]
+----
+layer = "applications"
+----
+
+== Filter events (Filtrar eventos)
+
+El panel *Filtros de vista* a la izquierda de la interfaz de usuario de SUSE Observability se puede utilizar para filtrar los eventos mostrados en la xref:/use/views/k8s-events-perspective.adoc[Perspectiva de eventos]. También están incluidos en la lista *Evento* en el panel derecho en la pestaña *Ver resumen* y las pestañas de detalles - *Detalles del componente* y *Detalles de relación directa*.
+
+Los siguientes filtros de eventos están disponibles:
+
+|===
+| Filtro | Descripción
+
+| *Categoría*
+| Mostrar solo eventos de una o más xref:/use/views/k8s-events-perspective.adoc#_event_category[categorías].
+
+| *Tipo*
+| Haz clic en la caja de filtro *Tipo* para abrir una lista de todos los tipos de eventos que se han generado para los componentes actualmente filtrados en la ventana de tiempo actual. Puedes seleccionar uno o más tipos de eventos para refinar los eventos mostrados.
+
+| *Fuente*
+| Los eventos pueden ser generados por SUSE Observability o recuperados de un sistema fuente externo, como Kubernetes o ServiceNow, mediante una integración. Haz clic en la caja de filtro *Fuente* para abrir una lista de todos los sistemas fuente para eventos que se han generado para los componentes actualmente filtrados en la ventana de tiempo actual. Selecciona uno o más sistemas fuente para ver solo esos eventos.
+
+| *Etiquetas*
+| Las propiedades de evento relevantes se añadirán como etiquetas cuando un evento sea recuperado de un sistema externo. Por ejemplo `status:open` o `status:production`. Esto puede ayudar a identificar eventos relevantes para un problema o entorno específico.
+|===
+
+image::k8s/k8s-filters-events.png[Filtros de eventos]

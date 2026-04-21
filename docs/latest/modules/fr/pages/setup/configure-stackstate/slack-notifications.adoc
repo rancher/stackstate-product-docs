@@ -1,0 +1,89 @@
+= Configuration de SUSE Observability pour les notifications Slack
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability auto-hébergé
+
+[CAUTION]
+====
+Les utilisateurs de SUSE Observability en mode SaaS peuvent utiliser les notifications Slack sans configuration supplémentaire. Ce guide s'applique uniquement aux installations de SUSE Observability auto-hébergées qui prévoient d'utiliser le canal de notification Slack.
+====
+
+
+Avant de pouvoir utiliser le canal de notification Slack dans SUSE Observability, vous devez d'abord suivre les étapes suivantes pour configurer à la fois Slack et SUSE Observability :
+
+. Créez une appli Slack pour SUSE Observability dans votre espace de travail
+. Configurez SUSE Observability avec les identifiants de cette appli Slack.
+
+== Création d'une appli Slack pour SUSE Observability
+
+[NOTE]
+====
+Vous devez avoir les autorisations dans Slack pour gérer les applis Slack pour votre espace de travail.
+====
+
+
+Allez sur la https://api.slack.com/apps[page API Slack] et cliquez sur le bouton *Créer une nouvelle appli*.
+
+* Sélectionnez l'option "À partir d'un manifeste d'appli" dans la boîte de dialogue qui s'ouvre.
+* Sélectionnez l'espace de travail auquel vous souhaitez envoyer des notifications et cliquez sur suivant.
+* Copiez le contenu du manifeste de l'appli Slack ci-dessous et collez-le dans la zone de texte. Assurez-vous de remplacer les valeurs dans `redirect_urls` par les URL de votre instance SUSE Observability. Cliquez sur suivant.
+* Vérifiez que l'URL est correcte et que les "portées du bot" listées sont `channels:join, channels:read, chat:write, groups:read` et cliquez sur le bouton de création pour créer l'appli.
+* Sur la page "Informations de base" de l'appli, il est possible de changer l'icône (dans la section Informations d'affichage). Vous pouvez la remplacer par, par exemple, le logo de SUSE Observability image:logo/stackstate-logo.png[logo de SUSE Observability,25,25].
+
+.Manifeste de l'appli Slack pour SUSE Observability
+[,json]
+----
+{
+    "display_information": {
+        "name": "SUSE Observability",
+        "description": "Receive notification messages from SUSE Observability",
+        "background_color": "#000000"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "SUSE Observability",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://the.url.of.your.stackstate.installation"
+        ],
+        "scopes": {
+            "bot": [
+                "channels:join",
+                "channels:read",
+                "chat:write",
+                "groups:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+----
+
+
+== Configurez SUSE Observability avec les identifiants de cette appli Slack.
+
+SUSE Observability doit être configuré avec les identifiants de l'appli Slack que vous avez créée. Vous pouvez le faire en ajoutant ce qui suit au fichier `values.yaml` de votre installation de SUSE Observability :
+
+[,yaml]
+----
+stackstate:
+  components:
+    all:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientId: "<app client id>"
+        secret:
+          CONFIG_FORCE_stackstate_notifications_channels_slack_authentication_clientSecret: "<app client secret>"
+----
+
+Les valeurs `<app client id>` et `<app client secret>` peuvent être trouvées dans la section "Identifiants de l'appli" sur la page "Informations de base" de l'appli Slack que vous avez créée. Appliquez ces modifications de configuration en exécutant la même commande Helm utilisée lors de l'installation de SUSE Observability (xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[pour Kubernetes] ou xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift]).
+
+Vous êtes maintenant prêt à utiliser le canal de notification Slack !

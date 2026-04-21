@@ -1,0 +1,74 @@
+= SUSE Observability Open Telemetry プロトコル サポート
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+SUSE Observability は OTLP プロトコルの 2 つのバージョン、`grpc` バージョン（OTLP とも呼ばれます）と `http/protobuf`（HTTP 経由の OTLP とも呼ばれます）をサポートしています。コレクターの設定では、使用するエクスポーターを選択できますが、SUSE Observability の正しい URL を設定することを確認してください。プロトコルの `grpc` バージョンが推奨されており、より大きなペイロードと高いスループットを可能にします。ただし、インフラストラクチャで `grpc` のサポートが不十分な場合は、HTTP バージョンに切り替えることができます。詳細は xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[トラブルシューティング] を参照してください。
+
+== SUSE Cloud Observability
+
+SUSE Cloud Observability のエンドポイントは次のとおりです：
+
+* OTLP: `otlp-<your-suse-observability>.app.stackstate.io:443`（URL スキームなし）
+* OTLP over HTTP: `https://otlp-http-<your-suse-observability>.app.stackstate.io`（URL スキーム付き: `https`）
+
+== セルフホスト型 SUSE Observability
+
+セルフホスト型インストールの場合、SUSE Observability 用のイングレスを xref:/setup/install-stackstate/kubernetes_openshift/ingress.adoc#_configure_ingress_rule_for_open_telemetry[ここに記載されているように]構成することで、いずれかまたは両方のエンドポイントを有効にする必要があります。
+
+SUSE Observability がコレクターと同じクラスターで実行されている場合、サービスエンドポイントを使用してイングレスなしで使用することもできますが、これは HTTP プロトコルを使用する場合のみ可能です：
+
+* OTLP over HTTP: `http://suse-observability-otel-collector.<namespace>.svc.cluster.local:4318`
+
+コレクターの設定で `insecure: true` を設定して、https の代わりにプレーンな http エンドポイントを使用できるようにしてください（次のセクションを参照）。
+
+GRPC プロトコルは、安全でない接続を介して資格情報を送信することをサポートしていないため、安全なイングレス設定と組み合わせてのみ使用できます。
+
+== コレクターの設定
+
+=== OTLP プロトコル
+
+コレクターの設定の例では、OTLP プロトコルを次のように使用しています：
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlp/suse-observability:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp endpoint, for example otlp-suse-observability.my.company.com:443
+    endpoint: <otlp-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+=== OTLP HTTP プロトコル
+
+OTLP を HTTP プロトコルで使用するには、`otlphttp` エクスポーターを使用してください。パイプライン内のすべてのエクスポーターの参照を `otlp/suse-observability` から `otlphttp/suse-observability` に更新してください！すべての出現を変更するために、検索 / 置換を使用してください。
+
+----
+extensions:
+  bearertokenauth:
+    scheme: SUSEObservability
+    token: "${env:API_KEY}"
+exporters:
+  otlphttp/stackstate:
+    auth:
+      authenticator: bearertokenauth
+    # Put in your own otlp-http endpoint, for example https://otlp-http-suse-observability.my.company.com:443
+    endpoint: <otlp-http-suse-observability-endpoint>
+    # Optional TLS configurations:
+    #tls:
+    # To disable TLS entirely:
+    #  insecure: true
+    # To disalbe certificate verification (but still use TLS):
+    #  insecure_skip_verify: true
+----
+
+エクスポーターの正確な要件と動作を制御するための追加の設定が利用可能です。例えば、カスタム CA ルート証明書を使用したり、クライアント証明書を有効にしたりすることも可能です。詳細については、https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlpexporter/README.md[OTLP エクスポーターのドキュメント]をご覧ください。

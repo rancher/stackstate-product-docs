@@ -1,0 +1,649 @@
+= SUSE 可观测性快速入门指南
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+:doctype: book
+
+== 概述
+
+当您的 SUSE 可观测性 SaaS 实例设置并配置完成后，您将收到来自 SUSE 可观测性的电子邮件，其中包含所需的登录信息。本快速入门指南将帮助您开始使用并将自己的数据导入到您的 SUSE 可观测性 SaaS 实例中。
+
+要将您的集群与 SUSE 可观测性集成，您可以按照适合您环境的指南进行操作。
+
+* <<_amazon_eks,Amazon EKS>>
+* <<_azure_aks,Azure AKS>>
+* <<_google_gke,Google GKE>>
+* <<_kubernetes,Kubernetes>>
+* <<_kops,KOPS>>
+* <<_openshift,OpenShift>>
+* <<_self_hosted,自托管>>
+
+
+== Kubernetes
+
+设置 Kubernetes 集成，以从 Kubernetes 集群收集拓扑、事件、日志、变更和指标数据，并在 SUSE 可观测性中提供这些数据。
+
+=== 支持的版本
+
+|===
+| 支持的 Kubernetes 版本
+
+| Kubernetes 1.32
+| Kubernetes 1.31
+| Kubernetes 1.30
+| Kubernetes 1.29
+| Kubernetes 1.28
+| Kubernetes 1.27
+| Kubernetes 1.26
+| Kubernetes 1.25
+| Kubernetes 1.24
+| Kubernetes 1.23
+| Kubernetes 1.22
+| Kubernetes 1.21
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== Kubernetes 的先决条件
+
+要设置 SUSE Observability Kubernetes 集成，您需要：
+
+* 一个正在运行的 Kubernetes 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 Kubernetes 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_kubernetes,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦代理被部署，它们将开始收集数据并将其推送到 SUSE Observability。
+
+[CAUTION]
+====
+在自托管的隔离环境中运行时，请先准备 xref:/k8s-suse-rancher-prime-agent-air-gapped.adoc[隔离安装说明]。
+====
+
+
+== OpenShift
+
+设置 OpenShift 集成，以从 OpenShift 集群收集拓扑、事件、日志、变更和指标数据，并使其在 SUSE Observability 中可用。
+
+=== 支持的版本
+
+|===
+| OpenShift Version | 支持的 Kubernetes 版本 | OpenShift 支持结束
+
+| OpenShift 4.17
+| Kubernetes 1.30
+| 2026 年 4 月 1 日
+
+| OpenShift 4.16
+| Kubernetes 1.29
+| 2025 年 12 月 27 日
+
+| OpenShift 4.15
+| Kubernetes 1.28
+| 2025 年 8 月 27 日
+
+| OpenShift 4.14
+| Kubernetes 1.27
+| 2025 年 5 月 1 日
+
+| OpenShift 4.13
+| Kubernetes 1.26
+| 2024 年 11 月 17 日
+
+| OpenShift 4.12
+| Kubernetes 1.25
+| 2024 年 7 月 17 日
+
+| OpenShift 4.11
+| Kubernetes 1.24
+| 2024 年 2 月 10 日
+
+| OpenShift 4.10
+| Kubernetes 1.23
+| 2023 年 9 月 10 日
+
+| OpenShift 4.9
+| Kubernetes 1.22
+| 2023 年 4 月 18 日
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== OpenShift 的先决条件
+
+要设置 SUSE Observability OpenShift 集成，您需要：
+
+* 一个正在运行的 OpenShift 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 OpenShift 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_openshift,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 代理部署完成后，它们将开始收集数据并将其推送到 SUSE Observability。
+
+
+== Amazon EKS
+
+设置 Amazon EKS 集成，以收集来自 Amazon EKS 集群的拓扑、事件、日志、变更和指标数据，并在 SUSE Observability 中提供这些数据。
+
+=== 支持的版本
+
+|===
+| Kubernetes 版本 | Amazon EKS 版本 | Amazon EKS 支持结束 | Amazon EKS 扩展支持结束
+
+| 1.32
+| 2025 年 1 月 23 日
+| 2026 年 3 月 23 日
+| 2027 年 3 月 23 日
+
+| 1.31
+| 2024 年 9 月 26 日
+| 2025 年 11 月 26 日
+| 2026 年 11 月 26 日
+
+| 1.30
+| 2024 年 5 月 23 日
+| 2025 年 7 月 23 日
+| 2026 年 7 月 23 日
+
+| 1.29
+| 2024 年 1 月 23 日
+| 2025 年 3 月 23 日
+| 2026 年 3 月 23 日
+
+| 1.28
+| 2023 年 9 月 26 日
+| 2024 年 11 月 1 日
+| 2025 年 11 月 26 日
+
+| 1.27
+| 2023 年 5 月 24 日
+| 2024 年 7 月
+| 2025 年 7 月 24 日
+
+| 1.26
+| 2023 年 4 月 11 日
+| 2024 年 6 月
+| 2025 年 6 月 11 日
+
+| 1.25
+| 2023 年 2 月 21 日
+| 2024 年 5 月
+| 2025 年 5 月 1 日
+
+| 1.24
+| 2022 年 11 月 15 日
+| 2024 年 1 月
+| 2025 年 1 月 31 日
+
+| 1.23
+| 2022 年 8 月 11 日
+| 2023 年 10 月 11 日
+| 2024 年 10 月 11 日
+
+| 1.22
+| 2022 年 4 月 4 日
+| 2023 年 6 月 4 日
+| 2024 年 9 月 1 日
+
+| 1.21
+| 2021 年 7 月 19 日
+| 2023 年 2 月 15 日
+| 2024 年 7 月 15 日
+
+| 1.20
+| 2021 年 5 月 18 日
+| 2022 年 11 月 1 日
+| 不适用
+
+| 1.19
+| 2021 年 2 月 16 日
+| 2022 年 8 月 1 日
+| 不适用
+
+| 1.18
+| 2020 年 10 月 13 日
+| 2022 年 8 月 15 日
+| 不适用
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== Amazon EKS 的先决条件
+
+要设置 SUSE Observability 的 Amazon EKS 集成，您需要：
+
+* 一个正在运行的 Amazon EKS 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 Amazon EKS 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_amazon_eks,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦这些 Agent 部署完成，它们将开始收集数据，并将数据推送到 SUSE Observability。
+
+
+== Google GKE
+
+设置 Google GKE 集成，以从 Google GKE 集群收集拓扑、事件、日志、变更和指标数据，并在 SUSE Observability 中提供这些数据。
+
+=== 支持的版本
+
+|===
+| Kubernetes 版本 | Google GKE 版本 | Google GKE 支持结束 | Google GKE 扩展支持结束
+
+| 1.32
+| 2025 年 2 月
+| 2026 年第 2 季度
+| 2027 年第 1 季度
+
+| 1.31
+| 2024 年 10 月 22 日
+| 2025 年 12 月 22 日
+| 2026 年 10 月 22 日
+
+| 1.30
+| 2024 年 7 月 30 日
+| 2025 年 9 月 30 日
+| 2026 年 7 月 30 日
+
+| 1.29
+| 2024 年 1 月 25 日
+| 2025 年 3 月 21 日
+| 2026 年 1 月 25 日
+
+| 1.28
+| 2023 年 12 月 4 日
+| 2025 年 2 月 4 日
+| 2025 年 12 月 4 日
+
+| 1.27
+| 2023 年 6 月 14 日
+| 2024 年 8 月 31 日
+| 2025 年 6 月 14 日
+
+| 1.26
+| 2023 年 4 月 14 日
+| 2024 年 6 月 30 日
+| 不适用
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== Google GKE 的前提条件
+
+要设置 SUSE Observability Google GKE 集成，您需要：
+
+* 一个正在运行的 Google GKE 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 Google GKE 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_google_gke,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦这些 Agent 部署完成，它们将开始收集数据，并将数据推送到 SUSE Observability。
+
+
+== Azure AKS
+
+设置 Azure AKS 集成，以从 Azure AKS 集群收集拓扑、事件、日志、变更和指标数据，并使其在 SUSE Observability 中可用。
+
+=== 支持的版本
+
+|===
+| Kubernetes 版本 | AKS GA | Azure AKS 生命周期结束 | 平台支持
+
+| 1.32
+| 2024 年 6 月
+| 2026 年 3 月
+| 直到 1.36 GA
+
+| 1.31
+| 2024 年 11 月
+| 2025 年 11 月
+| 直到 1.35 GA
+
+| 1.30
+| 2024 年 6 月
+| 2025 年 7 月
+| 直到 1.34 GA
+
+| 1.29
+| 2024 年 3 月
+| 2025 年 1 月
+| 直到 1.33 GA
+
+| 1.28
+| 2023 年 11 月
+| 2024 年 11 月
+| 直到 1.32 GA
+
+| 1.27
+| 2023 年 7 月
+| 2024 年 7 月
+| 2025 年 7 月
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== Azure AKS 的前提条件
+
+要设置 SUSE Observability Azure AKS 集成，您需要：
+
+* 一个正在运行的 Azure AKS 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 Azure AKS 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_azure_aks,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦这些 Agent 部署完成，它们将开始收集数据，并将数据推送到 SUSE Observability。
+
+
+== KOPS
+
+设置 KOPS 集成以收集来自 KOPS 集群的拓扑、事件、日志、变更和指标数据，并在 SUSE Observability 中提供这些数据。
+
+=== 支持的版本
+
+|===
+| 支持的 Kubernetes 版本
+
+| Kubernetes 1.32
+| Kubernetes 1.31
+| Kubernetes 1.30
+| Kubernetes 1.29
+| Kubernetes 1.28
+| Kubernetes 1.27
+| Kubernetes 1.26
+| Kubernetes 1.25
+| Kubernetes 1.24
+| Kubernetes 1.23
+| Kubernetes 1.22
+| Kubernetes 1.21
+| Kubernetes 1.20
+| Kubernetes 1.19
+| Kubernetes 1.18
+| Kubernetes 1.17
+| Kubernetes 1.16
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== KOPS 的先决条件
+
+要设置 SUSE Observability KOPS 集成，您需要：
+
+* 一个正在运行的 KOPS 集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要授予 SUSE Observability Agents 访问 Kubernetes API 的权限。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置 KOPS 集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_kops,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦代理被部署，它们将开始收集数据并将其推送到 SUSE Observability。
+
+
+== 自托管
+
+设置自托管集成以收集来自自托管集群的拓扑、事件、日志、变更和指标数据，并在 SUSE Observability 中提供这些数据。
+
+=== 支持的版本
+
+|===
+| 支持的 Kubernetes 版本
+
+| Kubernetes 1.32
+| Kubernetes 1.31
+| Kubernetes 1.30
+| Kubernetes 1.29
+| Kubernetes 1.28
+| Kubernetes 1.27
+| Kubernetes 1.26
+| Kubernetes 1.25
+| Kubernetes 1.24
+| Kubernetes 1.23
+| Kubernetes 1.22
+| Kubernetes 1.21
+| Kubernetes 1.20
+| Kubernetes 1.19
+| Kubernetes 1.18
+| Kubernetes 1.17
+| Kubernetes 1.16
+|===
+
+=== 支持的运行时
+
+|===
+| 支持的运行时
+
+| ContainerD
+| CRI-O
+|===
+
+=== 自托管的先决条件
+
+要设置 SUSE Observability 自托管集成，您需要：
+
+* 一个正在运行的自托管集群。
+* Helm 版本 3.13.1 或更高版本。
+* 一个具有 `create privileged pods`、`ClusterRoles` 和 `ClusterRoleBindings` 权限的用户：
+ ** ClusterRole 和 ClusterRoleBinding 需要：
+  *** 授予 SUSE Observability 代理访问 Kubernetes API 的权限
+  *** 为变更验证 webhook 生成一个密钥，该 webhook 是 xref:/setup/agent/k8sTs-agent-request-tracing.adoc[请求追踪] 的一部分。
+ ** SUSE Observability Agents 需要在特权 Pod 中运行，以便能够收集网络连接和主机信息。
+
+=== 设置自托管集成
+
+[CAUTION]
+====
+在开始之前，请检查 <<_prerequisites_for_self_hosted,Kubernetes 的先决条件>>。
+====
+
+
+要将数据从 Kubernetes 集群导入 SUSE Observability，请按照以下步骤操作：
+
+. 将 SUSE Observability helm 储存库添加到本地 helm 客户端：
++
+[,buildoutcfg]
+----
+ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/suse-observability
+ helm repo update
+----
+
+. 在 SUSE Observability UI 中，点击屏幕左上角打开主菜单，然后转到 `StackPacks` > `Integrations` > `Kubernetes`。
+. 安装 Kubernetes StackPack 的新实例：
+ ** 指定一个 *Kubernetes 集群名称*
+  *** 此名称将用于在 SUSE Observability 中识别集群
+ ** 单击 *安装*。
+. 在安装 StackPack 后，使用 SUSE Observability UI 中提供的 helm 命令，在您的集群上部署 SUSE Observability Agent、Cluster Agent、Checks Agent 和 kube-state-metrics。
+ ** 一旦代理被部署，它们将开始收集数据并将其推送到 SUSE Observability。
+
+
+== 后续操作
+
+* xref:/k8s-getting-started.adoc[SUSE Observability 演示]

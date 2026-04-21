@@ -1,0 +1,88 @@
+= Copia de seguridad de la configuración
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Autoalojado
+
+== Descripción general
+
+SUSE Observability tiene un mecanismo de copia de seguridad específicamente para la configuración (también denominada ajustes). Esto incluye los stackpacks instalados con su configuración, pero también cualquier otra personalización creada por el usuario. Por ejemplo, monitores que han sido desactivados o personalizados, vistas personalizadas, tokens de servicio, etc.
+
+La principal ventaja de la copia de seguridad de la configuración es que es muy pequeña (normalmente solo varios megabytes) y fácil y rápida de restaurar con un tiempo de inactividad mínimo. Después de que se restaure la copia de seguridad de la configuración, se procesarán nuevos datos como antes, recreando la topología, los estados de salud y las alertas. Sin embargo, el historial de topología (incluyendo la salud) no se conserva. Para ese propósito existe la xref:/setup/data-management/backup_restore/kubernetes_backup.adoc[copia de seguridad de StackGraph], sin embargo, esas copias de seguridad son mucho más grandes y tardan mucho más en crearse y restaurarse.
+
+La copia de seguridad de la configuración está habilitada por defecto. En su configuración predeterminada, hará una copia de seguridad cada noche, pero las copias de seguridad se almacenan solo en un volumen persistente en su propio espacio de nombres y se mantienen un máximo de las 10 copias de seguridad más recientes.
+
+== Trabajar con copias de seguridad de configuración
+
+Los scripts para trabajar con copias de seguridad de configuración (pero también con todas las demás copias de seguridad) se pueden descargar desde la https://github.com/StackVista/helm-charts/releases/latest[última versión del chart Helm de SUSE Observability]. Descarga y extrae el `backup-scripts-<version>.tar.gz` para comenzar.
+
+*Antes de usar los scripts, asegúrate de que* el binario `kubectl` esté instalado y esté configurado con el contexto y el espacio de nombres donde está instalado SUSE Observability. Por ejemplo, ejecuta este comando para conectarte al contexto `observability-cluster` y al espacio de nombres `suse-observability`:
+
+----
+kubectl config use-context observability-cluster
+kubectl config set-context --current --namespace=suse-observability
+----
+
+Las herramientas shell para interactuar con las copias de seguridad funcionan creando un trabajo de Kubernetes en el clúster e interactuando con ese trabajo. Después de que la herramienta haya terminado, el trabajo se elimina automáticamente. Iniciar el trabajo puede llevar algún tiempo (descargando la imagen de Docker, programando el trabajo en el clúster, etc., todo lleva algo de tiempo), por lo que los comandos no producirán un resultado inmediato.
+
+=== Restaurar una copia de seguridad
+
+[CAUTION]
+====
+Restaurar una copia de seguridad de configuración eliminará toda la topología, incluidos los estados de salud, las alertas y el historial de topología. También eliminará toda la configuración anterior y requerirá tiempo de inactividad para la API, la interfaz de usuario, los monitores, las notificaciones y la sincronización de la topología (puede limitarse a unos pocos minutos). La recopilación e ingestión de datos permanece activa durante la restauración.
+====
+
+
+Para restaurar una copia de seguridad:
+
+. Asegúrate de conectarte al contexto y espacio de nombres para SUSE Observability, <<_working_with_configuration_backups,ver aquí>>
+. Obtén la lista de copias de seguridad disponibles usando
++
+----
+./list-configuration-backups.sh
+----
+
+. De la lista de archivos de copia de seguridad, elige la copia que deseas restaurar
+. La restauración primero reducirá las ampliaciones que interactúan con StackGraph, luego se restaurará la copia de seguridad. Esto se puede seguir a través de la salida del comando de restauración. Restaura la copia de seguridad con el comando a continuación (responde `yes` para confirmar la eliminación de toda la topología y configuraciones de SUSE Observability):
++
+----
+./restore-configuration-backup.sh sts-backup-your-choice.sty
+----
+
+. Después de que la restauración haya terminado, las ampliaciones deben ampliarse manualmente:
++
+----
+./scale-up.sh
+----
+
+. Después de un corto tiempo, todas las ampliaciones están en funcionamiento y listas, y SUSE Observability puede utilizarse de nuevo.
+
+=== Inicia una copia de seguridad manual
+
+Se puede crear una copia de seguridad en cualquier momento sin ninguna interrupción del servicio. El script `backup-configuration-now.sh` en el repositorio de Github se puede utilizar para iniciar una copia de seguridad en cualquier momento. La copia de seguridad seguirá la convención de nomenclatura estándar, incluyendo la fecha/hora de la copia de seguridad.
+
+=== Personalizando las copias de seguridad de configuración
+
+Las copias de seguridad de configuración se pueden almacenar en almacenamiento de objetos, esto sucede automáticamente al configurar MinIO y habilitar copias de seguridad para topología, métricas, eventos y registros. Por favor, sigue las instrucciones para la xref:/setup/data-management/backup_restore/kubernetes_backup.adoc#_enable_backups[Copia de seguridad de Kubernetes].
+
+Por defecto, se retienen 365 días de copias de seguridad, esto se puede modificar a través de los valores de Helm. También es posible desactivar completamente la copia de seguridad de configuración o personalizar el horario de la copia de seguridad. Algunas otras partes de la copia de seguridad también se pueden personalizar:
+
+[,yaml]
+----
+backup:
+  configuration:
+    # backup.configuration.bucketName -- Name of the bucket to store configuration backups (needs to be a globally unique bucket when using Amazon S3).
+    bucketName: 'sts-configuration-backup'
+    # backup.configuration.maxLocalFiles -- The maximum number of configuration backup files stored on the PVC for the configuration backup (which is only of limited size, see backup.configuration.scheduled.pvc.size)
+    maxLocalFiles: 10
+    scheduled:
+      # backup.configuration.scheduled.enabled -- Enable scheduled configuration backups (if `backup.enabled` is set to `true`).
+      enabled: true
+      #_ backup.configuration.scheduled.schedule __ Cron schedule for automatic configuration backups in [Kubernetes cron schedule syntax](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#cron-schedule-syntax).
+      schedule: '0 4 * * *'
+      # backup.configuration.scheduled.backupRetentionTimeDelta -- Time to keep configuration backups in object storage. The value is passed to GNU date tool to determine a specific date, and files older than this date will be deleted.
+      backupRetentionTimeDelta: '365 days ago'
+      pvc:
+        # backup.configuration.scheduled.pvc.size -- Size of volume for settings backup in the cluster
+        size: '1Gi'
+----

@@ -1,0 +1,59 @@
+= SUSE Observabilityサポートパッケージ（ログ）
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+このページでは、SUSE Observabilityクラスターからログを収集するためのツールとガイダンスを提供します。これらのログは、問題の診断、根本原因の特定、および期待通りに機能していないクラスターのトラブルシューティングに不可欠です。
+予期しない動作、パフォーマンスの低下、または{stackstate-product-name}クラスターのエラーが発生している場合、このページは何が問題だったのかを理解し、是正措置を講じるために必要なデータを収集するのに役立ちます。ここで詳述されているスクリプトの隣には、クラスター上でパフォーマンス測定を積極的に実行し、も行うアクティブなスクリプトxref:/setup/install-stackstate/support-package-performance.adoc[Support Package (Performance)]があります。{stackstate-product-name}
+
+== 備考
+
+スクリプトは、SUSE Observabilityクラスターへのアクセスが設定されたkubectlを持つホストから、またはクラスターへの必要な権限と接続性を持つ他のホストから実行する必要があります。
+これは、ルートユーザを使用してホスト上で直接行うか、sudoを介して行うことができます。 kubeconfigが設定されていない場合は、コマンド`export KUBECONFIG=$PATH-TO-YOUR/kubeconfig`を使用してください。
+
+== 使用方法
+
+スクリプトはダウンロードして、ホスト上で直接実行する必要があります。`root`ユーザまたは`sudo`を使用してください。
+
+=== スクリプトをダウンロードして実行する
+
+xref::attachment$suse-observability_logs_collector.sh[suse-observability_logs_collector.sh]スクリプトをダウンロードしてください。
+
+* スクリプトを次のように保存してください：`suse-observability_logs_collector.sh`
+* 次のコマンドを使用してスクリプトを実行してください：
++
+[,bash]
+----
+bash suse-observability_logs_collector.sh
+----
++
+これにより、現在のディレクトリに`suse-observability_logs_<date>.tar.gz`という名前のファイルが生成されます。このファイルをケースにアップロードしてください。
+
+追加の引数を指定することができます：
+[,bash]
+----
+> bash suse-observability_logs_collector.sh -h
+SUSE Observability support package collector.
+Fetches details of a SUSE Observability instance for troubleshooting.
+
+Usage: ./suse-observability_logs_collector.sh [options] [<namespace>]
+
+options:
+  -h  Print this help
+  -e  Fetch logs for suse-observability pods from Elasticsearch
+  -r  Time range for logs to fetch from Elasticsearch,
+      when not specified "7d" is used
+
+<namespace>:
+  The namespace that is running SUSE Observability, or
+  "suse-observability" when not specified
+----
+
+例：{stackstate-product-name}がネームスペース`my-observability`にデプロイされているときに、組み込みのelasticsearchから3日間のログを収集するには：
+[,bash]
+----
+bash suse-observability_logs_collector.sh -e -r 3d my-observability
+----

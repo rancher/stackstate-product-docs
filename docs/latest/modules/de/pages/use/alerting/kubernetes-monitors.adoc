@@ -1,0 +1,228 @@
+= Monitore
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Übersicht
+
+Dieser Abschnitt beschreibt die sofort einsatzbereiten Monitore, die mit SUSE Observability geliefert werden. Die mit dem Produkt gelieferten Monitore werden ständig hinzugefügt. Werfen Sie einen Blick auf den Abschnitt Monitore im Menü, um die vollständige Liste zu finden.
+
+== Sofort einsatzbereite Kubernetes-Monitore
+
+=== Verfügbare Endpunkte
+
+Es ist wichtig sicherzustellen, dass Ihre Dienste verfügbar und für Benutzer zugänglich sind. Um dies zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die verifiziert, ob ein Dienst mindestens einen verfügbaren Endpunkt hat. Endpunkte sind Netzwerkadressen, die die Kommunikation zwischen verschiedenen Komponenten in einem verteilten System ermöglichen, und sie müssen verfügbar sein, damit der Dienst ordnungsgemäß funktioniert.
+Wenn innerhalb der letzten 10 Minuten kein verfügbarer Endpunkt aufgetreten ist, bleibt der Monitor abweichend, was darauf hinweist, dass möglicherweise ein Problem mit dem Dienst vorliegt, das behoben werden muss.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben der Monitorargumente]
+
+=== CPU-Limits-Ressourcenkontingent
+
+Benutzer erstellen Ressourcen (Pods, Dienste usw.) im Namespace, und das Kontingentsystem verfolgt die Nutzung, um sicherzustellen, dass die harten Ressourcenlimits für CPU, die in einem ResourceQuota definiert sind, nicht überschritten werden. Der Monitor wird alarmieren, wenn die gesamten CPU-Limits im Namespace 90 % oder mehr des durch das Kontingent festgelegten Wertes erreichen. Jede `resourcequota` im Namespace erzeugt einen Gesundheitszustand des Monitors.
+
+=== CPU-Anforderungen-Ressourcenkontingent
+
+Benutzer erstellen Ressourcen (Pods, Dienste usw.) im Namespace, und das Kontingentsystem verfolgt die Nutzung, um sicherzustellen, dass die harten Ressourcenanforderungen für CPU, die in einem ResourceQuota definiert sind, nicht überschritten werden. Der Monitor wird alarmieren, wenn die gesamten CPU-Anforderungen im Namespace 90 % oder mehr des durch das Kontingent festgelegten Wertes erreichen. Jede `resourcequota` im Namespace erzeugt einen Gesundheitszustand des Monitors.
+
+=== Gewünschte Replikate für das DaemonSet
+
+Es ist wichtig, dass die gewünschte Anzahl von Replikaten für ein DaemonSet erfüllt wird. DaemonSets werden verwendet, um eine Gruppe von Pods zu verwalten, die auf allen oder einer Teilmenge von Knoten in einem Cluster ausgeführt werden müssen, wobei sichergestellt wird, dass eine Kopie des Pods auf jedem Knoten läuft, der die festgelegten Kriterien erfüllt. Dies ist nützlich für Aufgaben wie Protokollierung, Überwachung und andere clusterweite Aufgaben, die auf jedem Knoten im Cluster ausgeführt werden müssen. 
+
+Um dies zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die verifiziert, ob die verfügbaren Replikate der gewünschten Anzahl von Replikaten entsprechen. Diese Überprüfung wird nur auf DaemonSets angewendet, die eine gewünschte Anzahl von Replikaten größer als null haben. 
+
+* Wenn die Anzahl der verfügbaren Replikate geringer ist als die gewünschte Anzahl, signalisiert der Monitor einen ABWEICHENDEN Gesundheitszustand, was darauf hinweist, dass möglicherweise ein Problem mit dem StatefulSet vorliegt.
+* Wenn die Anzahl der verfügbaren Replikate null ist, signalisiert der Monitor einen KRITISCHEN Gesundheitszustand, was darauf hinweist, dass das StatefulSet überhaupt nicht funktioniert. 
+
+Um die vollständige Monitordefinition zu verstehen, überprüfen Sie die Details.
+
+=== Festplattenspeicher abweichend
+
+Es ist wichtig, die Nutzung von Persistent Volume Claims (PVCs) in Ihrem Kubernetes-Cluster im Laufe der Zeit zu überwachen. PVCs werden verwendet, um Daten zu speichern, die über die Lebensdauer eines Containers hinaus bestehen müssen, und es ist entscheidend, sicherzustellen, dass sie genügend Speicherplatz haben, um die Daten zu speichern.
+Um dies zu verfolgen, haben wir eine Überprüfung eingerichtet, die lineare Vorhersage verwendet, um den Trend der Kubernetes-Volumennutzung über einen Zeitraum von 4 Tagen vorherzusagen. Wenn der Trend darauf hinweist, dass die PVCs innerhalb dieses Zeitrahmens keinen Speicherplatz mehr haben werden, erhalten Sie eine Benachrichtigung, die es Ihnen ermöglicht, Maßnahmen zu ergreifen, um Datenverlust oder Ausfallzeiten zu verhindern.
+
+=== Festplattenspeicher kritisch
+
+Es ist wichtig, die Nutzung von Persistent Volume Claims (PVCs) in Ihrem Kubernetes-Cluster zu überwachen. PVCs werden verwendet, um Daten zu speichern, die über die Lebensdauer eines Containers hinaus bestehen müssen, und es ist entscheidend, sicherzustellen, dass sie genügend Speicherplatz haben, um die Daten zu speichern. Um dies zu verfolgen, haben wir eine Überprüfung eingerichtet, die lineare Vorhersage verwendet, um den Trend der Kubernetes-Volumennutzung über einen Zeitraum von 12 Stunden vorherzusagen. Wenn der Trend darauf hinweist, dass die PVCs innerhalb dieses Zeitrahmens keinen Speicherplatz mehr haben werden, erhalten Sie eine Benachrichtigung, die es Ihnen ermöglicht, Maßnahmen zu ergreifen, um Datenverlust oder Ausfallzeiten zu verhindern.
+
+=== Gewünschte Replikate für das Deployment
+
+Es ist wichtig, dass die gewünschte Anzahl von Replikaten für ein Deployment erreicht wird. Deployments werden verwendet, um die Bereitstellung und Skalierung einer Gruppe identischer Pods in einem Kubernetes-Cluster zu verwalten. Indem sichergestellt wird, dass die gewünschte Anzahl von Replikaten läuft und verfügbar ist, können Deployments dazu beitragen, die Verfügbarkeit und Zuverlässigkeit einer Kubernetes-Anwendung oder -Dienstleistung aufrechtzuerhalten. Um dies zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die verifiziert, ob die verfügbaren Replikate der gewünschten Anzahl von Replikaten entsprechen.
+
+Diese Überprüfung wird nur auf Deployments angewendet, die eine gewünschte Anzahl von Replikaten größer als null haben.
+
+* Wenn die Anzahl der verfügbaren Replikate geringer ist als die gewünschte Anzahl, signalisiert der Monitor einen ABWEICHENDEN Gesundheitszustand, was darauf hinweist, dass möglicherweise ein Problem mit dem Deployment vorliegt.
+* Wenn die Anzahl der verfügbaren Replikate null ist, signalisiert der Monitor einen KRITISCHEN Gesundheitszustand, was darauf hinweist, dass das Deployment überhaupt nicht funktioniert.
+
+Um die vollständige Monitordefinition zu verstehen, überprüfen Sie die Details.
+
+=== HTTP - 5xx Fehlerquote
+
+HTTP-Antworten mit einem Statuscode im Bereich 5xx weisen auf serverseitige Fehler hin, wie z. B. eine Fehlkonfiguration, Überlastung oder interne Serverfehler.
+Um eine gute Benutzererfahrung zu gewährleisten, sollte der Prozentsatz der 5xx-Antworten weniger als 5 % der gesamten HTTP-Antworten für einen Kubernetes-Dienst betragen.
+
+Da der genaue Schwellenwert und die Schwere anwendungsspezifisch sein können, können die Schwellenwerte xref:/use/alerting/k8s-override-monitor-arguments.adoc[über eine Kubernetes-Annotation] am Dienst überschrieben werden. Um beispielsweise den vorkonfigurierten abweichenden Schwellenwert zu überschreiben und stattdessen nur einen kritischen Schwellenwert von 6 % zu haben, fügen Sie diese Annotation zu Ihrem Dienst hinzu:
+```
+monitor.kubernetes-v2.stackstate.io/http-error-ratio-for-service: | 
+  { 
+    "criticalThreshold": 0.06,
+    "deviatingThreshold": null
+  }
+```
+
+Das Weglassen des abweichenden Schwellenwerts aus diesem JSON-Snippet hätte ihn bei den konfigurierten 5 % belassen, mit dem kritischen Schwellenwert bei 6 %, was bedeutet, dass der Monitor nur für eine Fehlerquote zwischen 5 % und 6 % einen abweichenden Zustand signalisieren würde.
+
+=== HTTP - Antwortzeit - Q95 liegt über 3 Sekunden
+
+Die Verfolgung der 95. Perzentile (Q95) der HTTP-Antwortzeit für Ihre Kubernetes-Dienste hilft Ihnen, langsame Anfragen und Leistungsabweichungen zu erkennen, die die Benutzer beeinträchtigen könnten. Wenn die Q95-Antwortzeit während eines bestimmten Zeitfensters über 3 Sekunden liegt, wird der Monitor Sie mit einem abweichenden Zustand alarmieren.
+
+Sie können diesen Monitor an die Bedürfnisse Ihrer Anwendung anpassen, indem Sie xref:/use/alerting/k8s-override-monitor-arguments.adoc[die Standardeinstellungen überschreiben], wie z. B. das Zeitfenster, den Schwellenwert oder das Quantil, unter Verwendung einer Kubernetes-Annotation an Ihrem Dienst. Diese Flexibilität ist nützlich, wenn Ihr Dienst einzigartige Leistungsanforderungen hat. Zum Beispiel bei Long-Polling-Diensten.
+
+Um den Monitor anzupassen, fügen Sie eine Annotation wie die folgende zu Ihrem Dienst hinzu und passen Sie die Werte nach Bedarf an:
+
+```
+monitor.kubernetes-v2.stackstate.io/http-response-time/overrides: |
+  {
+    "deviatingTimeWindow": "10m",            // Time window for a deviating state (e.g., "10m", "1h")
+    "deviatingThreshold": 1.2,               // Threshold in seconds for a deviating state
+    "criticalTimeWindow": "30m",             // Time window for a critical state
+    "criticalThreshold": 2.0,                // Threshold in seconds for a critical state
+    "quantile": 0.99,                        // Quantile to monitor (e.g., 0.95, 0.99)
+    "nameTemplate": "API latency (p{{ quantile }}) > {{ threshold }}", // Custom monitor name
+    "enabled": true                          // Set to false to disable this monitor for the service
+  }
+```
+
+- Sie können jedes Feld weglassen, um seinen Standardwert zu verwenden.
+- Der Monitor bewertet das gewählte Quantil der Antwortzeit über das angegebene Fenster. Wenn der Wert über dem Schwellenwert liegt, wird der Monitor ausgelöst.
+- Im obigen Beispiel wird der Monitor einen abweichenden Zustand signalisieren, wenn die 99. Perzentile (Q99) der Antwortzeit über 1,2 Sekunden (in den letzten 10 Minuten) liegt, und einen kritischen Zustand, wenn sie über 2,0 Sekunden (in den letzten 30 Minuten) liegt.
+
+=== Trend der Kubernetes-Volume-Nutzung über 12 Stunden
+
+Es ist wichtig, die Nutzung von Persistent Volume Claims (PVCs) in Ihrem Kubernetes-Cluster zu überwachen. PVCs werden verwendet, um Daten zu speichern, die über die Lebensdauer eines Containers hinaus bestehen müssen, und es ist entscheidend, sicherzustellen, dass sie genügend Speicherplatz haben, um die Daten zu speichern. Um dies zu verfolgen, hat SUSE Observability eine Überprüfung eingerichtet, die lineare Vorhersage verwendet, um den Trend der Kubernetes-Volume-Nutzung über einen Zeitraum von 12 Stunden vorherzusagen. Wenn der Trend darauf hinweist, dass die PVCs innerhalb dieses Zeitrahmens keinen Speicherplatz mehr haben werden, erhalten Sie eine Benachrichtigung, die es Ihnen ermöglicht, Maßnahmen zu ergreifen, um Datenverlust oder Ausfallzeiten zu verhindern.
+
+=== Trend der Kubernetes-Volume-Nutzung über 4 Tage
+
+Es ist wichtig, die Nutzung von Persistent Volume Claims (PVCs) in Ihrem Kubernetes-Cluster im Laufe der Zeit zu überwachen. PVCs werden verwendet, um Daten zu speichern, die über die Lebensdauer eines Containers hinaus bestehen müssen, und es ist entscheidend, sicherzustellen, dass sie genügend Speicherplatz haben, um die Daten zu speichern.
+Um dies zu verfolgen, hat SUSE Observability eine Überprüfung eingerichtet, die lineare Vorhersagen verwendet, um den Kubernetes-Volumennutzungs-Trend über einen Zeitraum von 4 Tagen vorherzusagen. Wenn der Trend darauf hinweist, dass die PVCs innerhalb dieses Zeitrahmens keinen Speicherplatz mehr haben werden, erhalten Sie eine Benachrichtigung, die es Ihnen ermöglicht, Maßnahmen zu ergreifen, um Datenverlust oder Ausfallzeit zu verhindern.
+
+=== Speicherlimits ResourceQuota
+
+Benutzer erstellen Ressourcen (Pods, Dienste usw.) im Namespace, und das Quotasystem verfolgt die Nutzung, um sicherzustellen, dass die festgelegten harten Ressourcenlimits für den Speicher in einer ResourceQuota nicht überschritten werden. Der Monitor wird alarmieren, wenn die gesamten Speicherlimits im Namespace 90 % oder mehr des durch die Quote festgelegten Wertes erreichen. Jede `resourcequota` im Namespace erzeugt einen Gesundheitszustand des Monitors.
+
+=== Speicheranforderungen ResourceQuota
+
+Benutzer erstellen Ressourcen (Pods, Dienste usw.) im Namespace, und das Quotasystem verfolgt die Nutzung, um sicherzustellen, dass die festgelegten harten Ressourcenanforderungen für den Speicher in einer ResourceQuota nicht überschritten werden. Der Monitor wird alarmieren, wenn die gesamten Speicheranforderungen im Namespace 90 % oder mehr des durch die Quote festgelegten Wertes erreichen. Jede `resourcequota` im Namespace erzeugt einen Gesundheitszustand des Monitors.
+
+=== Knoten-Diskdruck
+
+Knoten-Diskdruck bezieht sich auf eine Situation, in der die an einen Knoten angeschlossenen Festplatten übermäßiger Belastung ausgesetzt sind. Obwohl es aufgrund der integrierten Präventionsmaßnahmen von Kubernetes unwahrscheinlich ist, dass Knoten-Diskdruck auftritt, kann es dennoch sporadisch vorkommen. Es gibt zwei Hauptgründe, warum Knoten-Diskdruck entstehen kann. Der erste Grund liegt darin, dass Kubernetes es versäumt, ungenutzte Images zu bereinigen. Unter normalen Umständen überprüft Kubernetes regelmäßig, ob ungenutzte Images vorhanden sind, und löscht diese. Daher ist dies eine ungewöhnliche Ursache für Knoten-Diskdruck, sollte jedoch anerkannt werden. Das wahrscheinlichere Problem betrifft die Ansammlung von Protokollen. In Kubernetes werden Protokolle typischerweise in zwei Szenarien gespeichert: wenn Container laufen und wenn die Protokolle des zuletzt beendeten Containers zur Fehlerbehebung aufbewahrt werden. Dieser Ansatz zielt darauf ab, ein Gleichgewicht zwischen der Aufbewahrung wichtiger Protokolle und der schrittweisen Entsorgung unnötiger Protokolle zu finden. Wenn jedoch ein lang laufender Container ein umfangreiches Volumen an Protokollen erzeugt, können diese sich so weit ansammeln, dass sie die Kapazität der Knoten-Disk überlasten. Um die vollständige Monitordefinition zu verstehen, überprüfen Sie die Details.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitorargumenten]
+
+=== Knoten-Speicherdruck
+
+Der Knoten-Speicherdruck bezieht sich auf eine Situation, in der die Speicherressourcen eines Kubernetes-Knotens übermäßig belastet sind. Obwohl es aufgrund der integrierten Ressourcenmanagement-Mechanismen von Kubernetes ungewöhnlich ist, auf Knoten-Speicherdruck zu stoßen, kann dies unter bestimmten Umständen dennoch vorkommen. Es gibt zwei Hauptgründe, weshalb Knoten-Speicherdruck auftreten kann. Der erste Grund hängt mit falsch konfigurierten oder unzureichenden Ressourcenanforderungen und -grenzen für Container zusammen, die auf dem Knoten ausgeführt werden. Kubernetes verlässt sich auf Ressourcenanforderungen und -grenzen, um Ressourcen effektiv zuzuweisen und zu verwalten. Wenn Container nicht genau mit ihren Speicheranforderungen konfiguriert sind, können sie mehr Speicher verbrauchen als erwartet, was zu Knoten-Speicherdruck führt. Der zweite Grund betrifft die Anwesenheit von speicherintensiven Anwendungen oder Prozessen. Bestimmte Arbeitslasten oder Anwendungen können höhere Speicheranforderungen haben, was zu einer erhöhten Speichernutzung auf dem Knoten führt. Wenn mehrere Pods oder Container mit erheblichen Speicheranforderungen ohne angemessene Ressourcenzuweisung auf demselben Knoten geplant werden, kann dies zu Speicherdruck führen. Um Knoten-Speicherdruck zu mindern, ist es entscheidend, die Ressourcenanforderungen und -grenzen für Container zu überprüfen und anzupassen, um sicherzustellen, dass sie mit den tatsächlichen Speicherbedürfnissen der Anwendungen übereinstimmen. Die Überwachung und Optimierung der Speichernutzung innerhalb der Anwendungen selbst kann ebenfalls dazu beitragen, den Speicherverbrauch zu reduzieren. Zusätzlich sollte man horizontales Pod-Autoscaling in Betracht ziehen, um die Anzahl der Pods basierend auf der Speichernutzung dynamisch zu skalieren. Regelmäßige Überwachung, Analyse speicherbezogener Metriken und proaktive Zuweisung von Speicherressourcen können helfen, einen gesunden Speicherzustand auf Kubernetes-Knoten aufrechtzuerhalten. Es ist wichtig, die spezifischen Anforderungen Ihrer Arbeitslasten zu verstehen und die Ressourcenzuweisung entsprechend anzupassen, um Knoten-Speicherdruck zu verhindern und eine optimale Leistung sicherzustellen.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitorargumenten]
+
+=== Knoten PID-Druck
+
+Knoten-PID-Druck tritt auf, wenn die verfügbaren Ressourcen zur Prozessidentifikation (PID) auf einem Kubernetes-Knoten übermäßig belastet sind. Der erste Grund hängt mit falsch konfigurierten oder unzureichenden Ressourcenanforderungen und -grenzen für Container zusammen, die auf dem Knoten ausgeführt werden. Kubernetes verlässt sich auf genaue Ressourcenanforderungen und -grenzen, um Ressourcen effektiv zuzuweisen und zu verwalten. Wenn Container nicht korrekt mit ihren PID-Anforderungen konfiguriert sind, können sie mehr PIDs verbrauchen als erwartet, was zu Knoten-PID-Druck führt. Der zweite Grund ist die Anwesenheit von PID-intensiven Anwendungen oder Prozessen. Einige Arbeitslasten oder Anwendungen haben höhere Anforderungen an die Prozessidentifikation, was zu einer erhöhten PID-Nutzung auf dem Knoten führt. Wenn mehrere Pods oder Container mit erheblichen PID-Anforderungen auf demselben Knoten ohne angemessene Ressourcenzuweisung geplant werden, kann dies zu PID-Druck führen. Um den PID-Druck auf dem Knoten zu beheben, ist es wichtig, die Ressourcenanforderungen und -grenzen für Container zu überprüfen und anzupassen, um sicherzustellen, dass sie mit den tatsächlichen PID-Bedürfnissen der Anwendungen übereinstimmen. Die Überwachung und Optimierung der PID-Nutzung innerhalb der Anwendungen selbst kann ebenfalls dazu beitragen, den PID-Verbrauch zu reduzieren. Darüber hinaus kann die Berücksichtigung der horizontalen Pod-Autoskalierung die Anzahl der Pods basierend auf der PID-Nutzung dynamisch skalieren. Regelmäßige Überwachung, Analyse der PID-bezogenen Metriken und proaktive Zuteilung von PID-Ressourcen sind entscheidend für die Aufrechterhaltung eines gesunden Zustands der PID-Nutzung auf Kubernetes-Knoten. Es ist wichtig, die spezifischen Anforderungen Ihrer Arbeitslasten zu verstehen und die Ressourcenzuweisung entsprechend anzupassen, um PID-Druck zu verhindern und eine optimale Leistung sicherzustellen.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitor-Argumenten]
+
+=== Knotenbereitschaft
+
+Überprüfen Sie, ob der Knoten wie erwartet läuft.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitor-Argumenten]
+
+=== Verwaiste persistente Volumes
+
+Stellen Sie sicher, dass keine persistenten Volumes verwaist sind. Ein verwaistes persistentes Volume ist ein persistentes Volume, das nicht mit einem persistenten Volume-Anspruch verbunden ist. Ein verwaistes persistentes Volume kann ein Sicherheitsrisiko darstellen, da es möglicherweise sensible Daten enthält, die nicht verwendet werden. Ein verwaistes persistentes Volume kann auch eine Verschwendung von Ressourcen sein, da es nicht verwendet wird.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitor-Argumenten], jedoch nur die `enabled` Eigenschaft
+
+=== Nicht genügend Speicher für Container
+
+Es ist wichtig sicherzustellen, dass die in Ihrem Kubernetes-Cluster laufenden Container über genügend Speicher verfügen, um ordnungsgemäß zu funktionieren. Out-of-Memory (OOM)-Bedingungen können dazu führen, dass Container abstürzen oder nicht mehr reagieren, was zu Neustarts und potenziellem Datenverlust führt.
+Um diese Bedingungen zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die OOM-Ereignisse in den im Cluster laufenden Containern erkennt und meldet. Diese Überprüfung hilft Ihnen, Container zu identifizieren, die an Speicherproblemen leiden, und ermöglicht es Ihnen, Maßnahmen zu ergreifen, um Probleme zu verhindern, bevor sie auftreten.
+Erlaubt xref:/use/alerting/k8s-override-monitor-arguments.adoc[Überschreiben von Monitor-Argumenten]
+
+=== Pod-Bereitschaftszustand
+
+Überprüft, ob ein geplanter Pod läuft und bereit ist, innerhalb des erwarteten Zeitrahmens Verkehr zu empfangen.
+
+=== Pod-Dauer
+
+Überwacht die Dauer der Server- und Verbraucher-Spans. Wenn der 95. Perzentil der Dauer den Schwellenwert (Standard 5000 ms) überschreitet, hat der Monitor einen abweichenden Zustand. Dieser Monitor unterstützt das Überschreiben von Einstellungen über xref:/use/alerting/k8s-override-monitor-arguments.adoc[Monitor-Argumentüberschreibungen].
+
+=== Fehlerquote der Pod-Spans
+
+Überwacht den Prozentsatz der Server- und Verbraucher-Spans, die einen Fehlerstatus haben. Wenn der Prozentsatz der Fehler-Spans den Schwellenwert (Standard 5) überschreitet, hat der Monitor einen abweichenden Zustand. Dieser Monitor unterstützt das Überschreiben von Einstellungen über xref:/use/alerting/k8s-override-monitor-arguments.adoc[Monitor-Argumentüberschreibungen].
+
+=== Pods im Wartestatus
+
+Wenn ein Pod sich im Wartestatus befindet und einen Grund wie CreateContainerConfigError, CreateContainerError, CrashLoopBackOff oder ImagePullBackOff enthält, wird er als abweichend angesehen.
+
+=== Gewünschte Replikate des ReplicaSets
+
+Es ist wichtig sicherzustellen, dass die gewünschte Anzahl von Replikaten für Ihr ReplicaSet (und Deployment) erfüllt wird. ReplicaSets und Deployments werden verwendet, um die Anzahl der Replikate eines bestimmten Pods in einem Kubernetes-Cluster zu verwalten.
+
+Um dies zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die verifiziert, ob die verfügbaren Replikate der gewünschten Anzahl von Replikaten entsprechen. Diese Überprüfung wird nur auf ReplicaSets und Deployments angewendet, die eine gewünschte Anzahl von Replikaten größer als null haben.
+
+* Wenn die Anzahl der verfügbaren Replikate kleiner ist als die gewünschte Anzahl, signalisiert der Monitor einen abweichenden Gesundheitszustand, was darauf hinweist, dass möglicherweise ein Problem mit dem ReplicaSet oder Deployment vorliegt.
+* Wenn die Anzahl der verfügbaren Replikate null ist, signalisiert der Monitor einen kritischen Gesundheitszustand, was darauf hinweist, dass das ReplicaSet oder die Implementierung überhaupt nicht funktioniert.
+
+Darüber hinaus wird der Gesundheitszustand des ReplicaSets auf die Implementierung übertragen, um eine umfassendere Überwachung zu ermöglichen.
+
+=== Neustarts für Container
+
+Es ist wichtig, die Neustarts für jeden Container in einem Kubernetes-Cluster zu überwachen. Container können aus verschiedenen Gründen neu starten, einschließlich Problemen mit der Anwendung oder der Infrastruktur.
+Um sicherzustellen, dass die Anwendung reibungslos läuft, hat SUSE Observability einen Monitor eingerichtet, der die Anzahl der Containerneustarts über einen Zeitraum von 10 Minuten verfolgt. Wenn es in diesem Zeitraum mehr als 3 Neustarts gibt, wird der Gesundheitszustand des Containers auf ABWEICHEND gesetzt, was darauf hinweist, dass möglicherweise ein Problem vorliegt, das untersucht werden muss.
+
+=== Verfügbare Endpunkte des Dienstes
+
+Es ist wichtig sicherzustellen, dass Ihre Dienste verfügbar und für Benutzer zugänglich sind. Um dies zu überwachen, haben wir eine Überprüfung eingerichtet, die verifiziert, ob ein Dienst mindestens einen verfügbaren Endpunkt hat. Endpunkte sind Netzwerkadressen, die die Kommunikation zwischen verschiedenen Komponenten in einem verteilten System ermöglichen, und sie müssen verfügbar sein, damit der Dienst ordnungsgemäß funktioniert.
+Wenn innerhalb der letzten 10 Minuten kein verfügbarer Endpunkt aufgetreten ist, bleibt der Monitor in einem abweichenden Zustand, was darauf hinweist, dass möglicherweise ein Problem mit dem Dienst vorliegt, das behoben werden muss.
+Um die vollständige Monitordefinition zu verstehen, überprüfen Sie die Details.
+
+=== Dauer des Dienst-Spans
+
+Überwacht die Dauer der Server- und Verbraucher-Spans. Wenn der 95. Perzentil der Dauer den Schwellenwert (Standard 5000 ms) überschreitet, hat der Monitor einen abweichenden Zustand. Dieser Monitor unterstützt das Überschreiben von Einstellungen über xref:/use/alerting/k8s-override-monitor-arguments.adoc[Monitor-Argumentüberschreibungen].
+
+=== Fehlerquote des Dienst-Spans
+
+Prozentsatz der Server- und Verbraucher-Spans, die sich in einem Fehlerzustand für einen Kubernetes-Dienst befinden. Dieser Monitor unterstützt das Überschreiben von Einstellungen über xref:/use/alerting/k8s-override-monitor-arguments.adoc[Monitor-Argumentüberschreibungen].
+
+=== Gewünschte Replikate des StatefulSets
+
+Es ist wichtig, dass die gewünschte Anzahl von Replikaten für ein StatefulSet erfüllt wird. StatefulSets werden verwendet, um zustandsbehaftete Anwendungen zu verwalten und erfordern eine bestimmte Anzahl von Replikaten, um ordnungsgemäß zu funktionieren.
+
+Um dies zu überwachen, hat SUSE Observability eine Überprüfung eingerichtet, die verifiziert, ob die verfügbaren Replikate der gewünschten Anzahl von Replikaten entsprechen. Diese Überprüfung wird nur auf StatefulSets angewendet, die eine gewünschte Anzahl von Replikaten größer als null haben.
+
+* Wenn die Anzahl der verfügbaren Replikate geringer ist als die gewünschte Anzahl, signalisiert der Monitor einen ABWEICHENDEN Gesundheitszustand, was darauf hinweist, dass möglicherweise ein Problem mit dem StatefulSet vorliegt.
+* Wenn die Anzahl der verfügbaren Replikate null ist, signalisiert der Monitor einen KRITISCHEN Gesundheitszustand, was darauf hinweist, dass das StatefulSet überhaupt nicht funktioniert.
+
+=== Nicht planbarer Knoten
+
+Wenn Sie ein Ereignis "NodeNotSchedulable" in Kubernetes antreffen, bedeutet dies, dass der Kubernetes-Planer nicht in der Lage war, einen Pod auf einem bestimmten Knoten aufgrund von Einschränkungen oder Problemen mit dem Knoten zu platzieren. Dieses Ereignis tritt auf, wenn der Planer keinen geeigneten Knoten finden kann, um den Pod gemäß seinen Ressourcenanforderungen und anderen Einschränkungen auszuführen.
+
+=== Aggregierter Gesundheitszustand eines Clusters
+
+Das Cluster hat selbst keinen eigenen Gesundheitszustand. Ein Cluster besteht jedoch aus wenigen Komponenten, von denen einige für den normalen Betrieb kritisch sind. Der Monitor aggregiert die Zustände dieser Komponenten:
+
+* alle Pods im Namespace 'kube-system'
+* alle Knoten und nimmt dann den kritischsten Gesundheitszustand.
+
+=== Gesundheitszustand der abgeleiteten Arbeitslasten (Deployment, DaemonSet, ReplicaSet, StatefulSet)
+
+Der Monitor aggregiert die Zustände aller obersten Abhängigkeiten und gibt dann den kritischsten Gesundheitszustand basierend auf direkten Beobachtungen (z. B. aus Metriken) zurück.
+Dieser Ansatz stellt sicher, dass Gesundheitssignale von technischen Komponenten auf niedriger Ebene (wie Pods) zu logischen Komponenten auf höherer Ebene propagiert werden, jedoch nur, wenn die Komponente selbst keinen beobachteten Gesundheitszustand aufweist.
+Um diesen Monitor effektiv zu nutzen, stellen Sie sicher, dass einige oder alle der folgenden Gesundheitsprüfungen deaktiviert sind:
+
+* Gewünschte Replikate für das Deployment
+* DaemonSet gewünschte Replikate
+* ReplicaSet gewünschte Replikate
+* StatefulSet gewünschte Replikate
+
+Wenn Sie einen Anwendungsfall haben, bei dem logische Komponenten keine direkten Monitore haben, können Sie die xref:/use/alerting/k8s-derived-state-monitors.adoc[Abgeleitete Zustandsüberwachung]-Funktion verwenden, um deren Gesundheit basierend auf den technischen Komponenten, von denen sie abhängen, abzuleiten.
+
+== Siehe auch
+
+* xref:/use/alerting/k8s-monitors.adoc[Monitore]

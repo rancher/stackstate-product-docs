@@ -1,0 +1,200 @@
+= Rancher RBAC
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Présentation
+
+L'extension SUSE Rancher Prime Observability utilise RBAC Kubernetes pour accorder l'accès aux utilisateurs de Rancher dans SUSE Observability.
+Si vous n'utilisez pas Rancher, consultez xref:/setup/security/rbac/rbac_roles.adoc[Procédure de configuration des rôles] dans une installation autonome.
+
+[NOTE]
+====
+Pour que le RBAC de Rancher fonctionne, 
+
+* l'authentification pour {stackstate-product-name} doit être configurée avec le xref:setup/security/authentication/oidc.adoc#_rancher[Fournisseur OIDC Rancher].
+* l'Agent {stackstate-product-name} doit avoir l'Agent RBAC activé et doit s'authentifier à l'aide d'un token de service.
+====
+
+Chaque utilisateur authentifié a le rôle *Accès de base à l'instance* qui lui permet d'utiliser le système.  Ces autorisations donnent accès aux vues, paramètres, liaisons de métriques, et permettent à un utilisateur de voir les notifications système.  Elles ne donnent accès à aucune donnée {stackstate-product-name}.  Pour voir des données, un utilisateur doit se voir attribuer un rôle supplémentaire. Deux directions pour étendre le rôle *Accès de base à l'instance* sont fournies avec Rancher *Modèles de rôle* :
+
+Rôles d'instance:: Vous permet de configurer ou de personnaliser {stackstate-product-name}.
+Rôles à portée:: Accorde l'accès aux données {stackstate-product-name} des clusters observés.
+
+== Rôles d'instance
+
+Vous pouvez attribuer les *Modèles de rôle* pour *Rôles d'instance* aux utilisateurs ou groupes dans le *Projet* qui exécute {stackstate-product-name}. Si aucun rôle d'instance n'est explicitement attribué à un membre d'un projet, alors il aura les autorisations du rôle *Accès de base à l'instance*.
+
+=== Rôles d'instance avec accès aux données {stackstate-product-name}
+
+Quelques rôles "globaux" permettent l'accès à toutes les données {stackstate-product-name} - dans n'importe lequel des clusters observés.  Ces rôles sont destinés à être utilisés pour configurer le système et pour résoudre les problèmes au niveau du système.  Pour les utilisateurs ayant l'un de ces rôles, il n'est pas nécessaire de configurer xref:scoped[Rôles à portée].
+
+Administrateur d'instance:: Accorde un accès complet à toutes les vues et toutes les autorisations.
+Dépanneur d'instance:: Accorde toutes les autorisations requises pour utiliser SUSE Observability pour le dépannage, y compris la capacité d'activer/désactiver des moniteurs, de créer des vues personnalisées et d'utiliser le CLI.
+Observateur d'instance:: Accorde l'accès à toutes les données dans une instance SUSE Observability.
+
+=== Rôles d'instance sans accès aux données {stackstate-product-name}
+
+Ces rôles doivent être combinés avec le rôle *Observateur d'instance* ou l'un des xref:scoped[Rôles à portée] (voir ci-dessous).  Sinon, aucune donnée {stackstate-product-name} n'est accessible et l'interface utilisateur affichera un message "Aucun composant trouvé".  Cela s'applique à tous les utilisateurs de Rancher, y compris les utilisateurs, tels que les propriétaires de projet.
+
+Accès recommandé à l'instance:: Accorde les autorisations recommandées pour utiliser SUSE Observability.  Ce rôle inclut des autorisations qui ne sont pas strictement nécessaires, mais qui offrent des moyens (limités) de personnalisation {stackstate-product-name}.
+Accès de base à l'instance:: Accorde des autorisations minimales pour utiliser {stackstate-product-name}. Ce rôle n'a pas besoin d'être explicitement attribué et il n'existe pas de *Modèle de Rôle* pour cela ; chaque utilisateur connecté l'a. 
+
+Vous pouvez trouver les autorisations assignées à chaque rôle prédéfini de SUSE Observability ci-dessous. Pour plus de détails sur les différentes autorisations et leur gestion en utilisant le `sts` CLI, voir xref:/setup/security/rbac/rbac_permissions.adoc[autorisations du contrôle d'accès en fonction du rôle (RBAC)].
+
+[tabs]
+====
+Accès de base::
++
+--
+L'accès de base accorde des autorisations minimales pour utiliser SUSE Observability. À combiner avec un Observateur (instance, cluster ou projet).
+Ces autorisations sont accordées à tous les utilisateurs.
+
+|===
+|Ressource |Verbes 
+
+|liaisons-métriques |obtenir
+|paramètres |obtenir
+|system-notifications |obtenir
+|vues |obtenir
+|===
+
+--
+Accès recommandé::
++
+--
+L'accès recommandé accorde des autorisations qui ne sont pas strictement nécessaires, mais qui rendent SUSE Observability beaucoup plus utile. Il offre un degré limité de personnalisation.
+À combiner avec un Observateur (instance, cluster ou projet).
+
+|===
+|Ressource |Verbes 
+
+|api-tokens |obtenir
+|tableaux-de-bord-préférés |créer, supprimer
+|vues favorites |créer, supprimer
+|stackpacks |obtenir 
+|paramètres-de-visualisation |update
+|===
+
+--
+Observer::
++
+--
+L'Observateur accorde l'accès à toutes les données d'observabilité dans une instance SUSE Observability.  À combiner avec *Accès recommandé* pour une meilleure expérience.
+
+|===
+|Ressource |Verbes 
+
+|topologie |obtenir
+|métriques |obtenir
+|traces |obtenir
+|===
+
+--
+Dépanneur::
++
+--
+Le rôle Dépanneur d'instance a accès à toutes les données disponibles dans SUSE Observability et la capacité de créer des vues et d'activer/désactiver des moniteurs.
+
+|===
+|Ressource |Verbes 
+
+|agents |obtenir 
+|api-tokens |obtenir
+|actions-composant |execute
+|tableaux de bord |obtenir, créer, mettre à jour, supprimer 
+|tableaux-de-bord-préférés |créer, supprimer
+|vues favorites |créer, supprimer
+|liaisons-métriques |obtenir
+|métriques |obtenir 
+|moniteurs |obtenir, créer, mettre à jour, supprimer, exécuter 
+|notifications |obtenir, créer, mettre à jour, supprimer 
+|paramètres |obtenir 
+|stackpack-configurations |obtenir, créer, mettre à jour, supprimer
+|stackpacks |obtenir 
+|system-notifications |obtenir
+|topologie |obtenir 
+|traces |obtenir 
+|vues |obtenir, créer, mettre à jour, supprimer 
+|paramètres-de-visualisation |obtenir
+|===
+
+--
+Admin::
++
+--
+Le rôle Administrateur d'instance a toutes les autorisations assignées.
+
+|===
+|Ressource |Verbes 
+
+|agents |obtenir 
+|api-tokens |obtenir
+|actions-composant |execute
+|tableaux de bord |obtenir, créer, mettre à jour, supprimer 
+|tableaux-de-bord-préférés |créer, supprimer
+|vues favorites |créer, supprimer
+|clés-api-d'ingestion |obtenir, créer, mettre à jour, supprimer
+|liaisons-métriques |obtenir
+|métriques |obtenir 
+|moniteurs |obtenir, créer, mettre à jour, supprimer, exécuter 
+|notifications |obtenir, créer, mettre à jour, supprimer 
+|permissions |obtenir, créer, mettre à jour, supprimer 
+|scripts restreints |execute
+|jetons-de-service |obtenir, créer, mettre à jour, supprimer
+|paramètres |obtenir, créer, mettre à jour, supprimer, déverrouiller 
+|stackpack-configurations |obtenir, créer, mettre à jour, supprimer
+|stackpacks |obtenir, créer 
+|sync-data |obtenir, mettre à jour, supprimer
+|system-notifications |obtenir
+|messages de sujet |obtenir
+|topologie |obtenir 
+|traces |obtenir 
+|vues |obtenir, créer, mettre à jour, supprimer 
+|paramètres-de-visualisation |update
+|===
+
+--
+====
+
+[#scoped]
+== Rôles à portée
+
+Vous pouvez attribuer les *Modèles de rôle* suivants aux utilisateurs ou groupes dans un cluster observé.  Ils accordent l'accès aux données {stackstate-product-name} provenant d'un *Projet* dans le *Cluster*, donnant à un utilisateur la permission de lire la topologie, les métriques, les journaux et les données de trace.
+
+Observer:: Accorde l'accès aux données provenant des espaces de noms dans un *Projet*. Vous pouvez utiliser cela dans la section *Adhésion au projet* de la configuration du cluster.
+Observateur de cluster:: Accorde l'accès à toutes les données provenant d'un *Cluster*. Vous pouvez utiliser ce modèle dans la section *Adhésion au cluster* de la configuration du cluster.
+
+Les ressources dans ces rôles correspondent à xref:/setup/security/rbac/rbac_permissions.adoc#_scoped_permissions[autorisations à portée]. Elles sont disponibles dans le groupe API `scope.observability.cattle.io` (avec juste le verbe `get` car ces ressources sont en lecture seule) :
+
+* `topology` - composants (déploiements, pods, etc.) du cluster ou de l'espace de noms
+* `traces` - étendues du cluster ou de l'espace de noms
+* `metrics` - données métriques provenant du cluster ou de l'espace de noms
+
+Notez que l'accès aux journaux est contrôlé par la ressource `topology`.
+
+Activez la personnalisation pour les utilisateurs avec ces rôles d'observateur en accordant le rôle *Accès recommandé à l'instance* sur le *Projet* exécutant {stackstate-product-name}.
+
+== Rôles personnalisés
+
+Pour accorder des autorisations supplémentaires au-delà de l'accès recommandé, créez un modèle de rôle de projet *RoleTemplate* dans Rancher, héritant de *Accès recommandé à l'instance SUSE Observability*.  Ensuite, par exemple, pour accorder les droits de consulter les moniteurs et les graphiques métriques, ajoutez des règles :
+
+* Verbe : `get`
+* Ressource : `metricbindings` et `monitors`
+* ApiGroup : `instance.observability.cattle.io`
+
+image::rancher-custom-role.png[Modèle de rôle personnalisé pour un accès plus riche]
+
+Vous pouvez spécifier toute combinaison de ressource et de verbe définie dans les xref:/setup/security/rbac/rbac_permissions.adoc[Permissions RBAC].  Notez que les tirets (`-`) sont supprimés des noms de ressources, donc la permission `get-metric-bindings` devient la ressource RBAC Kubernetes `metricbindings` avec le verbe `get`.
+
+
+== Dépannage
+
+* Vérifiez que l'agent RBAC pour le cluster est capable de communiquer avec la plateforme.
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Inspectez les sujets utilisateurs] (utilisateur et rôles).
+  ** Vérifiez toute configuration de rôles sur le fournisseur OIDC.
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[Inspectez la permission du sujet]
+  ** Vérifiez que les (Cluster)RoleBindings pertinents qui associent l'utilisateur à un (Cluster)Role sont présents.
+  ** Inspectez le (Cluster)Role pour vérifier qu'il accorde les autorisations correctes.

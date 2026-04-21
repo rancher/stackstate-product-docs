@@ -1,0 +1,78 @@
+= メトリクスの参照 
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-11-07
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+このページでは、SUSE Observability によって収集される一般的な Kubernetes 関連のメトリクスを定義し、それらがどのように計算されるかを説明します。
+
+=== container_memory_usage
+
+[horizontal]
+名前:: `container_memory_usage`
+タイプ:: ゲージ
+ユニット:: バイト
+ソース:: コンテナ cgroup 階層からの直接読み取り。
+
+[cols="1,3"]
+|===
+|cgroup バージョン | ソースファイル
+
+|v1 | `memory.usage_in_bytes`
+|v2 | `memory.current`
+|===
+
+まとめ:: cgroup とその子孫によって現在使用されているメモリの総量。これは、匿名メモリ (RSS)、ページキャッシュ、およびカーネルメモリを含む合計です。特定のメモリ領域の詳細を取得するには、次のメトリクスのいずれかを使用してください。
+
+=== container_memory_kernel
+
+[horizontal]
+名前:: `container_memory_kernel`
+タイプ:: ゲージ
+ユニット:: バイト
+ソース:: コンテナ cgroup 階層からの直接読み取り。
+
+[cols="1,3"]
+|===
+|cgroup バージョン | ソースファイル
+
+|v1 | `memory.kmem.usage_in_bytes`
+|v2 | `memory.stat` -> `kernel` ファイル内の フィールド
+|===
+まとめ:: カーネルメモリの総量 (kernel_stack、pagetables、percpu、vmalloc、slab を含む)
+
+=== container_memory_rss
+
+[horizontal]
+名前:: `container_memory_rss`
+タイプ:: ゲージ
+ユニット:: バイト
+ソース:: コンテナ cgroup 階層からの直接読み取り。
+
+[cols="1,3"]
+|===
+|cgroup バージョン | ソースファイル
+
+|v1 | `memory.stat` -> `total_rss` ファイル内の フィールド
+|v2 | `memory.stat` -> `anon` ファイル内の フィールド
+|===
+まとめ:: 匿名メモリの常駐セットサイズ (RSS)。これは、cgroup 内のプロセスによって実際に使用されている非ファイルバックメモリ (ヒープとスタック) です。この値は、アプリケーションの真の「作業セット」を反映することがよくあります。
+
+=== container_memory_cache
+
+[horizontal]
+名前:: `container_memory_cache`
+タイプ:: ゲージ
+ユニット:: バイト
+ソース:: コンテナ cgroup 階層からの直接読み取り。
+
+[cols="1,3"]
+|===
+|cgroup バージョン | ソースファイル
+
+|v1 | `memory.stat` -> `total_cache` ファイル内の フィールド
+|v2 | `memory.stat` -> `file` ファイル内の フィールド
+|===
+まとめ:: ページキャッシュ (ファイルシステムデータをキャッシュするために使用されるメモリ、tmpfs および共有メモリを含む)。

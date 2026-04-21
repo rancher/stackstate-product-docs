@@ -1,0 +1,50 @@
+= Node.jsアプリケーションのインストルメンテーション
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 自動インストルメンテーション
+
+Node.jsの自動インストルメンテーションは、アプリケーションに自動インストルメンテーション用のJavaScriptライブラリを含めることで行われます。幅広いhttps://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/metapackages/auto-instrumentations-node#_supported_instrumentations[ライブラリやフレームワークがサポートされています]。
+
+自動インストルメンテーションは、アプリケーションの変更を必要としません。設定するには、次の手順に従ってください：
+
+. アプリケーションにOpen TelemetryインストルメンテーションSDKを追加します：
++
+[,bash]
+----
+npm install --save @opentelemetry/api
+npm install --save @opentelemetry/auto-instrumentations-node
+----
+
+. SDKを読み込むためにアプリケーションを起動するコマンドを更新します。これは、Dockerイメージのエントリポイントまたはコマンド、またはアプリケーションのKubernetesマニフェスト内の`command`を更新することで行います。`--require @opentelemetry/auto-instrumentations-node/register`を追加します：
++
+[,bash]
+----
+node --require @opentelemetry/auto-instrumentations-node/register app.js
+----
+
+. サービス名とエクスポーターエンドポイントを設定するための追加の環境変数xref:/setup/otel/instrumentation/sdk-exporter-config.adoc[を指定してアプリケーションをデプロイします]。サポートされているプロトコルはgRPCとHTTP上のprotobufです。
+. SUSE Observabilityがトレースやメトリクスを受信していることを確認するには、サービス名のメトリクス / トレースエクスプローラーでメトリクス / トレースを検索してください。
+
+詳細については、https://opentelemetry.io/docs/languages/js/automatic/[Open Telemetry ドキュメント]を参照してください。
+
+[CAUTION]
+====
+環境変数を介して設定された自動インストルメンテーションは、このhttps://github.com/open-telemetry/opentelemetry-js/issues/4551[Open Telemetryの問題]が解決されるまでトレースのみをサポートします。自動インストルメンテーションからメトリクスを有効にするには、コードの変更が必要です。これらの変更を行うには、https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[Open Telemetry ドキュメント]の指示に従ってください。
+====
+
+
+== 手動インストルメンテーション
+
+手動インストルメンテーションは、自動インストルメンテーションでサポートされていないコードの部分からメトリクス、トレース、またはログが必要な場合に使用できます。例えば、サポートされていないライブラリ、社内コード、またはビジネスレベルのメトリクスなどがあります。
+
+そのデータをキャプチャするには、アプリケーションを変更する必要があります。
+
+. Open Telemetry SDKを依存関係として含めます。
+. アプリケーションにコードを追加して、必要に応じてメトリクス、スパン、またはログをキャプチャします。
+
+これに関する詳細なドキュメントは、https://opentelemetry.io/docs/languages/js/instrumentation/[Open Telemetry Javascript SDK ドキュメントページ]にあります。
+
+OTLPエクスポーターを使用し、コードからエクスポーターエンドポイントを正しく設定することを確認してください。また、https://opentelemetry.io/docs/languages/js/exporters/#_usage_with_nodejs[Open Telemetry ドキュメント]も参照してください。エクスポーターをxref:/setup/otel/collector.adoc[ドキュメント通り]に設定したと仮定すると、設定する必要があるエンドポイントは`http://opentelemetry-collector.open-telemetry.svc.cluster.local:4317`で、gRPCを使用します。gRPCに問題がある場合は、xref:/setup/otel/instrumentation/sdk-exporter-config.adoc#_grpc_vs_http[gRPCとHTTP]も参照してください。

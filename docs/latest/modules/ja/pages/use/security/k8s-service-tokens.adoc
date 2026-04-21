@@ -1,0 +1,224 @@
+= サービス トークン
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== 概要
+
+サービス トークンを使用することで、関連付けられたユーザー アカウントなしで SUSE Observability に認証することが可能です。これは、CI サーバーのようなヘッドレス サービスから SUSE Observability を使用したい場合に便利です。そのようなシナリオでは、通常、アイデンティティ プロバイダーにユーザー アカウントをプロビジョニングしたくありません。
+
+== サービス トークンの管理
+
+サービス トークンは、xref:/setup/cli/cli-sts.adoc[`sts` CLI] を介して管理できます。以下のコマンドが利用可能です：
+
+[,sh]
+----
+> sts service-token --help
+Manage service tokens.
+
+Usage:
+  sts service-token [command]
+
+Available Commands:
+  create      Create a service token
+  delete      Delete a service token
+  list        List service tokens
+
+Use "sts service-token [command] --help" for more information about a command.
+----
+
+インストール時に <<_set_up_a_bootstrap_service_token,起動用サービストークンを設定する>> {stackstate-product-name} ことも可能です。
+
+=== サービス トークンの作成
+
+[NOTE]
+====
+Open Telemetry および Kubernetes StackPacks を使用すると、必要な権限が設定されたサブジェクトとサービス トークンを作成できます。
+====
+
+{stackstate-product-name} のサービス トークンを作成するには、`sts` CLI を使用できます。
+
+[,sh]
+----
+sts service-token create
+----
+
+[NOTE]
+====
+サービス トークンは一度だけ表示されることに注意してください。トークンを再度表示することはできません。
+====
+
+
+このコマンドは、以下のコマンドライン引数を取ります：
+
+|===
+| フラグ | 説明
+
+| `--name`
+| サービス トークンの名前
+
+| `--expiration`
+| サービス トークンの有効期限、形式は yyyy-MM-dd です。有効期限はオプションです。
+
+| `--roles`
+| サービス トークンに割り当てる役割のカンマ区切りリスト
+|===
+
+例えば、以下のコマンドは、名前 `my-service-token` と役割 `stackstate-k8s-troubleshooter` のサービス トークンを作成します：
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+=== 起動用サービストークンを設定します。
+
+{stackstate-product-name}をインストールする際、（一時的な）起動用サービストークンで起動することが可能です。これにより、{stackstate-product-name}と最初に対話してUIからAPIトークンを取得することなくCLIを使用できます。これを設定するには、次のスニペットを{stackstate-product-name}の設定ファイルに追加してください：
+
+Kubernetes上で起動用サービストークンを作成するように{stackstate-product-name}を設定するには、ファイル`authentication.yaml`に次の値を追加する必要があります。次に例を示します。
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    serviceToken:
+      bootstrap:
+        token: <token>
+        roles:
+          - stackstate-admin
+        ttl: 24h
+----
+
+以下の手順に従って、{stackstate-product-name}を起動用サービストークンを作成するように設定してください：
+
+. `authentication.yaml` - 起動用サービストークンを追加します：
+ ** *token* - {stackstate-product-name}の(初期)開始時に作成されるトークンです。
+ ** *roles* - 起動用トークンに割り当てられたロールの配列です。
+ ** *ttl* - オプションです。サービストークンの有効期限を、期間文字列として表現します。
+. ファイル`authentication.yaml`を{stackstate-product-name}のインストール手順の`values.yaml`と一緒に保存してください。
+. Helm upgradeを実行して変更を適用します。
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* Helm upgradeコマンドの最初の実行ではポッドが再起動され、短時間可用性が中断される可能性があります。
+* すべての`authentication.yaml`の実行時に`helm upgrade`を含めてください。
+* 認証の設定はKubernetesシークレットとして保存されます。
+====
+
+
+==== 外部シークレットから起動用サービストークンをセットアップします。
+
+Helmの値を介して起動用サービストークンを指定する代わりに、Helmチャートの外部で作成および管理されるシークレットから起動用サービストークンを読み取ることもできます（外部シークレット）。外部シークレットから起動用サービストークンを使用するには、xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[これらの手順]に従い、次のデータを追加してください：
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  bootstrap_token: <base64 of token>
+----
+
+このトークンは、既存のデータが入っているシークレットに追加できます。
+
+=== サービス トークンの一覧
+
+作成済みのすべてのサービス トークンのID、名前、有効期限、役割は`sts` CLIを使用して確認できます。次に例を示します。
+
+[,sh]
+----
+> sts service-token list
+ID              | NAME             | EXPIRATION | ROLES
+107484341630693 | my-service-token |            | [stackstate-admin]
+----
+
+=== サービス トークンの削除
+
+サービス トークンは、`sts` CLIを使用して削除できます。サービス トークンのIDを引数として渡してください。次に例を示します。
+
+[,sh]
+----
+> sts service-token delete 107484341630693
+✅ Service token deleted: 107484341630693
+----
+
+== サービス トークンの使用
+
+サービストークンは、SUSE Observability APIsを使用する際の認証に使用します： +
+* CLIを使用する場合 +
+* HTTP APIsを直接使用する場合 +
+* テレメトリデータを取り込む場合
+
+=== SUSE Observability `sts` CLI
+
+サービス トークンは、`sts` CLIを使用した認証に用いられます。詳細については、xref:/setup/cli/cli-sts.adoc#_authentication[CLIドキュメント]を参照してください。
+
+=== SUSE Observability APIs
+
+サービストークンを使用してSUSE Observability APIsに直接アクセスするには、リクエストのヘッダーに追加します：
+
+* `Authorization` ヘッダーに:
++
+[,sh]
+----
+  > curl -X GET -H "Authorization: ApiKey <TOKEN>" http://localhost:8080/api/server/status
+----
+
+* `X-API-Key` ヘッダーに:
++
+[,sh]
+----
+  > curl -X GET -H "X-API-Key: <TOKEN>" http://localhost:8080/api/server/status
+----
+
+=== テレメトリデータの取り込み
+
+テレメトリデータの取り込み用のサービストークンを作成するには、まず役割を作成する必要があります：
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+サービス トークンを使用してKubernetes RBACデータを取り込む場合、さらに`update-scoped-permissions`を付与する必要があります：
+[,sh]
+----
+> sts rbac grant --subject my-agent --permission update-scoped-permissions --resource my-cluster
+✅ Granted permission 'update-scoped-permissions' on 'my-cluster' to subject 'my-agent'
+PERMISSION                | RESOURCE
+update-metrics            | system
+update-scoped-permissions | my-cluster
+----
+
+これにより、SUSE Observability内に`my-agent`という新しい役割が作成され、`update-metrics`の権限が付与されます。この役割のためにサービストークンを作成できます：
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+新しく作成されたサービストークンは、次のテレメトリデータの認証のためのAPIキーとして使用できます：
+
+* {stackstate-product-name} xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[エージェント（RBACエージェントを含む）]
+* xref:setup/otel/getting-started/getting-started-k8s.adoc[OTel コレクター]
+
+

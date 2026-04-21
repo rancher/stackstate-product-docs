@@ -1,0 +1,82 @@
+= 卸载 SUSE Observability
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自托管
+
+== 概述
+
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_un_install_the_helm_chart[卸载 Helm 图表]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[去除剩余资源]
+. xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_manually_created_resources[去除手动创建的资源]
+
+== 卸载 Helm 图表
+
+[NOTE]
+====
+卸载 Helm 图表将保留所有数据，因为 Helm 不会去除持久卷声明或名称空间。要同时去除这些，xref:/setup/install-stackstate/kubernetes_openshift/uninstall.adoc#_remove_remaining_resources[去除剩余资源]。
+====
+
+
+要卸载 SUSE Observability，第一步是运行 `helm uninstall` 命令。此命令将去除由 `helm upgrade --install` 命令创建的所有资源。
+
+从 `suse-observability` 名称空间卸载 `suse-observability` 版本，像这样，替换名称空间或版本名称为安装时使用的任何自定义名称：
+
+----
+helm uninstall --namespace suse-observability suse-observability
+----
+
+命令几乎会立即返回，但关闭所有 Pod 和去除所有其他资源可能需要一些时间。检查是否所有 Pod 都已消失，使用：
+
+----
+kubectl get pods --namespace suse-observability
+----
+
+如果您想稍后重新安装 SUSE Observability 并保留旧数据，这就是全部，完整卸载请继续进行接下来的两个部分。
+
+== 去除剩余资源
+
+[CAUTION]
+====
+去除持久卷声明和/或名称空间将导致在 SUSE Observability 中存储的所有数据丢失。
+====
+
+
+要去除名称空间及其持久卷声明和链接的持久卷，只需去除整个名称空间：
+
+----
+kubectl delete namespace suse-observability
+----
+
+当命令返回时，名称空间和所有卷将被去除。
+
+要仅去除持久卷声明（PVCs）并保留名称空间，请运行：
+
+----
+kubectl delete pvc --all -n suse-observability
+----
+
+在 OpenShift 上，Helm 图表还创建了一个安全上下文约束（SCC）。它不会被 Helm 自动清理，而是需要手动去除：
+
+----
+# The scc is always named suse-observability-<namespace>
+oc delete scc suse-observability-suse-observability
+----
+
+== 去除手动创建的资源
+
+[NOTE]
+====
+即使您打算在同一集群上重新安装 SUSE Observability，但在不同的名称空间中，这些资源也可以被去除。这些资源包含对 SUSE Observability 名称空间的引用。
+====
+
+
+如xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_manually_create_cluster_wide_resources[所需权限]所述，您的集群管理员可能需要手动创建一些资源。这些资源现在可以再次被去除，但这也是一项需要管理员权限的手动任务。
+
+删除以如下方式创建的集群角色和集群角色绑定：
+
+----
+kubectl delete cluster-role suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authorization
+kubectl delete cluster-role-binding suse-observability-authentication
+----

@@ -1,0 +1,224 @@
+= Tokens de servicio
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Descripción general
+
+Usando tokens de servicio, es posible autenticarse en SUSE Observability sin tener una cuenta de usuario asociada. Esto es útil para situaciones en las que se desea utilizar SUSE Observability desde servicios sin interfaz de usuario, como un servidor CI. En tal escenario, normalmente no se desea crear una cuenta de usuario en el proveedor de identidad.
+
+== Gestionar tokens de servicio
+
+Los tokens de servicio se pueden gestionar a través de la xref:/setup/cli/cli-sts.adoc[`sts` CLI]. Los siguientes comandos están disponibles:
+
+[,sh]
+----
+> sts service-token --help
+Manage service tokens.
+
+Usage:
+  sts service-token [command]
+
+Available Commands:
+  create      Create a service token
+  delete      Delete a service token
+  list        List service tokens
+
+Use "sts service-token [command] --help" for more information about a command.
+----
+
+También es posible <<_set_up_a_bootstrap_service_token,configurar un token de servicio de arranque>> al instalar {stackstate-product-name}.
+
+=== Crear tokens de servicio
+
+[NOTE]
+====
+Los StackPacks de Open Telemetry y Kubernetes te permiten crear un sujeto y un token de servicio con todos los permisos requeridos configurados.
+====
+
+Para crear un token de servicio para {stackstate-product-name}, puedes usar la `sts` CLI.
+
+[,sh]
+----
+sts service-token create
+----
+
+[NOTE]
+====
+Ten en cuenta que el token de servicio solo se mostrará una vez. No es posible ver el token nuevamente.
+====
+
+
+Este comando toma los siguientes argumentos de línea de comandos:
+
+|===
+| Indicadores | Descripción
+
+| `--name`
+| El nombre del token de servicio
+
+| `--expiration`
+| La fecha de expiración del token de servicio, el formato es yyyy-MM-dd. La expiración es opcional.
+
+| `--roles`
+| Una lista de roles separados por comas para asignar al token de servicio
+|===
+
+Por ejemplo, el comando a continuación creará un token de servicio con el nombre `my-service-token` y el rol `stackstate-k8s-troubleshooter`:
+
+[,sh]
+----
+> sts service-token create --name my-service-token --roles stackstate-k8s-troubleshooter
+✅ Service token created: svctok-aaaaa-bbbb-ccccc-ddddd
+----
+
+=== Configurar un token de servicio de arranque
+
+Al instalar {stackstate-product-name}, es posible inicializarlo con un token de servicio (temporal). Esto permite utilizar la CLI sin interactuar primero con {stackstate-product-name} y obtener un token de API desde la interfaz de usuario. Para configurar esto, añade el siguiente fragmento al archivo de configuración {stackstate-product-name}:
+
+Para configurar {stackstate-product-name} para crear un token de servicio de arranque en Kubernetes, se deben añadir los siguientes valores al archivo `authentication.yaml`. Por ejemplo:
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    serviceToken:
+      bootstrap:
+        token: <token>
+        roles:
+          - stackstate-admin
+        ttl: 24h
+----
+
+Sigue los pasos a continuación para configurar {stackstate-product-name} para crear un token de servicio de arranque:
+
+. En `authentication.yaml` - añade el token de servicio de arranque:
+ ** *token* - El token que se crea al arranque de {stackstate-product-name}.
+ ** *roles* - Un array de roles que se asignan al token de servicio de arranque.
+ ** *ttl* - Opcional. El tiempo de vida del token de servicio, expresado como una cadena de duración.
+. Almacena el archivo `authentication.yaml` junto con el `values.yaml` de las instrucciones de instalación de {stackstate-product-name}.
+. Ejecuta una actualización de Helm para aplicar los cambios.
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+* La primera ejecución del comando de actualización de Helm resultará en el reinicio de pods, lo que puede causar una breve interrupción de la disponibilidad.
+* Incluye `authentication.yaml` en cada ejecución de `helm upgrade`.
+* La configuración de autenticación se almacena como un secreto de Kubernetes.
+====
+
+
+==== Configura el token de servicio de arranque desde un secreto externo.
+
+En lugar de especificar el token de servicio de arranque a través de los valores de Helm, también puedes leer el token de servicio de arranque de un secreto que se crea y gestiona fuera del gráfico de Helm (un secreto externo). Para utilizar un token de servicio de arranque de un externo, sigue xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[estos pasos] y añade los siguientes datos:
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  bootstrap_token: <base64 of token>
+----
+
+Este token puede añadirse al secreto junto a los datos que ya están allí.
+
+=== Listar tokens de servicio
+
+El ID, nombre, fecha de expiración y roles de todos los tokens de servicio creados se pueden ver utilizando la `sts` CLI. Por ejemplo:
+
+[,sh]
+----
+> sts service-token list
+ID              | NAME             | EXPIRATION | ROLES
+107484341630693 | my-service-token |            | [stackstate-admin]
+----
+
+=== Eliminar tokens de servicio
+
+Un token de servicio se puede eliminar utilizando la `sts` CLI. Pasa el ID del token de servicio como argumento. Por ejemplo:
+
+[,sh]
+----
+> sts service-token delete 107484341630693
+✅ Service token deleted: 107484341630693
+----
+
+== Usar tokens de servicio
+
+Utilizas los tokens de servicio para autenticarte al usar las APIs de SUSE Observability:
+* Al usar el CLI
+* Al usar las APIs HTTP directamente
+* Al ingerir datos de telemetría
+
+=== SUSE Observability `sts` CLI
+
+Un token de servicio se utiliza para la autenticación con la CLI de `sts`. Para obtener más información, consulta xref:/setup/cli/cli-sts.adoc#_authentication[la documentación de la CLI].
+
+=== APIs de SUSE Observability
+
+Para usar un token de servicio para comunicarte directamente con la API de SUSE Observability, añádelo al encabezado de la solicitud de una de las siguientes maneras:
+
+* En el encabezado `Authorization`:
++
+[,sh]
+----
+  > curl -X GET -H "Authorization: ApiKey <TOKEN>" http://localhost:8080/api/server/status
+----
+
+* En el encabezado `X-API-Key`:
++
+[,sh]
+----
+  > curl -X GET -H "X-API-Key: <TOKEN>" http://localhost:8080/api/server/status
+----
+
+=== Ingesta de datos de telemetría
+
+Para crear un token de servicio para la ingesta de datos de telemetría, primero necesitas crear un rol:
+[,sh]
+----
+> sts rbac create-subject --subject my-agent
+✅ Created subject 'my-agent'
+> sts rbac grant --subject my-agent --permission update-metrics
+✅ Granted permission 'update-metrics' on 'system' to subject 'my-agent'
+PERMISSION   | RESOURCE
+update-metrics | system
+----
+
+Si deseas usar el token de servicio para ingerir datos de RBAC de Kubernetes, también necesitas conceder `update-scoped-permissions`:
+[,sh]
+----
+> sts rbac grant --subject my-agent --permission update-scoped-permissions --resource my-cluster
+✅ Granted permission 'update-scoped-permissions' on 'my-cluster' to subject 'my-agent'
+PERMISSION                | RESOURCE
+update-metrics            | system
+update-scoped-permissions | my-cluster
+----
+
+Esto creará un nuevo rol en SUSE Observability llamado `my-agent` y le otorgará el permiso `update-metrics`. Luego puedes crear un token de servicio para este rol:
+
+[,sh]
+----
+> sts service-token create --name my-agent --roles my-agent
+✅ Service token created: svctok-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+----
+
+El token de servicio recién creado se puede usar como la clave API para la autenticación de datos de telemetría de:
+
+* {stackstate-product-name} xref:k8s-suse-rancher-prime.adoc#_installing_the_suse_observability_agent[Agente (incluido el Agente RBAC)]
+* xref:setup/otel/getting-started/getting-started-k8s.adoc[OTel Collector]
+
+

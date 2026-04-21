@@ -1,0 +1,57 @@
+= Prometheus remote_write
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+Cuando tengas tu propio Prometheus en las instalaciones o autoalojado funcionando donde se agregan las métricas de tu entorno, puedes reflejar estas métricas en SUSE Observability. Esto te permitirá utilizar las potentes características de topología y correlación de SUSE Observability para solucionar problemas en tu entorno de Kubernetes sin tener que cambiar entre herramientas.
+
+Para hacer esto posible, SUSE Observability expone el protocolo Prometheus `remote_write` como un punto final. Usando este punto final, puedes configurar tu instancia de Prometheus para enviar métricas a SUSE Observability. Las métricas se ingieren automáticamente, y será posible vincular las métricas a los componentes observados por SUSE Observability. El siguiente diagrama muestra cómo funciona esto:
+
+image::k8s/k8s-prometheus-remotewrite.png[Prometheus Remote Write]
+
+== Requisitos previos
+
+Para reflejar tus métricas de Prometheus en SUSE Observability, necesitas buscar la clave de API que se utiliza para enviar métricas a SUSE Observability. La clave de API se puede encontrar en la descripción del StackPack de Kubernetes instalado en SUSE Observability. Los siguientes pasos muestran cómo encontrar la clave de API:
+
+. Abre la interfaz de usuario de SUSE Observability y navega a la página de StackPacks
++
+image::k8s/k8s-stackpacks.png[StackPacks]
+
+. Encuentra el StackPack de Kubernetes y haz clic en él.
+. En la descripción del StackPack, encontrarás la clave de API que se utiliza para enviar métricas a SUSE Observability.
++
+image::k8s/k8s-stackpacks-apikey.png[Clave de API]
+
+== Configurando tu instancia de Prometheus
+
+Para configurar tu instancia de Prometheus para enviar métricas a SUSE Observability, necesitas añadir un nuevo punto final de escritura remota a tu configuración de Prometheus. Esto se puede hacer actualizando la sección `remote_write` en tu archivo `prometheus.yml`. Hay 2 variantes que puedes usar para la autenticación al punto final, ya sea a través de un encabezado o mediante autenticación básica.
+
+=== Autenticación de encabezado
+
+Puedes autenticarte utilizando la clave de API añadiendo el encabezado `sts-api-key` a las solicitudes remote_write de Prometheus. El siguiente ejemplo muestra cómo configurar esto:
+
+[,yaml]
+----
+remote_write:
+- url: https://<tenant>.app.stackstate.io/receiver/prometheus/api/v1/write
+  headers:
+    sts-api-key: <API Key>
+----
+
+=== Autenticación básica
+
+Puedes autenticarte utilizando la autenticación básica añadiendo la sección `basic_auth` a las solicitudes remote_write de Prometheus. Debido a que las solicitudes a esta API se realizan desde un servicio sin cabeza, el campo de nombre de usuario se establece en el valor estático `apikey`. El siguiente ejemplo muestra cómo configurar esto:
+
+[,yaml]
+----
+remote_write:
+- url: https://<tenant>.app.stackstate.io/receiver/prometheus/api/v1/write
+  basic_auth:
+    username: apikey
+    password: <API Key>
+----
+
+== Finalizando
+
+Después de que se hayan aplicado los cambios de configuración al archivo de configuración, es necesario reiniciar Prometheus. Después del reinicio, Prometheus comenzará a enviar métricas a SUSE Observability. Las métricas se correlacionarán automáticamente con el resto de tu entorno y serán visibles en la interfaz de usuario de SUSE Observability.

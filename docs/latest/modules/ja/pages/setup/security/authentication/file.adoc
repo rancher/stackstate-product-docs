@@ -1,0 +1,138 @@
+= ファイルベース
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability 自己ホスト型
+
+== 概要
+
+外部認証プロバイダーが使用できない場合、ファイルベースの認証を使用できます。これにより、すべてのSUSE Observabilityユーザーは設定ファイルに事前に設定される必要があります。設定内のユーザーに対する変更が行われるたびに、SUSE Observabilityは変更をHelmで適用した後に自動的に再起動します。
+
+SUSE Observabilityにはいくつかのデフォルトロールが含まれており、以下の例の設定を参照してください。各デフォルトロールに割り当てられた権限と、他のロールを作成する方法に関する指示は、xref:/setup/security/rbac/README.adoc[ロールベースのアクセス制御 (RBAC) ドキュメント]に記載されています。
+
+== ファイルベースの認証を設定する
+
+=== Kubernetes
+
+Kubernetesでファイルベースの認証を設定するには、SUSE Observabilityユーザーを`authentication.yaml`ファイルに追加する必要があります。次に例を示します。
+
+[tabs]
+====
+authentication.yaml::
++
+--
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-admin ]
+        - username: guest
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-guest ]
+        - username: poweruser
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-power-user ]
+        - username: troubleshooter
+          passwordHash: 5f4dcc3b5aa765d61d8327deb882cf99
+          roles: [ stackstate-k8s-troubleshooter ]
+----
+
+--
+====
+
+以下の手順に従ってユーザーを構成し、変更を適用してください：
+
+. `authentication.yaml`でユーザーを追加します。各ユーザーに対して以下の設定を追加する必要があります（上記の例を参照）：
+ ** *ユーザー名* - SUSE Observabilityにログインするために使用されるユーザー名。英数字と_文字のみが許可されています。
+ ** *パスワードハッシュ* - SUSE Observabilityにログインする際に使用されるパスワードのハッシュ値。パスワードはbcryptハッシュとして保存されます。
+ ** *ロール* - ユーザーが所属するロールのリスト。xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[デフォルトのSUSE Observabilityロール]は`stackstate-admin`、`stackstate-power-user`、および`stackstate-guest`であり、他のロールを作成する方法の詳細はxref:/setup/security/rbac/rbac_roles.adoc[RBACロール]を参照してください。
+. SUSE Observabilityのインストール手順にあるファイル`authentication.yaml`と一緒に、ファイル`values.yaml`を保存してください。
+. 変更を適用するために、helm upgrade コマンドを実行してください：
++
+[,text]
+----
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values values.yaml \
+   --values authentication.yaml \
+ suse-observability \
+ suse-observability/suse-observability
+----
+
+[NOTE]
+====
+*注意:*
+
+* bcryptパスワードハッシュは、次のコマンドライン`htpasswd -bnBC 10 "" <password> | tr -d ':\n'`を使用するか、オンラインツールを使用して生成できます。
+* helm upgradeコマンドの最初の実行はポッドの再起動を引き起こし、短時間の可用性の中断を引き起こす可能性があります。
+* すべての`authentication.yaml`実行に`helm upgrade`を含めてください。
+* 認証設定はKubernetesのシークレットとして保存されます。
+====
+
+
+以下の手順に従ってユーザーを構成し、変更を適用してください：
+
+. `authentication.yaml`でユーザーを追加します。各ユーザーに対して以下の設定を追加する必要があります（上記の例を参照）：
+ ** *ユーザー名* - SUSE Observabilityにログインするために使用されるユーザー名。英数字と_文字のみが許可されています。
+ ** *password* - SUSE Observabilityにログインするために使用されるパスワード。パスワードはMD5ハッシュまたはbcryptハッシュとして保存されます。
+ ** *ロール* - ユーザーが所属するロールのリスト。xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[デフォルトのSUSE Observabilityロール]は`stackstate-admin`、`stackstate-power-user`、`stackstate-k8s-troubleshooter`、および`stackstate-guest`です。他のロールの作成方法の詳細については、xref:/setup/security/rbac/rbac_roles.adoc[RBACロール]を参照してください。
+. 変更を適用するためにSUSE Observabilityを再起動してください。
+
+[NOTE]
+====
+*注意:*
+
+* MD5パスワードハッシュは、LinuxおよびMacの`md5sum`または`md5`コマンドラインアプリケーションを使用して生成できます。
+* bcryptパスワードハッシュは、次のコマンドライン`htpasswd -bnBC 10 "" <password> | tr -d ':\n'`を使用するか、オンラインツールを使用して生成できます。
+====
+
+
+=== 外部シークレットを使用する
+
+ユーザーパスワードが外部シークレットから取得されるべき場合は、xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[これらの手順]に従って、次のデータを入力してください：
+
+[,yaml]
+----
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+  file_<username1>_password: <base64 of bcrypt of password>
+  file_<username2>_password: <base64 of bcrypt of password>
+----
+
+ログインセクションの各ユーザーについて、テンプレートに記入してシークレットにレコードを追加する必要があります。次に例を示します。
+
+[,yaml]
+----
+
+stackstate:
+  authentication:
+    file:
+      logins:
+        - username: admin_user
+          roles: [ stackstate-admin ]
+
+
+kind: Secret
+metadata:
+   name: "<custom-secret-name>"
+type: Opaque
+data:
+   file_admin_user_password: "base64EncryptedPass"
+----
+
+== 関連項目
+
+* xref:/setup/security/authentication/authentication_options.adoc[認証オプション]
+* xref:/setup/security/rbac/rbac_permissions.adoc#_predefined_roles[定義済みのSUSE Observabilityロールの権限]
+* xref:/setup/security/rbac/rbac_roles.adoc[RBACロールを作成する]
+* xref:/setup/security/external-secrets.adoc#_getting_authentication_data_from_an_external_secret[外部シークレット]

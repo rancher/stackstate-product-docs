@@ -1,0 +1,200 @@
+= Rancher RBAC
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2025-07-10
+:page-revdate: {revdate}
+:description: SUSE Observability Auto-hospedado
+
+== Visão Geral
+
+A extensão de observabilidade do SUSE Rancher Prime utiliza o RBAC do Kubernetes para conceder acesso aos usuários Rancher no SUSE Observability.
+Se você não utiliza o Rancher, consulte xref:/setup/security/rbac/rbac_roles.adoc[Procedimentos para configurar funções] em uma instalação autônoma.
+
+[NOTE]
+====
+Para que o RBAC do Rancher funcione, 
+
+* a autenticação para {stackstate-product-name} deve ser configurada com o xref:setup/security/authentication/oidc.adoc#_rancher[Provedor OIDC do Rancher].
+* o Agente {stackstate-product-name} deve ter o Agente RBAC habilitado e deve se autenticar usando um token de serviço.
+====
+
+Todo usuário autenticado possui a função *Acesso Básico à Instância* que permite usar o sistema.  Essas permissões fornecem acesso às visualizações, configurações, vinculações de métricas e permitem que um usuário veja notificações do sistema.  Elas NÃO concedem acesso a nenhum dado de {stackstate-product-name}.  Para ver quaisquer dados, um usuário precisa receber uma função adicional. Duas direções para estender a função *Acesso Básico à Instância* são fornecidas com os *Modelos de Função do Rancher*:
+
+Funções de Instância:: Permite que você configure ou personalize {stackstate-product-name}.
+Funções Escopadas:: Concede acesso aos dados de {stackstate-product-name} de clusters observados.
+
+== Funções de Instância
+
+Você pode atribuir os *Modelos de Função* para *Funções de Instância* a usuários ou grupos no *Projeto* que está executando {stackstate-product-name}. Se nenhuma função de instância for explicitamente atribuída a um membro de um projeto, então ele terá as permissões da função *Acesso Básico à Instância*.
+
+=== Funções de Instância com acesso aos dados de {stackstate-product-name}
+
+Um par de funções "globais" permite acesso a todos os dados de {stackstate-product-name} - em qualquer um dos clusters observados.  Essas funções são destinadas a serem usadas para configurar o sistema e para solucionar problemas em nível de sistema.  Para usuários com qualquer uma dessas funções, não é necessário configurar xref:scoped[Funções Escopadas].
+
+Administrador da Instância:: Concede acesso total a todas as visualizações e todas as permissões.
+Solucionador de Problemas da Instância:: Concede todas as permissões necessárias para usar o SUSE Observability para solução de problemas, incluindo a capacidade de habilitar/desabilitar monitores, criar visualizações personalizadas e usar o CLI.
+Observador da Instância:: Concede acesso a todos os dados em uma instância do SUSE Observability.
+
+=== Funções de instância sem acesso aos dados de {stackstate-product-name}
+
+Essas funções precisam ser combinadas com a função *Observador da Instância* ou uma das xref:scoped[Funções Escopadas] (veja abaixo).  Caso contrário, nenhum dado de {stackstate-product-name} estará acessível e a interface exibirá a mensagem "Nenhum componente encontrado".  Isso se aplica a todos os usuários do Rancher, incluindo aqueles que são proprietários de Projeto.
+
+Acesso Recomendado da Instância:: Concede permissões recomendadas para usar o SUSE Observability.  Esta função inclui permissões que não são estritamente necessárias, mas fornecem um meio (limitado) de personalização {stackstate-product-name}.
+Acesso Básico da Instância:: Concede permissões mínimas para usar {stackstate-product-name}. Esta função não precisa ser atribuída explicitamente e não há *Modelo de Função* para ela; todo usuário autenticado a possui. 
+
+Você pode encontrar as permissões atribuídas a cada função predefinida do SUSE Observability abaixo. Para detalhes das diferentes permissões e como gerenciá-las usando o `sts` CLI, veja xref:/setup/security/rbac/rbac_permissions.adoc[Permissões de controle de acesso com base em função (RBAC)]
+
+[tabs]
+====
+Acesso Básico::
++
+--
+O acesso básico concede permissões mínimas para usar o SUSE Observability. Para ser combinado com um Observador (Instância, Cluster ou Projeto).
+Essas permissões são concedidas a todos os usuários.
+
+|===
+|Resource |Verbos 
+
+|vínculos-métricos |obter
+|configurações |obter
+|notificações do sistema |obter
+|telas |obter
+|===
+
+--
+Acesso Recomendado::
++
+--
+O acesso recomendado concede permissões que não são estritamente necessárias, mas que tornam o SUSE Observability muito mais útil. Ele fornece um grau limitado de personalização.
+Para ser combinado com um Observador (Instância, Cluster ou Projeto).
+
+|===
+|Resource |Verbos 
+
+|api-tokens |obter
+|painéis-favoritos |criar, excluir
+|visualizações-favoritas |criar, excluir
+|stackpacks |obter 
+|configurações-de-visualização |atualizar
+|===
+
+--
+Observador::
++
+--
+O Observador concede acesso a todos os dados de observabilidade em uma instância do SUSE Observability.  Combine com *Acesso Recomendado* para uma melhor experiência.
+
+|===
+|Resource |Verbos 
+
+|topologia |obter
+|métricas |obter
+|rastros |obter
+|===
+
+--
+Solucionador de Problemas::
++
+--
+A função de Solucionador de Problemas tem acesso a todos os dados disponíveis no SUSE Observability e a capacidade de criar visualizações e habilitar/desabilitar monitores.
+
+|===
+|Resource |Verbos 
+
+|agentes |obter 
+|api-tokens |obter
+|ações-de-componente |executar
+|painéis |obter, criar, atualizar, deletar 
+|painéis-favoritos |criar, excluir
+|visualizações-favoritas |criar, excluir
+|vínculos-métricos |obter
+|métricas |obter 
+|monitores |obter, criar, atualizar, deletar, executar 
+|notificações |obter, criar, atualizar, deletar 
+|configurações |obter 
+|configurações de stackpack |obter, criar, atualizar, deletar
+|stackpacks |obter 
+|notificações do sistema |obter
+|topologia |obter 
+|rastros |obter 
+|telas |obter, criar, atualizar, deletar 
+|configurações-de-visualização |obter
+|===
+
+--
+Admin.::
++
+--
+A função de Administrador tem todas as permissões atribuídas.
+
+|===
+|Resource |Verbos 
+
+|agentes |obter 
+|api-tokens |obter
+|ações-de-componente |executar
+|painéis |obter, criar, atualizar, deletar 
+|painéis-favoritos |criar, excluir
+|visualizações-favoritas |criar, excluir
+|chaves-api-de-ingestão |obter, criar, atualizar, deletar
+|vínculos-métricos |obter
+|métricas |obter 
+|monitores |obter, criar, atualizar, deletar, executar 
+|notificações |obter, criar, atualizar, deletar 
+|permissions |obter, criar, atualizar, deletar 
+|scripts-restritos |executar
+|service-tokens |obter, criar, atualizar, deletar
+|configurações |obter, criar, atualizar, deletar, desbloquear 
+|configurações de stackpack |obter, criar, atualizar, deletar
+|stackpacks |obter, criar 
+|sync-data |obter, atualizar, deletar
+|notificações do sistema |obter
+|mensagens de tópico |obter
+|topologia |obter 
+|rastros |obter 
+|telas |obter, criar, atualizar, deletar 
+|configurações-de-visualização |atualizar
+|===
+
+--
+====
+
+[#scoped]
+== Funções Escopadas
+
+Você pode atribuir os seguintes *Modelos de Função* a usuários ou grupos em um cluster observado.  Eles concedem acesso a {stackstate-product-name} dados provenientes de (um *Projeto* em) o *Cluster*, dando a um usuário permissão para ler topologia, métricas, logs e dados de rastreamento.
+
+Observador:: Concede acesso a dados provenientes de namespaces em um *Projeto*. Você pode usar isso na seção *Associação de Projetos* da configuração do cluster.
+Observador do Cluster:: Concede acesso a todos os dados provenientes de um *Cluster*. Você pode usar este modelo na seção *Associação de Cluster* da configuração do cluster.
+
+Os recursos nessas funções correspondem a xref:/setup/security/rbac/rbac_permissions.adoc#_scoped_permissions[Permissões Escopadas]. Eles estão disponíveis no grupo de API `scope.observability.cattle.io` (com apenas o verbo `get` já que esses recursos são somente leitura):
+
+* `topology` - componentes (implantações, pods, etc.) do cluster ou namespace
+* `traces` - spans do cluster ou namespace
+* `metrics` - dados métricos originados do cluster ou namespace
+
+Observe que o acesso aos logs é controlado pelo recurso `topology`.
+
+Ative a personalização para usuários com essas funções de observador concedendo a função *Acesso Recomendado à Instância* no *Projeto* em execução {stackstate-product-name}.
+
+== Funções Personalizadas
+
+Para conceder permissões adicionais além do Acesso Recomendado, crie um *Modelo de Função* de Projeto personalizado no Rancher, herdando de *Acesso Recomendado da Instância do SUSE Observability*.  Então, por exemplo, para conceder os direitos de visualizar monitores e gráficos métricos, adicione regras com:
+
+* Verbo: `get`
+* Recurso: `metricbindings` e `monitors`
+* Grupo de API: `instance.observability.cattle.io`
+
+image::rancher-custom-role.png[Modelo de Função Personalizado para acesso mais rico]
+
+Você pode especificar qualquer combinação de recurso e verbo definida nas xref:/setup/security/rbac/rbac_permissions.adoc[Permissões RBAC].  Observe que os traços (`-`) são removidos dos nomes dos recursos, então a permissão `get-metric-bindings` se torna o recurso RBAC do Kubernetes `metricbindings` com o verbo `get`.
+
+
+== Solução de problemas
+
+* Verifique se o Agente RBAC para o cluster consegue se comunicar com a plataforma.
+
+* xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Inspecione os sujeitos do usuário] (usuário e funções).
+  ** Verifique qualquer configuração de funções no provedor OIDC.
+* xref:/setup/security/rbac/rbac_permissions.adoc#_show_granted_permissions[Inspecione a permissão do sujeito]
+  ** Verifique se os (Cluster)RoleBindings relevantes que correspondem ao usuário com um (Cluster)Role estão presentes.
+  ** Inspecione o (Cluster)Role para verificar se ele concede as permissões corretas.
