@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="pt_BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto-instrumentação de uma função Lambda NodeJS | SUSE Observability  Latest</title>
+    <meta name="description" content="SUSE Observability">
+    <meta name="generator" content="Antora 3.1.10">
+    <link rel="stylesheet" href="../../../../../../../_/css/site.css">
+<meta http-equiv="last-modified" content="2025-07-10"/>
+<link rel="stylesheet" href="../../../../../../../_/css/search.css">
+<link rel="icon" href="../../../../../../../_/img/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../../../../../../_/css/font-styles.css">
+<link rel="stylesheet" href="../../../../../../../_/fonts/css/all.css">
+<link rel="stylesheet" href="../../../../../../../_/css/site-extra.css">
+<link rel="stylesheet" href="../../../../../../../_/css/vendor/tabs.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=SUSE:wght@100..800&display=swap&family=SUSE+Mono:ital,wght@0,100..800;1,100..800" rel="stylesheet">
+<link href="https://documentation.suse.com/docserv/res/fonts/poppins/poppins.css" rel="stylesheet">
+<link rel="stylesheet" href="../../../../../../../_/css/vendor/light.css">
+<script src="/docserv/res/lightheaded/analytics.js" type="text/javascript"></script>
+<script type="module">
+  import { defineCustomElements, setAssetPath } from 'https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/shared-header.esm.js';
+  defineCustomElements();
+  setAssetPath("https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/assets");
+</script>
+<!-- Default English link -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="x-default" rel="alternate"/>
+<!-- Link for the currently processed page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/pt/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hrefLang="pt-BR" rel="alternate" />
+<!-- Link for the English page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="en-US" rel="alternate" />
+<!-- Link for the Japanese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/ja/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="ja-JP" rel="alternate" />
+<!-- Link for the Chinese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/zh/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="zh-CN" rel="alternate" />
+<!-- Link for the German page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/de/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="de-DE" rel="alternate" />
+<!-- Link for the French page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/fr/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="fr-FR" rel="alternate" />
+<!-- Link for the Spanish page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/es/setup/otel/languages/node.js/auto-instrumentation-of-lambdas.html" hreflang="es-ES" rel="alternate" />
+
+<!-- JSON-LD for doc metadata -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "Auto-instrumentação de uma função Lambda NodeJS | SUSE Observability latest",
+  "headline": "Auto-instrumentação de uma função Lambda NodeJS",
+  "description": "SUSE Observability",
+  "inLanguage": "pt_BR",
+  "dateModified": "2025-07-10T00:00:00Z",
+  "author": {
+    "@type": "Organization",
+    "name": "SUSE Product & Solution Documentation Team",
+    "url": "https://documentation.suse.com"
+  },
+  "mentions": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "SUSE Observability",
+      "softwareVersion": "latest",
+      "applicationCategory": "Cloud Infrastructure",
+      "operatingSystem": "Linux"
+    }
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "SUSE",
+    "url": "https://documentation.suse.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.suse.com/assets/img/suse-white-logo-green.svg"
+    }
+  }
+}
+</script>
+<!-- end JSON-LD for doc metadata -->
+
+<!-- SUVA - Begin Ask Geeko-->
+<!--
+searchUnifyChatbot ("Ask Geeko") Copyright ©2024 Grazitti Interactive - All Rights Reserved. NOTICE: All information contained herein is, and remains the property of Grazitti Interactive and its suppliers, if any. The intellectual and technical concepts contained herein are proprietary to Grazitti Interactive and its suppliers and may be covered by India, U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained from Grazitti Interactive.
+-->
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/Allow/an.js?c485cb3c-93d4-4942-99e8-91f3b8ca5636"></script>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/js/index.js?q=gAAAAABp3JBN9VuEJTi5tFafLIMwgMkCPdJS3Qm56lSYx93ir3Twt9hgSvd3OHEt6-nYfSbY3yHq0Zv8PRPsSy4nbqZiaJ4cZvRc6ItVZdvwz9Urf35cH6OUyPOwdA0phlS-zVIznQ2rWW438p-91NlTHuxJuOFpnA=="></script>
+<link rel="stylesheet" href="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/css/index.css">
+<div id="searchUnifyChatbot"></div>
+<!-- SUVA - End Ask Geeko-->
+<!--BEGIN QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+<script type='text/javascript' src="../../../../../../../_/js/qualtrics.js" defer></script>
+<!--END QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+    <script>var uiRootPath = '../../../../../../../_'</script>
+  </head>
+  <body class="article">
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs'; mermaid.initialize({"startOnLoad":true});</script><shared-header
+language="en"
+languages='{
+    "en": { "label": "English", "url": "https://documentation.suse.com/en-us/" },
+    "de": { "label": "Deutsch", "url": "https://documentation.suse.com/de-de/" },
+    "fr": { "label": "Français", "url": "https://documentation.suse.com/fr-fr/" },
+    "es": { "label": "Español", "url": "https://documentation.suse.com/es-es/" },
+    "zh_CN": { "label": "中文", "url": "https://documentation.suse.com/zh-cn/" },
+    "pt_BR": { "label": "Português Brasileiro", "url": "https://documentation.suse.com/pt-br/" }
+}'
+enable-search='false'>
+</shared-header>
+
+<!-- Leaving as a comment, I expect it will be required again next year.
+<a target=_blank"" class="survey-link" href="https://suselinux.fra1.qualtrics.com/jfe/form/SV_bEiGZbUNzLD8Tcy"> Documentation survey </a>
+-->
+<div class="body">
+<div class="nav-container" data-component="suse-observability" data-version="latest">
+  <aside class="nav">
+    <div class="panels">
+<div class="nav-panel-menu is-active" data-panel="menu">
+  <nav class="nav-menu">
+    <button class="nav-menu-toggle" aria-label="Toggle expand/collapse all" style="display: none"></button>
+    <h3 class="title">SUSE Observability</h3>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="0">
+<ul class="nav-list">
+  <li class="nav-item" data-depth="1">
+    <a class="nav-link" href="../../../../classic.html">Documentação SUSE Observability</a>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Lançamento</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Notas de versão</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.1.adoc">v2.8.1 - 17/Mar/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.0.adoc">v2.8.0 - 03/Mar/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.7.0.adoc">v2.7.0 - 14/Jan/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.3.adoc">v2.6.3 - 25/Nov/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.2.adoc">v2.6.2 - 03/Nov/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.1.adoc">v2.6.1 - 13/Out/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.0.adoc">v2.6.0 - 29/Set/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.5.0.adoc">v2.5.0 - 08/Set/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.4.0.adoc">v2.4.0 - 25/Ago/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.7.adoc">v2.3.7 - 28/Jul/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.6.adoc">v2.3.6 - 23/Jul/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.5.adoc">v2.3.5 - 19/Jun/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.4.adoc">v2.3.4 - 04/Jun/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.3.adoc">v2.3.3 - 07/Mai/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.2.adoc">v2.3.2 - 22/Abr/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.1.adoc">v2.3.1 - 17/Mar/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.0.adoc">v2.3.0 - 30/Jan/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.1.adoc">v2.2.1 - 10/Dez/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.0.adoc">v2.2.0 - 09/Dez/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.1.0.adoc">v2.1.0 - 29/Out/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20241001154902.adoc">v2.0.2 - 01/10/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240918082712.adoc">v2.0.1 - 18/Set/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240911112250.adoc">v2.0.0 - 11/Set/2024</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="#setup/release-notes/Release Strategy.adoc">Estratégia de Lançamento</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Instalação</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Plataforma: Auto-hospedado</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../install-stackstate/Compatibility%20Self%20Hosted.html">Matriz de compatibilidade</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Introdução e Requisitos</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/requirements.html">Requisitos do sistema e dimensionamento</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/initial_run_guide.html">Primeiro login e credenciais padrão</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Guias de Instalação</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/kubernetes_install.html">Instalação do Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/openshift_install.html">Instalação do OpenShift</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/ack.html">Instalação do Alibaba Cloud ACK</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../k8s-suse-rancher-prime-air-gapped.html">Instalação em plataforma air-gapped</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Configuração Avançada</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Autenticação</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/authentication_options.html">Opções de autenticação</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/oidc.html">Open ID Connect (OIDC)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/keycloak.html">KeyCloak</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/oidc/microsoft-entra-id.html">Microsoft Entra ID</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/ldap.html">LDAP</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/file.html">Baseado em arquivo</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/single_password.html">Senha única</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Armazenamento e Recursos</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/storage.html">Classes de armazenamento e personalização</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/data_retention.html">Períodos de retenção de dados e redimensionamento</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/affinity.html">Configurar afinidades do Kubernetes</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Rede e Segurança</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/ingress.html">Expondo SUSE Observability com um ingress do Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../../use/security/self-signed-certificates.html">Certificados autoassinados</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../../use/security/k8s-service-tokens.html">Tokens de serviço</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../../use/security/k8s-ingestion-api-keys.html">Chaves de API</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../../use/security/disabling-tls-verification.html">Desabilitando a verificação TLS</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/external-secrets.html">Gerenciando segredos externamente</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/required_permissions.html">Permissões necessárias e segurança do Pod</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/customize_config.html">Substituir valor padrão do Helm</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../security/authentication/troubleshooting.html">Resolvendo problemas de autenticação e autorização</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../advanced/analytics.html">Análises</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Notificações</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../configure-stackstate/slack-notifications.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../configure-stackstate/email-notifications.html">E-mail</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Backup e Restauração</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/backup_restore/backup_enable.html">Habilitar backups</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/backup_restore/backup_restore.html">Restaurar backups</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Backup Legado</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/backup_restore/kubernetes_backup.html">Backup do Kubernetes (Legado)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/backup_restore/configuration_backup.html">Backup da configuração (Legado)</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Solução de problemas</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/troubleshooting.html">Guia rápido de solução de problemas</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/advanced-troubleshooting.html">Solução de problemas avançada</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/extension-troubleshooting.html">Solução de problemas de extensão da interface do usuário</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/support-package-logs.html">Pacote de suporte (Logs)</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../install-stackstate/support-package-performance.html">Pacote de suporte (Desempenho)</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Atualização e Desinstalação</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Fazendo upgrade</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../upgrade-stackstate/migrate-from-6.html">Migração do StackState</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../upgrade-stackstate/steps-to-upgrade.html">Passos para fazer upgrade</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../upgrade-stackstate/version-specific-upgrade-instructions.html">Instruções de atualização específicas da versão</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Desinstalação</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../install-stackstate/kubernetes_openshift/uninstall.html">Removendo charts e recursos do Helm</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../../data-management/clear_stored_data.html">Limpeza de dados</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Plataforma: Hospedado pela SUSE</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">SUSE Cloud Observability</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../suse-cloud-observability-quick-start-guide.html">Guia de Introdução Rápida</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../suse-cloud-observability/user-management.html">Gerenciando usuários via Keycloak</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Agente</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../agent/supported-architectures.html">Suporte à arquitetura de hardware</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../k8s-quick-start-guide.html">Guia de Introdução Rápida</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../k8s-getting-started.html">Passo a passo de Observabilidade da SUSE</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../k8s-suse-rancher-prime-agent-air-gapped.html">Instalação air-gapped usando gráficos do Helm</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../k8s-network-configuration-saas.html">Configuração de rede para SaaS</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../agent/k8s-network-configuration-proxy.html">Configuração para conexões proxy</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../agent/k8s-custom-secrets-setup.html">Gerenciamento de Segredos Personalizados</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../agent/k8sTs-agent-request-tracing.html">Gerenciamento de rastreamento de requisições</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../agent/k8sTs-agent-request-tracing-certificates.html">Certificados para injeção de sidecar</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Extensão da interface do Rancher</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../k8s-suse-rancher-prime.html">Instalação do SUSE Rancher Prime</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Controle de acesso com base em função (RBAC)</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../security/rbac/rbac_permissions.html">Permissões</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../security/rbac/rbac_roles.html">Funções</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../security/rbac/rbac_rancher.html">Rancher</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../security/rbac/rbac_scopes.html">Escopos</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Uso</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Recursos e Interface do Usuário</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-views.html">Visões do Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-view-structure.html">Compreendendo Filtros e Perspectivas</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-custom-views.html">Criando e salvando visualizações personalizadas</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-explore-views.html">Explorar visualizações</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-overview-perspective.html">Listar visualizações e cartões</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-highlights-perspective.html">Página de resumo de recursos</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-topology-perspective.html">Usando o gráfico de Topologia</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-events-perspective.html">Linha do tempo de eventos</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/k8sTs-explore-metrics.html">Explorando métricas</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-metrics-perspective.html">Métricas de componentes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/traces/k8sTs-explore-traces.html">Explorar Rastros</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-traces-perspective.html">Perspectiva de Rastros</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/logs/k8sTs-explore-logs.html">Navegador de logs</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/views/k8s-filters.html">Usando filtros de topologia e eventos</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/stackstate-ui/k8sTs-keyboard-shortcuts.html">Atalhos do teclado</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/stackstate-ui/k8sTs-timeline-time-travel.html">Usando a linha do tempo e viagem no tempo</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Painel</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/dashboards/dashboards.html">Criando e gerenciando painéis</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/dashboards/dashboard-widgets.html">Configurando widgets</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/dashboards/dashboard-variables.html">Usando variáveis</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/dashboards/dashboard-organize.html">Layout e organização</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Monitores e Alertas</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/k8s-monitors.html">Monitores</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/kubernetes-monitors.html">Monitores K8s prontos para uso</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/k8s-override-monitor-arguments.html">Personalizando monitores padrão</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/notifications/configure.html">Configurando notificações</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Notificações</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../use/alerting/notifications/channels/slack.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../use/alerting/notifications/channels/teams.html">Equipes</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../use/alerting/notifications/channels/webhook.html">Webhook</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../use/alerting/notifications/channels/opsgenie.html">Opsgenie</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../../../use/alerting/notifications/troubleshooting.html">Resolução de problemas de notificações</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Resolução de Problemas Guiada</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/troubleshooting/k8s-guided-troubleshooting.html">O que é resolução de problemas guiada?</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/troubleshooting/k8s-configuration.html">Configurando YAML</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/troubleshooting/k8s-changes.html">Comparando alterações</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/troubleshooting/k8s-logs.html">Visualizando logs de pods</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Ingestão de Dados e Integrações</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Coletor OpenTelemetry (OTel)</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/overview.html">Visão Geral</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/otelmappings/concepts.html">Rastreamentos, Métricas, Sinais</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/otelmappings/getting-started.html">Guia Geral do OTel</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../concepts.html">Conceitos</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../collector.html">Configuração do coletor</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../proxy-collector.html">Configuração de proxy seguro</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../sampling.html">Amostragem de Cabeça e Cauda</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../otlp-apis.html">Pontos de extremidade da API para OTLP</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Guias de Instrumentação OpenTelemetry</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../getting-started/getting-started-k8s.html">Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../getting-started/getting-started-k8s-operator.html">Usando o Operador OTel</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../getting-started/getting-started-linux.html">Host Linux</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../getting-started/getting-started-lambda.html">AWS Lambda</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../instrumentation/node.js/auto-instrumentation-of-lambdas.html">Detalhes do Lambda Node.js</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../instrumentation/dot-net.html">.NET</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../instrumentation/java.html">Java</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../instrumentation/node.js.html">Configuração do SDK Node.js</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../instrumentation/sdk-exporter-config.html">Configuração do Exportador SDK</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Integrações</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/k8s-prometheus-remote-write.html">Enviando métricas do Prometheus</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/k8s-stackstate-grafana-datasource.html">Fonte de Dados Grafana</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/open-metrics.html">Raspagem de OpenMetrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/logs/k8sTs-log-shipping.html">Configurando o Promtail</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Extensões da Plataforma</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">CLI</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../cli/cli-sts.html">Instalação e uso</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../security/authentication/service_tokens.html">Tokens de serviço</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Integrações Personalizadas</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <span class="nav-text">Stackpacks</span>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../stackpacks/about-stackpacks.html">Instalando StackPacks</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../troubleshooting.html">Solução de problemas de mapeamentos OTel</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Personalizando monitores padrão.</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/k8s-add-monitors-cli.html">Adicionando monitores usando a CLI</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/k8s-dynamic-threshold-monitors.html">Monitores de limiar dinâmico K8s</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/alerting/k8s-derived-state-monitors.html">Monitores de estado derivado K8s</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/monitors/remediation-guide.html">Guia de remediação</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Saúde</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../configure/health/health-synchronization.html">Sincronização de saúde externa</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../configure/health/send-health-data/send-health-data.html">Enviar dados de saúde via HTTP</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../configure/health/send-health-data/repeat_snapshots.html">Repetir instantâneos JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../configure/health/send-health-data/transactional_increments.html">Incrementos transacionais JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../configure/health/debug-health-sync.html">Depurar sincronização de saúde</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Gráficos personalizados</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/k8s-add-charts.html">Adicionando gráficos personalizados aos componentes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../../use/metrics/k8s-writing-promql-for-charts.html">Escrevendo consultas PromQL para gráficos representativos</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/metric-bindings/troubleshooting.html">Solução de problemas de gráficos métricos personalizados</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/metric-bindings/writing-promql.html">Escrevendo PromQL</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../../custom-integrations/metric-bindings/cli.html">Suporte CLI para vinculações de métricas</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Referência</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../../../develop/reference/k8sTs-stql_reference.html">Linguagem de Consulta do SUSE Observability (STQL)</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../../../develop/reference/k8sTs-chart-units.html">Unidades de gráfico</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../../../use/metrics/k8sTs-metric-reference.html">Referências de métricas</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../../../configure/topology/identifiers.html">Identificadores de topologia</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </nav>
+</div>
+<div class="nav-panel-explore" data-panel="explore">
+  <div class="context">
+    <span class="title">SUSE Observability</span>
+    <span class="version">Latest</span>
+  </div>
+  <ul class="components">
+        <li class="component is-current">
+          <div class="title"><a href="../../../../../en/classic.html">SUSE Observability</a></div>
+          <ul class="versions">
+            <li class="version is-current is-latest">
+              <a href="../../../../../en/classic.html">Latest</a>
+            </li>
+          </ul>
+        </li>
+  </ul>
+</div>
+    </div>
+  </aside>
+</div>
+<main class="article">
+<div class="toolbar" role="navigation">
+<button class="nav-toggle"></button>
+<nav class="breadcrumbs" aria-label="breadcrumbs">
+<ul>
+    <li>
+      <a class="home-link-dsc" href="https://documentation.suse.com/" title="documentation.suse.com" aria-label="SUSE Documentation Home"></a>
+    </li>
+    <li>
+      <a href="https://documentation.suse.com/cloudnative/suse-observability" title="SUSE Observability" aria-label="SUSE Documentation - SUSE Observability">
+        SUSE Observability
+      </a>
+    </li>
+      <li>
+          <a href="auto-instrumentation-of-lambdas.html" title="Auto-instrumentação de uma função Lambda NodeJS" aria-label="Auto-instrumentação de uma função Lambda NodeJS">Auto-instrumentação de uma função Lambda NodeJS</a>
+      </li>
+  </ul>
+</nav>      <div class="navbar-item search hide-for-print">
+        <div id="search-field" class="field">
+          <label class="visual-search-label-bc" for="search-input">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+          <input label="Search" aria-label="Search" id="search-input" type="text" placeholder="Pesquisar na documentação" >
+          <label class="filter checkbox" style="display: none">
+            <input type="checkbox" data-facet-filter="component:suse-observability" checked> Only this project
+          </label>
+        </div>
+      </div>
+</div>
+  <div class="content">
+<aside
+  class="toc sidebar"
+  data-title="Nesta página" data-levels="2">
+  <div class="toc-menu">
+    <!-- start qualtrics -->
+    <div id='ZN_8qZUmklKYbBqAYe'><!--DO NOT REMOVE-CONTENTS PLACED HERE--></div>
+    <div id="qualtrics_container"></div>
+    <!-- end qualtrics -->
+  </div>
+</aside><article class="doc">
+<h1 class="page">Auto-instrumentação de uma função Lambda NodeJS</h1>
+<div class="sect1">
+<h2 id="_introdução"><a class="anchor" href="#_introdução"></a>Introdução</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Este documento orienta você na auto-instrumentação de funções Lambda NodeJS usando OpenTelemetry. A auto-instrumentação simplifica o processo de adicionar observabilidade às suas funções Lambda, capturando automaticamente métricas de desempenho e informações de rastreamento.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_pré_requisitos"><a class="anchor" href="#_pré_requisitos"></a>Pré-requisitos</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Antes de começar, certifique-se de ter o seguinte:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Função AWS Lambda:</strong> A função que você deseja instrumentar.</p>
+</li>
+<li>
+<p><strong>SDK OpenTelemetry:</strong> Instalado em sua função Lambda.</p>
+</li>
+<li>
+<p><strong>Coletor OpenTelemetry:</strong> Implantado e configurado.</p>
+</li>
+<li>
+<p><strong>SUSE Observability:</strong> Uma conta com SUSE Observability onde você enviará seus dados de telemetria.</p>
+</li>
+<li>
+<p><strong>MemÃ³ria:</strong> Memória suficiente para executar a Lambda, incluindo a instrumentação.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_valores_fornecidos_pelo_ambiente"><a class="anchor" href="#_valores_fornecidos_pelo_ambiente"></a>Valores fornecidos pelo ambiente</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>OpenTelemetry depende de vários valores de configuração para funcionar corretamente. Esses valores controlam aspectos como coleta de dados, exportação e comunicação com sistemas de backend. Para tornar sua implantação do OpenTelemetry flexível e adaptável a diferentes ambientes, você pode fornecer essas configurações por meio de variáveis de ambiente. Essa abordagem oferece vários benefícios:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Configuração Dinâmica:</strong> Ajuste facilmente as configurações sem alterações no código.</p>
+</li>
+<li>
+<p><strong>Configurações Específicas do Ambiente:</strong> Configure o OpenTelemetry de forma diferente para desenvolvimento, teste e produção.</p>
+</li>
+<li>
+<p><strong>Gerenciamento de Segredos:</strong> Armazene informações sensíveis, como chaves de API, de forma segura.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Para a configuração do OpenTelemetry descrita nesta documentação, você precisará definir as seguintes variáveis de ambiente:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong><code>VERBOSITY</code>:</strong> Controla o nível de detalhe nos logs do OpenTelemetry.</p>
+</li>
+<li>
+<p><strong><code>OTLP_API_KEY</code>:</strong> Autentica sua função Lambda para enviar dados ao SUSE Observability.</p>
+</li>
+<li>
+<p><strong><code>OTLP_ENDPOINT</code>:</strong> Especifica o endereço da sua instância do SUSE Observability.</p>
+</li>
+<li>
+<p><strong><code>OPENTELEMETRY_COLLECTOR_CONFIG_FILE</code>:</strong> Aponta para o arquivo de configuração do OpenTelemetry Collector.</p>
+</li>
+<li>
+<p><strong><code>AWS_LAMBDA_EXEC_WRAPPER</code>:</strong> Configura o ambiente de execução da Lambda para usar o manipulador do OpenTelemetry.</p>
+</li>
+<li>
+<p><strong><code>OTLP_INSTR_LAYER_ARN</code>:</strong> Fornece o ARN (Amazon Resource Name) da camada de instrumentação do OpenTelemetry, que adiciona os componentes necessários para a auto-instrumentação.</p>
+</li>
+<li>
+<p><strong><code>OTLP_COLLECTOR_LAYER_ARN</code>:</strong> Fornece o ARN da camada do coletor do OpenTelemetry, que é responsável por receber, processar e exportar dados de telemetria.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p><strong>Considerações Importantes:</strong></p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Ponto de Extremidade GRPC:</strong> O <code>OTLP_ENDPOINT</code> deve especificar o ponto de extremidade gRPC da sua instância do SUSE Observability sem nenhum prefixo <code>http</code> ou <code>https</code>. Use a porta 443 para comunicação segura.</p>
+</li>
+<li>
+<p><strong>Camadas Específicas da Região:</strong> As camadas Lambda são vinculadas à região. Certifique-se de que os ARNs que você usa para <code>OTLP_INSTR_LAYER_ARN</code> e <code>OTLP_COLLECTOR_LAYER_ARN</code> correspondam à região da AWS onde sua função Lambda está implantada.</p>
+</li>
+<li>
+<p><strong>Correspondência de Arquitetura:</strong> A camada do OpenTelemetry Collector é específica da arquitetura. Escolha o ARN correto para a arquitetura da sua função Lambda (por exemplo, <code>amd64</code> ou <code>arm64</code>).</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p><strong>Um exemplo completo: esteja ciente de que você precisa inserir seus próprios valores.</strong></p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">VERBOSITY: "normal"
+OTLP_API_KEY: "&lt;your api key for sending data to SUSE Observability here&gt;"
+OTLP_ENDPOINT: "&lt;your-dns-name-for-suse-observability-here&gt;:443"
+OPENTELEMETRY_COLLECTOR_CONFIG_FILE: "/var/task/collector.yaml"
+AWS_LAMBDA_EXEC_WRAPPER: "/opt/otel-handler"
+OTLP_INSTR_LAYER_ARN: "arn:aws:lambda:&lt;aws-region&gt;:184161586896:layer:opentelemetry-nodejs-0_11_0:1"
+OTLP_COLLECTOR_LAYER_ARN: "arn:aws:lambda:&lt;aws-region&gt;:184161586896:layer:opentelemetry-collector-&lt;amd64|arm64&gt;-0_12_0:1"</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_o_arquivo_collector_yaml"><a class="anchor" href="#_o_arquivo_collector_yaml"></a>O arquivo collector.yaml</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>A configuração de coleta do OTEL define como os dados coletados devem ser distribuídos.  Isso é feito no arquivo collector.yaml colocado no diretório src onde os arquivos lambda podem ser encontrados.  Abaixo está um exemplo de arquivo collector.yaml.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml"># collector.yaml in the root directory
+# Set an environemnt variable 'OPENTELEMETRY_COLLECTOR_CONFIG_FILE' to
+# '/var/task/collector.yaml'
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  debug:
+    verbosity: "${env:VERBOSITY}"
+  otlp/stackstate:
+    headers:
+      Authorization: "SUSEObservability ${env:OTLP_API_KEY}"
+    endpoint: "${env:OTLP_ENDPOINT}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []
+    metrics:
+      receivers: [otlp]
+      exporters: [debug, otlp/stackstate]
+      processors: []</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Este coletor é usado para enviar os dados para um próximo coletor, que é utilizado para amostragem de cauda, agregação de métricas, etc., antes de enviar os dados para SUSE Observability. Este segundo coletor também precisa ser executado no ambiente do cliente.</p>
+</div>
+<div class="paragraph">
+<p>Dependendo da funcionalidade desejada, ou com base em fatores como volumes de dados gerados por lambdas instrumentados dessa forma, os coletores podem ser configurados para processamento em lote, amostragem de cauda e outras técnicas de pré-processamento para reduzir o impacto em SUSE Observability.</p>
+</div>
+<div class="paragraph">
+<p>Veja esta página para <a href="../../proxy-collector.html" class="xref page">orientações e instruções</a> sobre como configurar um coletor em lote que atua como um proxy de segurança para SUSE Observability.
+Veja esta página para <a href="../../collector.html" class="xref page">instruções</a> sobre como configurar um coletor que também faz amostragem de cauda.
+Para mais informações sobre a configuração do processador no coletor opentelemetry, consulte a <a href="https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/README.md">documentação oficial</a>.</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="../../../../_images/otel/aws_nodejs_otel_auto_instrumentation.svg" alt="Instrumentação do AWS Lambda com Opentelemetry">
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_package_json"><a class="anchor" href="#_package_json"></a>Package.json</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Certifique-se de adicionar <code>"@opentelemetry/auto-instrumentations-node": "^0.55.2",+</code> a <code>package.json</code> e executar <code>npm install</code> para adicionar as bibliotecas de cliente de auto-instrumentação à sua Lambda NodeJS.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_solução_de_problemas"><a class="anchor" href="#_solução_de_problemas"></a>Solução de problemas</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_tempos_de_espera"><a class="anchor" href="#_tempos_de_espera"></a>Tempos de espera</h3>
+<div class="paragraph">
+<p>Se a adição das camadas OTEL Lambda resultar em lambdas que excedem o tempo limite (verificar os logs pode indicar que o coletor foi solicitado a desligar enquanto ainda estava ocupado, por exemplo, vendo a seguinte entrada de log):</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-json hljs" data-lang="json">{
+    "level": "info",
+    "ts": 1736867469.2312617,
+    "caller": "internal/retry_sender.go:126",
+    "msg": "Exporting failed. Will retry the request after interval.",
+    "kind": "exporter",
+    "data_type": "traces",
+    "name": "otlp/stackstate",
+    "error": "rpc error: code = Canceled desc = context canceled",
+    "interval": "5.125929689s"
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>pouco depois de receber a instrução para desligar:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-json hljs" data-lang="json">{
+    "level": "info",
+    "ts": 1736867468.4311068,
+    "logger": "lifecycle.manager",
+    "msg": "Received SHUTDOWN event"
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Isso indica que os recursos alocados para a função Lambda não são suficientes para permitir sua execução, além da sobrecarga adicional imposta pela instrumentação OTEL.  Para corrigir essa situação, a alocação de memória e as configurações de tempo limite da função Lambda podem ser ajustadas conforme necessário, permitindo que ela conclua seu trabalho e que a coleta de telemetria ocorra com sucesso.</p>
+</div>
+<div class="paragraph">
+<p>Tente modificar as propriedades MemorySize e TimeOut das lambdas que estão falhando:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">MemorySize: 256
+Timeout: 25</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Observe que a alocação de memória padrão é de 128MB</p>
+</div>
+<div class="paragraph">
+<p>Observe que o incremento de memória é de 128MB</p>
+</div>
+<div class="paragraph">
+<p>Observe que o Timeout é um valor inteiro que denota segundos.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_autenticação_e_filtragem_de_ip_de_origem"><a class="anchor" href="#_autenticação_e_filtragem_de_ip_de_origem"></a>Autenticação e Filtragem de IP de Origem</h3>
+<div class="paragraph">
+<p>Se você encontrar <code>error 403 Unauthorized</code> ao enviar dados do coletor para seu cluster, ou para qualquer coletor de pré-processamento ou proxy, verifique se o endereço IP de origem do gateway NAT da VPC corresponde ao que está na lista de permissões do coletor, também verifique se o mecanismo de autenticação escolhido corresponde à origem e ao destino, e também se as credenciais (segredos, etc.) estão configuradas corretamente.</p>
+</div>
+<div class="paragraph">
+<p>Para mais informações sobre como configurar a autenticação para o coletor opentelemetry, consulte a <a href="https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configauth/README.md">documentação oficial</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_referências"><a class="anchor" href="#_referências"></a>Referências</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Documentação de auto-instrumentação → <a href="https://opentelemetry.io/docs/faas/lambda-auto-instrument/" class="bare">https://opentelemetry.io/docs/faas/lambda-auto-instrument/</a></p>
+</div>
+<div class="paragraph">
+<p>Documentação do coletor → <a href="https://opentelemetry.io/docs/faas/lambda-collector/" class="bare">https://opentelemetry.io/docs/faas/lambda-collector/</a></p>
+</div>
+<div class="paragraph">
+<p>Página de lançamentos do GitHub para encontrar os últimos ARNs → <a href="https://github.com/open-telemetry/opentelemetry-lambda/releases" class="bare">https://github.com/open-telemetry/opentelemetry-lambda/releases</a></p>
+</div>
+<div class="paragraph">
+<p>Configuração do Exportador OTLP → <a href="https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/" class="bare">https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/</a></p>
+</div>
+</div>
+</div>
+</article>
+  </div>
+</main>
+</div>
+<script src="../../../../../../../_/js/site.js"></script>
+<script async src="../../../../../../../_/js/vendor/highlight.js"></script>
+<script src="../../../../../../../_/js/vendor/lunr.js"></script>
+<script src="../../../../../../../_/js/search-ui.js" id="search-ui-script" data-site-root-path="../../../../../../.." data-snippet-length="100" data-stylesheet="../../../../../../../_/css/search.css"></script>
+<script async src="../../../../../../../search-index.js"></script>
+<script src="../../../../../../../_/js/vendor/langSelection.js"></script>
+<script async src="../../../../../../../_/js/vendor/tabs.js"></script>
+
+
+<script src="../../../../../../../_/js/CNLanguageSwitcher.js"></script>
+  </body>
+</html>

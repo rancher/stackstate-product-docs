@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="zh_CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>从 StackState 6.x 迁移到 SUSE Observability | SUSE Observability  Latest</title>
+    <meta name="description" content="SUSE Observability 自托管">
+    <meta name="generator" content="Antora 3.1.10">
+    <link rel="stylesheet" href="../../../../../_/css/site.css">
+<meta http-equiv="last-modified" content="2025-07-10"/>
+<link rel="stylesheet" href="../../../../../_/css/search.css">
+<link rel="icon" href="../../../../../_/img/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../../../../_/css/font-styles.css">
+<link rel="stylesheet" href="../../../../../_/fonts/css/all.css">
+<link rel="stylesheet" href="../../../../../_/css/site-extra.css">
+<link rel="stylesheet" href="../../../../../_/css/vendor/tabs.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=SUSE:wght@100..800&display=swap&family=SUSE+Mono:ital,wght@0,100..800;1,100..800" rel="stylesheet">
+<link href="https://documentation.suse.com/docserv/res/fonts/poppins/poppins.css" rel="stylesheet">
+<link rel="stylesheet" href="../../../../../_/css/vendor/light.css">
+<script src="/docserv/res/lightheaded/analytics.js" type="text/javascript"></script>
+<script type="module">
+  import { defineCustomElements, setAssetPath } from 'https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/shared-header.esm.js';
+  defineCustomElements();
+  setAssetPath("https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/assets");
+</script>
+<!-- Default English link -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="x-default" rel="alternate"/>
+<!-- Link for the currently processed page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/zh/setup/upgrade-stackstate/migrate-from-6-new.html" hrefLang="zh-CN" rel="alternate" />
+<!-- Link for the English page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="en-US" rel="alternate" />
+<!-- Link for the Japanese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/ja/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="ja-JP" rel="alternate" />
+<!-- Link for the German page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/de/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="de-DE" rel="alternate" />
+<!-- Link for the French page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/fr/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="fr-FR" rel="alternate" />
+<!-- Link for the Spanish page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/es/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="es-ES" rel="alternate" />
+<!-- Link for the Brazilian Portuguese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/pt/setup/upgrade-stackstate/migrate-from-6-new.html" hreflang="pt-BR" rel="alternate" />
+
+<!-- JSON-LD for doc metadata -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "从 StackState 6.x 迁移到 SUSE Observability | SUSE Observability latest",
+  "headline": "从 StackState 6.x 迁移到 SUSE Observability",
+  "description": "SUSE Observability 自托管",
+  "inLanguage": "zh_CN",
+  "dateModified": "2025-07-10T00:00:00Z",
+  "author": {
+    "@type": "Organization",
+    "name": "SUSE Product & Solution Documentation Team",
+    "url": "https://documentation.suse.com"
+  },
+  "mentions": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "SUSE Observability",
+      "softwareVersion": "latest",
+      "applicationCategory": "Cloud Infrastructure",
+      "operatingSystem": "Linux"
+    }
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "SUSE",
+    "url": "https://documentation.suse.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.suse.com/assets/img/suse-white-logo-green.svg"
+    }
+  }
+}
+</script>
+<!-- end JSON-LD for doc metadata -->
+
+<!-- SUVA - Begin Ask Geeko-->
+<!--
+searchUnifyChatbot ("Ask Geeko") Copyright ©2024 Grazitti Interactive - All Rights Reserved. NOTICE: All information contained herein is, and remains the property of Grazitti Interactive and its suppliers, if any. The intellectual and technical concepts contained herein are proprietary to Grazitti Interactive and its suppliers and may be covered by India, U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained from Grazitti Interactive.
+-->
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/Allow/an.js?c485cb3c-93d4-4942-99e8-91f3b8ca5636"></script>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/js/index.js?q=gAAAAABp3JBN9VuEJTi5tFafLIMwgMkCPdJS3Qm56lSYx93ir3Twt9hgSvd3OHEt6-nYfSbY3yHq0Zv8PRPsSy4nbqZiaJ4cZvRc6ItVZdvwz9Urf35cH6OUyPOwdA0phlS-zVIznQ2rWW438p-91NlTHuxJuOFpnA=="></script>
+<link rel="stylesheet" href="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/css/index.css">
+<div id="searchUnifyChatbot"></div>
+<!-- SUVA - End Ask Geeko-->
+<!--BEGIN QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+<script type='text/javascript' src="../../../../../_/js/qualtrics.js" defer></script>
+<!--END QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+    <script>var uiRootPath = '../../../../../_'</script>
+  </head>
+  <body class="article">
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs'; mermaid.initialize({"startOnLoad":true});</script><shared-header
+language="en"
+languages='{
+    "en": { "label": "English", "url": "https://documentation.suse.com/en-us/" },
+    "de": { "label": "Deutsch", "url": "https://documentation.suse.com/de-de/" },
+    "fr": { "label": "Français", "url": "https://documentation.suse.com/fr-fr/" },
+    "es": { "label": "Español", "url": "https://documentation.suse.com/es-es/" },
+    "zh_CN": { "label": "中文", "url": "https://documentation.suse.com/zh-cn/" },
+    "pt_BR": { "label": "Português Brasileiro", "url": "https://documentation.suse.com/pt-br/" }
+}'
+enable-search='false'>
+</shared-header>
+
+<!-- Leaving as a comment, I expect it will be required again next year.
+<a target=_blank"" class="survey-link" href="https://suselinux.fra1.qualtrics.com/jfe/form/SV_bEiGZbUNzLD8Tcy"> Documentation survey </a>
+-->
+<div class="body">
+<div class="nav-container" data-component="suse-observability" data-version="latest">
+  <aside class="nav">
+    <div class="panels">
+<div class="nav-panel-menu is-active" data-panel="menu">
+  <nav class="nav-menu">
+    <button class="nav-menu-toggle" aria-label="Toggle expand/collapse all" style="display: none"></button>
+    <h3 class="title">SUSE Observability</h3>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="0">
+<ul class="nav-list">
+  <li class="nav-item" data-depth="1">
+    <a class="nav-link" href="../../classic.html">SUSE Observability 文档</a>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">发布</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">发行说明</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.1.adoc">v2.8.1 - 2026年3月17日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.0.adoc">v2.8.0 - 2026年3月3日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.7.0.adoc">v2.7.0 - 2026年1月14日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.3.adoc">v2.6.3 - 2025年11月25日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.2.adoc">v2.6.2 - 2025年11月3日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.1.adoc">v2.6.1 - 2025年10月13日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.0.adoc">v2.6.0 - 2025年9月29日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.5.0.adoc">v2.5.0 - 2025年9月8日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.4.0.adoc">v2.4.0 - 2025年8月25日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.7.adoc">v2.3.7 - 2025年7月28日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.6.adoc">v2.3.6 - 2025年7月23日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.5.adoc">v2.3.5 - 2025年6月19日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.4.adoc">v2.3.4 - 2025年6月4日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.3.adoc">v2.3.3 - 2025年5月7日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.2.adoc">v2.3.2 - 2025年4月22日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.1.adoc">v2.3.1 - 2025年3月17日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.0.adoc">v2.3.0 - 2025年1月30日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.1.adoc">v2.2.1 - 10/Dec/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.0.adoc">v2.2.0 - 2024年12月09日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.1.0.adoc">v2.1.0 - 2024年10月29日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20241001154902.adoc">v2.0.2 - 01/10/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240918082712.adoc">v2.0.1 - 18/09/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240911112250.adoc">v2.0.0 - 11/09/2024</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="#setup/release-notes/Release Strategy.adoc">发布策略</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">安装</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">平台：自托管</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../install-stackstate/Compatibility%20Self%20Hosted.html">兼容性矩阵</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">入门与要求</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/requirements.html">系统要求与规模</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/initial_run_guide.html">首次登录与默认凭据</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">安装指南</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/kubernetes_install.html">Kubernetes 安装</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/openshift_install.html">OpenShift 安装</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/ack.html">阿里云 ACK 安装</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-air-gapped.html">隔离平台安装</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">高级配置</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">身份验证</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/authentication_options.html">身份验证选项</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/oidc.html">开放ID连接 (OIDC)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/keycloak.html">KeyCloak</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/oidc/microsoft-entra-id.html">Microsoft Entra ID</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/ldap.html">LDAP</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/file.html">基于文件的</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/single_password.html">单一密码</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">存储与资源</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/storage.html">存储类与自定义</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/data_retention.html">数据保留期限与调整大小</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/affinity.html">配置 Kubernetes 亲和性</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">网络与安全</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/ingress.html">通过 Kubernetes 入口暴露 SUSE Observability</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/self-signed-certificates.html">自我签名证书</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/k8s-service-tokens.html">服务词元</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/k8s-ingestion-api-keys.html">API 词元</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/disabling-tls-verification.html">禁用 TLS 验证</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/external-secrets.html">外部管理机密</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/required_permissions.html">所需权限和 Pod 安全性</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/customize_config.html">覆盖默认 Helm 值</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/troubleshooting.html">故障排除身份验证和授权</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../advanced/analytics.html">分析</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">通知</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../configure-stackstate/slack-notifications.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../configure-stackstate/email-notifications.html">电子邮件</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">备份与恢复</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/backup_enable.html">启用备份</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/backup_restore.html">恢复备份</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">遗留备份</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/kubernetes_backup.html">Kubernetes 备份（遗留）</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/configuration_backup.html">配置备份（遗留）</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">查错</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/troubleshooting.html">快速故障排除指南</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/advanced-troubleshooting.html">高级故障排除</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/extension-troubleshooting.html">UI 扩展故障排除</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/support-package-logs.html">支持包（日志）</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../install-stackstate/support-package-performance.html">支持包（性能）</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">升级与卸载</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">升级</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="migrate-from-6.html">从 StackState 迁移</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="steps-to-upgrade.html">升级步骤</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="version-specific-upgrade-instructions.html">特定版本的升级说明</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">卸装</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../install-stackstate/kubernetes_openshift/uninstall.html">移除 Helm 图表和资源</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/clear_stored_data.html">清除数据</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">平台：由 SUSE 托管</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">SUSE Cloud Observability</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../suse-cloud-observability-quick-start-guide.html">快速入门指南</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../suse-cloud-observability/user-management.html">通过 Keycloak 管理用户</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">代理</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../agent/supported-architectures.html">硬件架构支持</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-quick-start-guide.html">快速入门指南</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-getting-started.html">SUSE Observability 演示</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-agent-air-gapped.html">使用 Helm 图表的隔离安装</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../k8s-network-configuration-saas.html">SaaS 的网络配置</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../agent/k8s-network-configuration-proxy.html">代理连接的配置</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../agent/k8s-custom-secrets-setup.html">自定义机密管理</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../agent/k8sTs-agent-request-tracing.html">请求追踪管理</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../agent/k8sTs-agent-request-tracing-certificates.html">侧车注入的证书</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Rancher UI 扩展</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime.html">SUSE Rancher Prime 安装</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">基于角色的访问控制 (RBAC)</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../security/rbac/rbac_permissions.html">权限</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../security/rbac/rbac_roles.html">角色</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../security/rbac/rbac_rancher.html">Rancher</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../security/rbac/rbac_scopes.html">范围</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">用法</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">功能和用户界面</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-views.html">Kubernetes 视图</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-view-structure.html">理解过滤器和视角</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-custom-views.html">创建和保存自定义视图</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-explore-views.html">探索视图</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-overview-perspective.html">列表视图和卡片</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-highlights-perspective.html">资源摘要页面</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-topology-perspective.html">使用拓扑图</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-events-perspective.html">事件时间线</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8sTs-explore-metrics.html">探索指标</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-metrics-perspective.html">组件指标</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/traces/k8sTs-explore-traces.html">探索追踪</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-traces-perspective.html">追踪视角</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/logs/k8sTs-explore-logs.html">日志浏览器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-filters.html">使用拓扑和事件过滤器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/stackstate-ui/k8sTs-keyboard-shortcuts.html">键盘快捷键</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/stackstate-ui/k8sTs-timeline-time-travel.html">使用时间线和时间旅行</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">仪表板</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboards.html">创建和管理仪表板</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-widgets.html">配置组件</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-variables.html">使用变量</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-organize.html">布局和组织</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">监视器和警报</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-monitors.html">监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/kubernetes-monitors.html">开箱即用的 K8s 监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-override-monitor-arguments.html">自定义标准监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/configure.html">配置通知</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">通知</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/slack.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/teams.html">小组</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/webhook.html">Webhook</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/opsgenie.html">Opsgenie</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/alerting/notifications/troubleshooting.html">通知故障排除</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">引导式故障排除</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-guided-troubleshooting.html">什么是引导式故障排除？</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-configuration.html">配置 YAML</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-changes.html">比较更改</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-logs.html">查看 Pod 日志</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">数据摄取与集成</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetry (OTel) 收集器</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/overview.html">概述</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/concepts.html">追踪、指标、信号</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/getting-started.html">通用 OTel 指南</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/concepts.html">概念</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/collector.html">收集器配置</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/proxy-collector.html">安全代理设置</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/sampling.html">头部和尾部采样</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/otlp-apis.html">OTLP 的 API 端点</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetry 仪器化指南</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/getting-started/getting-started-k8s.html">Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/getting-started/getting-started-k8s-operator.html">使用 OTel 操作员</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/getting-started/getting-started-linux.html">Linux 主机</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/getting-started/getting-started-lambda.html">AWS Lambda</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/instrumentation/node.js/auto-instrumentation-of-lambdas.html">Node.js Lambda 详情</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/instrumentation/dot-net.html">.NET</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/instrumentation/java.html">Java</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/instrumentation/node.js.html">Node.js SDK 设置</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/instrumentation/sdk-exporter-config.html">SDK 导出器配置</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">集成</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-prometheus-remote-write.html">发送 Prometheus 指标</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-stackstate-grafana-datasource.html">Grafana 数据源</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/open-metrics.html">Scraping OpenMetrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/logs/k8sTs-log-shipping.html">配置 Promtail</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">平台扩展</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">CLI</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../cli/cli-sts.html">安装和使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../security/authentication/service_tokens.html">服务令牌</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">自定义集成</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <span class="nav-text">堆栈包</span>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../stackpacks/about-stackpacks.html">安装 StackPacks</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/troubleshooting.html">故障排除 OTel 映射</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">自定义标准监视器。</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-add-monitors-cli.html">使用 CLI 添加监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-dynamic-threshold-monitors.html">K8s 动态阈值监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-derived-state-monitors.html">K8s 派生状态监视器</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/remediation-guide.html">补救指南</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">健康</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/health-synchronization.html">外部健康同步</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/send-health-data.html">通过HTTP发送健康数据</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/repeat_snapshots.html">重复快照JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/transactional_increments.html">事务增量JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/debug-health-sync.html">调试健康同步</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">自定义图表</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-add-charts.html">将自定义图表添加到组件</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-writing-promql-for-charts.html">为代表性图表编写 PromQL 查询</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/metric-bindings/troubleshooting.html">故障排除自定义指标图表</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/metric-bindings/writing-promql.html">编写 PromQL</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/metric-bindings/cli.html">CLI 对指标绑定的支持</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">参考手册</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-stql_reference.html">SUSE Observability 查询语言（STQL）</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-chart-units.html">图表单位</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../use/metrics/k8sTs-metric-reference.html">指标参考</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../configure/topology/identifiers.html">拓扑标识符</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </nav>
+</div>
+<div class="nav-panel-explore" data-panel="explore">
+  <div class="context">
+    <span class="title">SUSE Observability</span>
+    <span class="version">Latest</span>
+  </div>
+  <ul class="components">
+        <li class="component is-current">
+          <div class="title"><a href="../../../en/classic.html">SUSE Observability</a></div>
+          <ul class="versions">
+            <li class="version is-current is-latest">
+              <a href="../../../en/classic.html">Latest</a>
+            </li>
+          </ul>
+        </li>
+  </ul>
+</div>
+    </div>
+  </aside>
+</div>
+<main class="article">
+<div class="toolbar" role="navigation">
+<button class="nav-toggle"></button>
+<nav class="breadcrumbs" aria-label="breadcrumbs">
+<ul>
+    <li>
+      <a class="home-link-dsc" href="https://documentation.suse.com/" title="documentation.suse.com" aria-label="SUSE Documentation Home"></a>
+    </li>
+    <li>
+      <a href="https://documentation.suse.com/cloudnative/suse-observability" title="SUSE Observability" aria-label="SUSE Documentation - SUSE Observability">
+        SUSE Observability
+      </a>
+    </li>
+      <li>
+          <a href="migrate-from-6-new.html" title="从 StackState 6.x 迁移到 SUSE Observability" aria-label="从 StackState 6.x 迁移到 SUSE Observability">从 StackState 6.x 迁移到 SUSE Observability</a>
+      </li>
+  </ul>
+</nav>      <div class="navbar-item search hide-for-print">
+        <div id="search-field" class="field">
+          <label class="visual-search-label-bc" for="search-input">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+          <input label="Search" aria-label="Search" id="search-input" type="text" placeholder="搜索文档" >
+          <label class="filter checkbox" style="display: none">
+            <input type="checkbox" data-facet-filter="component:suse-observability" checked> Only this project
+          </label>
+        </div>
+      </div>
+</div>
+  <div class="content">
+<aside
+  class="toc sidebar"
+  data-title="在此页面上" data-levels="3">
+  <div class="toc-menu">
+    <!-- start qualtrics -->
+    <div id='ZN_8qZUmklKYbBqAYe'><!--DO NOT REMOVE-CONTENTS PLACED HERE--></div>
+    <div id="qualtrics_container"></div>
+    <!-- end qualtrics -->
+  </div>
+</aside><article class="doc">
+<h1 class="page">从 StackState 6.x 迁移到 SUSE Observability</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>由于产品名称的更改以及拓扑数据格式的重大变化，无法通过标准的 Helm 升级命令从 StackState 升级到 SUSE Observability。本迁移指南将帮助您将 SUSE Observability 设置为与 StackState 完全相同。</p>
+</div>
+<div class="paragraph">
+<p>SUSE Observability 将是一个全新的安装，不会包含已有的历史数据。<strong>可选地</strong> 可以保持历史数据的可访问性，直到 SUSE Observability 积累了足够的历史。本指南涵盖这两种情况。</p>
+</div>
+<div class="paragraph">
+<p>根据选择的场景，迁移步骤有所不同。并行运行稍微复杂一些，并且需要更多的资源。适用于这两种情况的总体步骤是：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>安装最新版本的 StackState 6.x</p>
+</li>
+<li>
+<p>创建并下载配置备份</p>
+</li>
+<li>
+<p>安装和配置 SUSE Observability，特定场景的步骤</p>
+</li>
+<li>
+<p>更新 Open Telemetry 收集器配置</p>
+</li>
+<li>
+<p>迁移代理</p>
+</li>
+</ol>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>在本指南中，所有示例假设以下设置，请根据您的确切设置自定义命令：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Kubernetes 集群使用名为 <code>observability</code> 的上下文进行访问</p>
+</li>
+<li>
+<p>StackState 安装在 <code>stackstate</code> 名称空间中</p>
+</li>
+<li>
+<p>SUSE Observability 将安装在 <code>suse-observability</code> 名称空间中</p>
+</li>
+</ul>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_安装最新版本的_stackstate_6_x"><a class="anchor" href="#_安装最新版本的_stackstate_6_x"></a>安装最新版本的 StackState 6.x</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>只有最新版本的 StackState 6.x 才具有包含所有配置的配置备份，该备份格式与 SUSE Observability 兼容。请确保您已安装最新版本，通过运行 <code>helm list --namespace stackstate</code>（使用安装 StackState 的名称空间）：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Helm 图表版本应为 <code>1.12.1</code></p>
+</li>
+<li>
+<p>应用程序版本应为 <code>6.0.0-snapshot.20241023094532-stackstate-6.x-7be52ad</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>如果您没有该版本，请先按照标准 <a href="https://docs.stackstate.com/6.0/self-hosted-setup/upgrade-stackstate/steps-to-upgrade#_minor_or_maintenance_stackstate_release">升级步骤</a> 升级。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_创建配置备份并下载备份"><a class="anchor" href="#_创建配置备份并下载备份"></a>创建配置备份并下载备份</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>首先，我们创建 StackState 配置的配置备份，之后您不应再对 StackState 进行任何配置更改（这些更改将不会传输到 SUSE Observability）。为此，首先熟悉配置备份，并使用 <a href="https://docs.stackstate.com/6.0/self-hosted-setup/data-management/backup_restore/configuration_backup#_working_with_configuration_backups">StackState 6.x 的配置备份文档</a> 获取所需的脚本。</p>
+</div>
+<div class="paragraph">
+<p>从包含脚本的 <code>restore</code> 目录中运行以下命令：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>设置活动上下文和名称空间：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">  kubectl config use-context observability
+  kubectl config set-context --current --namespace=stackstate</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>创建备份（这将需要1Gi的内存和1个内核在集群中），这可能需要一些时间来创建 Kubernetes 作业并启动 pod：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash"> ./backup-configuration-now.sh</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>在命令的输出中，您将看到备份的文件名，类似于 <code>sts-backup-20241024-1423.sty</code>。复制文件名并使用它下载备份：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./download-configuration-backup.sh sts-backup-20241023-1423.sty</code></pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>您现在应该在计算机上拥有配置备份文件。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_安装并配置_suse_observability"><a class="anchor" href="#_安装并配置_suse_observability"></a>安装并配置 SUSE Observability</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>在这里，两个选项是不同的。按照您首选场景的说明进行操作。
+选择一个：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><a href="#_replace_stackstate">[_replace_stackstate]</a></p>
+</li>
+<li>
+<p><a href="#_run_side_by_side">[_run_side_by_side]</a>。</p>
+</li>
+</ul>
+</div>
+<div class="sect2">
+<h3 id="_替换_stackstate"><a class="anchor" href="#_替换_stackstate"></a>替换 StackState</h3>
+<div class="sect3">
+<h4 id="_卸载_stackstate"><a class="anchor" href="#_卸载_stackstate"></a>卸载 StackState</h4>
+<div class="paragraph">
+<p>在安装 SUSE Observability 之前卸载 StackState 有两个优点，首先，它释放了集群中的资源，因此不需要临时额外的节点。其次，它移除了 StackState 的入口配置，从而释放了 StackState 的 URL 以供 SUSE Observability 重新使用。唯一的缺点是，从此时起到设置 SUSE Observability 配置的这段时间内，您将无法使用 StackState 或 SUSE Observability 进行监控。</p>
+</div>
+<div class="paragraph">
+<p>卸载 StackState 还会删除您的历史数据（拓扑和所有其他遥测数据）。要卸载 StackState，请遵循 <a href="https://docs.stackstate.com/6.0/self-hosted-setup/uninstall">卸载文档</a>。</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_安装_suse_observability"><a class="anchor" href="#_安装_suse_observability"></a>安装 SUSE Observability</h4>
+<div class="paragraph">
+<p>在与 StackState 不同的名称空间中安装 SUSE Observability，以避免任何冲突。推荐使用文档中相同的名称空间，<code>suse-observability</code>。</p>
+</div>
+<div class="paragraph">
+<p>安装的最大变化是现在支持控制文件，请选择与您观察到的集群匹配的控制文件，使用 <a href="../install-stackstate/requirements.html#_resource_requirements" class="xref page">要求</a> 并根据安装指南生成值。StackState 的自定义 Helm 值与 SUSE Observability 兼容。但是，必须删除自定义资源的值，以支持新的控制文件，我们将这些保存在一个名为 <code>custom-values-no-resources.yaml</code> 的文件中。您可以使用相同的入口设置，这样 SUSE Observability 从用户和代理的角度来看将有效地替代 StackState。</p>
+</div>
+<div class="paragraph">
+<p>要安装 SUSE Observability，请遵循 <a href="../install-stackstate/kubernetes_openshift/kubernetes_install.html" class="xref page">安装指南</a>，对值生成进行一些小修改以进行迁移：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>使用与您的环境和（更新的）自定义值匹配的选定控制文件。</p>
+</li>
+<li>
+<p>获取 StackState 值中的 <code>global.receiverApiKey</code> 并将其作为额外参数提供给值生成。</p>
+</li>
+<li>
+<p>对于必须提供的基本 URL，我们使用与当前 StackState 安装相同的 URL：<code><a href="https://stackstate.demo.stackstate.io" class="bare">https://stackstate.demo.stackstate.io</a></code>。</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>因此，值生成步骤看起来像这样（再次使用我们的示例，使用最小配置文件）：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">export VALUES_DIR=.
+helm template \
+  --set license='&lt;your license&gt;' \
+  --set receiverApiKey='our-old-api-key' \
+  --set baseUrl='https://stackstate.demo.stackstate.io' \
+  --set sizing.profile='10-nonha' \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Helm 安装命令与安装文档中的相同，您可以选择包含 <code>custom-values-no-resources.yaml</code> 值文件（如果有的话）。还要确保包含入口配置值，这可以与用于 StackState 的相同。在示例中我们将使用：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+  --values $VALUES_DIR/suse-observability-values/templates/ingress.yaml \
+suse-observability \
+suse-observability/suse-observability</code></pre>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>安装将默认生成一个新的管理员密码。如果您使用的是标准身份验证并希望保留之前的管理员密码，则需要在值生成步骤中指定它（或在生成值后进行编辑）。</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_恢复配置备份"><a class="anchor" href="#_恢复配置备份"></a>恢复配置备份</h4>
+<div class="paragraph">
+<p>现在 SUSE Observability 已安装，可以恢复配置备份。SUSE Observability Helm 图表附带了一组类似的备份工具<a href="../data-management/backup_restore/configuration_backup.html" class="xref page">在此记录</a>。<strong>这些与 StackState 6.x 不同</strong>，因此请确保从 <code>restore</code> 目录获取恢复备份的脚本 <strong>SUSE Observability Helm 图表</strong>。</p>
+</div>
+<div class="paragraph">
+<p>从 SUSE Observability Helm 图表的 <code>restore</code> 目录运行以下命令以恢复备份：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>设置活动上下文和名称空间：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">  kubectl config use-context observability
+  kubectl config set-context --current --namespace=suse-observability</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>上传之前创建的备份文件，在这种情况下是`sts-backup-20241024-1423.sty`（如果需要，请确保使用完整路径）：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./upload-configuration-backup.sh sts-backup-20241024-1423.sty</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>恢复备份（这将需要1Gi的内存和1个集群核心），这可能需要一些时间来创建Kubernetes作业并启动Pod：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash"> ./restore-configuration-backup.sh sts-backup-20241024-1423.sty</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>请确保回答`yes`以确认删除所有数据是可以的。</p>
+</div>
+</li>
+<li>
+<p>将所有部署的规模恢复到原来的状态：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./scale-up.sh</code></pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>现在 SUSE Observability 与 StackState 具有完全相同的设置，我们准备开始使用它。请注意，由于使用的是相同的URL，第一次可能需要刷新浏览器。</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_并行运行"><a class="anchor" href="#_并行运行"></a>并行运行</h3>
+<div class="paragraph">
+<p>在这种情况下，SUSE Observability 将摄取新数据，并负责运行监视器和发送通知。StackState 将仅提供对历史数据的访问。</p>
+</div>
+<div class="paragraph">
+<p>在某个时刻，流量需要从 StackState 切换到 SUSE Observability。限制对用户和已安装代理影响的解决方案是将 SUSE Observability 配置为使用 StackState 最初使用的 URL。本指南将重用 StackState URL（<code>stackstate.demo.stackstate.io</code>），而“旧” StackState 将可以通过新的 <code>stackstate-old.demo.stackstate.io</code> URL 访问。在使用 OIDC 提供者进行身份验证时，<code>stackstate-old</code> URL 需要在 OIDC 提供者配置和 StackState 配置中添加或更新。</p>
+</div>
+<div class="paragraph">
+<p>在新的 URL 下安装 SUSE Observability 也是可能的，在这种情况下，您需要更新代理和 Open Telemetry 收集器以使用新的 URL，或者使用其他方法重新路由流量。</p>
+</div>
+<div class="paragraph">
+<p>总结一下，在迁移之前，设置为在命名空间 <code>stackstate</code> 中运行的 StackState，URL 为 <code><a href="https://stackstate.demo.stackstate.io" class="bare">https://stackstate.demo.stackstate.io</a></code>。这将迁移到：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>在命名空间 <code>suse-observability</code> 中的 SUSE Observability，URL 为 <code>stackstate.demo.stackstate.io</code>，这将是新的活动实例。</p>
+</li>
+<li>
+<p>在命名空间 <code>stackstate</code> 中的 StackState，URL 为 <code><a href="https://stackstate-old.demo.stackstate.io" class="bare">https://stackstate-old.demo.stackstate.io</a></code>，这将仅包含历史数据。</p>
+</li>
+</ul>
+</div>
+<div class="sect3">
+<h4 id="_安装_suse_observability_2"><a class="anchor" href="#_安装_suse_observability_2"></a>安装 SUSE Observability</h4>
+<div class="paragraph">
+<p>在与 StackState 不同的命名空间中安装 SUSE Observability，以避免任何冲突。推荐使用文档中相同的命名空间，<code>suse-observability</code>。</p>
+</div>
+<div class="paragraph">
+<p>安装的最大变化是现在支持控制文件，请选择与您观察到的集群匹配的控制文件，使用 <a href="../install-stackstate/requirements.html#_resource_requirements" class="xref page">requirements</a> 并根据安装指南生成值。StackState 的自定义 Helm 值与 SUSE Observability 兼容。但是，必须删除自定义资源的值，以支持新的控制文件，我们将这些保存在一个名为 <code>custom-values-no-resources.yaml</code> 的文件中。目前还要排除 SUSE Observability 安装中的入口设置。</p>
+</div>
+<div class="paragraph">
+<p>要安装 SUSE Observability，请遵循 <a href="../install-stackstate/kubernetes_openshift/kubernetes_install.html" class="xref page">安装指南</a>，对值生成进行一些小修改以进行迁移：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>使用与您的环境和（更新的）自定义值匹配的选定控制文件。</p>
+</li>
+<li>
+<p>获取 StackState 值中的 <code>global.receiverApiKey</code> 并将其作为额外参数提供给值生成。</p>
+</li>
+<li>
+<p>对于必须提供的基本 URL，我们使用与当前 StackState 安装相同的 URL：<code><a href="https://stackstate.demo.stackstate.io" class="bare">https://stackstate.demo.stackstate.io</a></code>。</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>因此，值生成步骤看起来像这样（再次使用我们的示例，使用最小控制文件）：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">export VALUES_DIR=.
+helm template \
+  --set license='&lt;your license&gt;' \
+  --set receiverApiKey='our-old-api-key' \
+  --set baseUrl='https://stackstate.demo.stackstate.io' \
+  --set sizing.profile='10-nonha' \
+  suse-observability-values \
+  suse-observability/suse-observability-values --output-dir $VALUES_DIR</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Helm 安装命令与安装文档中的相同，您可以选择包含 <code>custom-values-no-resources.yaml</code> 值文件（如果有的话）。</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>安装将默认生成一个新的管理员密码。如果您使用的是标准身份验证并希望保留之前的管理员密码，则需要在值生成步骤中指定它（或在生成值后进行编辑）。</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_恢复配置备份_2"><a class="anchor" href="#_恢复配置备份_2"></a>恢复配置备份</h4>
+<div class="paragraph">
+<p>现在，SUSE Observability 已安装，可以恢复配置备份。SUSE Observability Helm 图表附带了一组类似的备份工具<a href="../data-management/backup_restore/configuration_backup.html" class="xref page">在此记录</a>。<strong>这些与StackState 6.x不同</strong>，因此请确保从`restore`目录获取恢复备份的脚本*SUSE Observability Helm 图表*。</p>
+</div>
+<div class="paragraph">
+<p>从SUSE Observability Helm 图表的`restore`目录运行以下命令以恢复备份：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>设置活动上下文和命名空间：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">  kubectl config use-context observability
+  kubectl config set-context --current --namespace=suse-observability</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>上传之前创建的备份文件，在这种情况下是`sts-backup-20241024-1423.sty`（如果需要，请确保使用完整路径）：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./upload-configuration-backup.sh sts-backup-20241024-1423.sty</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>恢复备份（这将需要1Gi的内存和1个集群核心），这可能需要一些时间来创建Kubernetes作业并启动Pod：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash"> ./restore-configuration-backup.sh sts-backup-20241024-1423.sty</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>仔细检查您是否在 suse-observability 命名空间中，而不再在 StackState 命名空间中，只有这样才能回答 <code>yes</code> 以确认删除所有数据是可以的。</p>
+</div>
+</li>
+<li>
+<p>将所有部署的规模恢复到原来的状态：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./scale-up.sh</code></pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>现在SUSE Observability与StackState具有完全相同的设置，我们准备开始使用它。</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_准备缩减_stackstate_的规模"><a class="anchor" href="#_准备缩减_stackstate_的规模"></a>准备缩减 StackState 的规模。</h4>
+<div class="paragraph">
+<p>为了确保旧的 "StackState" 设置不再发生变化，并减少其资源使用，必须将多个 StackState 部署缩减到 0 副本。最好的方法是通过 Helm 值，这样任何其他配置更改都不会意外地将某些部署再次扩展。</p>
+</div>
+<div class="paragraph">
+<p>创建一个新的 <code>scaled-down.yaml</code> 文件，并将其存放在您的 StackState <code>values.yaml</code> 旁边（或编辑您现有的 <code>values.yaml</code> 以包含或更新这些键）：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">common:
+  deployment:
+    replicaCount: 0
+  statefulset:
+    replicaCount: 0
+anomaly-detection:
+  enabled: false
+backup:
+  enabled: false
+stackstate:
+  components:
+    correlate:
+      replicaCount: 0
+    checks:
+      replicaCount: 0
+    healthSync:
+      replicaCount: 0
+    e2es:
+      replicaCount: 0
+    notification:
+      replicaCount: 0
+    receiver:
+      replicaCount: 0
+    state:
+      replicaCount: 0
+    sync:
+      replicaCount: 0
+    slicing:
+      replicaCount: 0
+    vmagent:
+      replicaCount: 0
+  features:
+    server:
+      split: true
+opentelemetry:
+  enabled: false</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>当更改 StackState 的入口时，将使用此文件。当不再接收到代理或开放遥测数据时，这些 StackState 服务是不需要的。</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_重新路由流量"><a class="anchor" href="#_重新路由流量"></a>重新路由流量。</h4>
+<div class="paragraph">
+<p>重新路由流量将把代理流量和 StackState 用户切换到 SUSE Observability。为此需要两个步骤，首先将 StackState 切换到新的 URL，然后配置 SUSE Observability 入口以使用原始 StackState URL。在这两个步骤之间，SUSE Observability/StackState 将暂时无法访问，但代理将缓存数据，并在能够再次连接时发送。</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>从 StackState 获取入口配置并将其复制到您为 SUSE Observability 准备的值中，或者将其复制到一个单独的 <code>ingress.yaml</code> 值文件中，放在生成的 <code>baseConfig_values.yaml</code> 和 <code>sizing_values.yaml</code> 旁边。</p>
+</li>
+<li>
+<p>更新 StackState 的入口值以使用不同的 URL，这里我们将其从 <code>stackstate</code> 更改为 <code>stackstate-old</code>：</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml"> ingress:
+   annotations:
+     nginx.ingress.kubernetes.io/proxy-body-size: 100m
+   enabled: true
+   hosts:
+     - host: "stackstate-old.demo.stackstate.io"
+   tls:
+     - hosts:
+         - "stackstate-old.demo.stackstate.io"
+       secretName: tls-secret-stackstate-old
+
+ opentelemetry-collector:
+   ingress:
+     enabled: true
+     annotations:
+       nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+       nginx.ingress.kubernetes.io/backend-protocol: GRPC
+     hosts:
+       - host: otlp-stackstate-old.demo.stackstate.io
+         paths:
+           - path: /
+             pathType: Prefix
+             port: 4317
+     tls:
+       - hosts:
+           - otlp-stackstate-old.demo.stackstate.io
+         secretName: tls-secret-stackstate-old-otlp</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>编辑 StackState 的原始 <code>values.yaml</code> 并将 <code>stackstate.baseUrl</code> 值更新为使用新的 URL（在这种情况下为 <code><a href="https://stackstate-old.demo.stackstate.io" class="bare">https://stackstate-old.demo.stackstate.io</a></code>）。</p>
+</li>
+<li>
+<p>运行 StackState 的 helm 升级，并包含更新的入口配置，以便开始使用 <code>stackstate-old.demo.stackstate.io</code> 入口。还要包括上一步的 <code>scaled-down.yaml</code> 值，并确保包含在安装 StackState 期间使用的所有值文件：</p>
+<div class="listingblock">
+<div class="content">
+<pre>  helm upgrade \
+   --install \
+   --namespace stackstate \
+   --values stackstate-values/values.yaml \
+   --values stackstate-values/stackstate-ingress.yaml \
+   --values stackstate-values/scaled-down.yaml \
+ stackstate \
+ stackstate/stackstate-k8s</pre>
+</div>
+</div>
+</li>
+<li>
+<p>运行 <a href="../install-stackstate/kubernetes_openshift/kubernetes_install.html#_deploy_suse_observability_with_helm" class="xref page">helm upgrade</a> 命令以升级 SUSE Observability，开始使用原始 <code>stackstate.demo.stackstate.io</code> URL（确保包含在安装 SUSE Observability 期间使用的所有值文件，但现在还要包括 <code>ingress.yaml</code>）：</p>
+<div class="listingblock">
+<div class="content">
+<pre> export VALUES_DIR=.
+ helm upgrade \
+   --install \
+   --namespace suse-observability \
+   --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
+   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+   --values ingress.yaml \
+ suse-observability \
+ suse-observability/suse-observability</pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>现在用户可以访问 <code><a href="https://stackstate.demo.stackstate.io" class="bare">https://stackstate.demo.stackstate.io</a></code> 来获取具有所有熟悉的 StackState 功能和实时数据的 SUSE Observability。第一次使用时，用户可能需要点击刷新以强制加载新应用程序。</p>
+</div>
+<div class="paragraph">
+<p>他们可以访问 <code><a href="https://stackstate-old.demo.stackstate.io" class="bare">https://stackstate-old.demo.stackstate.io</a></code> 来查看历史数据。</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_卸载_stackstate_2"><a class="anchor" href="#_卸载_stackstate_2"></a>卸载 StackState</h4>
+<div class="paragraph">
+<p>当不再需要 StackState 安装时，可以使用 <a href="https://docs.stackstate.com/6.0/self-hosted-setup/uninstall">卸载程序</a> 卸载。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_更新_open_telemetry_收集器配置"><a class="anchor" href="#_更新_open_telemetry_收集器配置"></a>更新 Open Telemetry 收集器配置</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>SUSE Observability 的身份验证发生了变化。StackState 使用了带有 <code>StackState</code> 方案的承载令牌，但 SUSE Observability 使用 <code>SUSEObservability</code> 方案。更新已安装的 Open Telemetry Collectors 的值以切换：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">config:
+  extensions:
+    bearertokenauth:
+      scheme: StackState
+      token: "${env:API_KEY}"</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>更改为</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">config:
+  extensions:
+    bearertokenauth:
+      scheme: SUSEObservability
+      token: "${env:API_KEY}"</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>使用更新的值通过 <code>helm upgrade</code> 命令升级已安装的收集器，更多详细信息请参见 <a href="../otel/collector.html#_deploy_the_collector" class="xref page">部署 Open Telemetry Collector</a>。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_升级_stackpacks"><a class="anchor" href="#_升级_stackpacks"></a>升级 stackpacks</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>导航到 <code><a href="https://your-stackstate-instance/#/stackpacks/" class="bare">https://your-stackstate-instance/#/stackpacks/</a></code> 或通过主菜单打开 StackPacks 概览。从那里浏览所有已安装的 stackpacks，并点击 "升级" 按钮以获取 stackpack 的新 SUSE Observability 版本。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_迁移代理"><a class="anchor" href="#_迁移代理"></a>迁移代理</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>迁移到 SUSE Observability 的最后一步是更新所有已安装的代理。这不必立即完成，但可以在每个特定集群的方便时间进行，因为 SUSE Observability 与 StackState 代理向后兼容。</p>
+</div>
+<div class="paragraph">
+<p>迁移是一个简单的两步过程：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>卸载 StackState 代理</p>
+</li>
+<li>
+<p>安装 SUSE Observability 代理</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>首先卸载旧代理是很重要的，因为不可能同时运行两个代理。在集群上卸载代理的方法如下：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">helm uninstall -n stackstate stackstate-k8s-agent</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>如果您使用了不同的命名空间或发布名称，请相应地更新命令。</p>
+</div>
+<div class="paragraph">
+<p>导航至`https://your-stackstate-instance/#/stackpacks/kubernetes-v2`。在StackPack实例列表中找到您要升级代理的集群，并复制并运行适用于您的Kubernetes发行版的helm install命令。如果您有自定义值，可以直接通过`--values`参数原样包含它们，而SUSE Observability代理的值使用与StackState代理相同的命名规则。</p>
+</div>
+</div>
+</div>
+</article>
+  </div>
+</main>
+</div>
+<script src="../../../../../_/js/site.js"></script>
+<script async src="../../../../../_/js/vendor/highlight.js"></script>
+<script src="../../../../../_/js/vendor/lunr.js"></script>
+<script src="../../../../../_/js/search-ui.js" id="search-ui-script" data-site-root-path="../../../../.." data-snippet-length="100" data-stylesheet="../../../../../_/css/search.css"></script>
+<script async src="../../../../../search-index.js"></script>
+<script src="../../../../../_/js/vendor/langSelection.js"></script>
+<script async src="../../../../../_/js/vendor/tabs.js"></script>
+
+
+<script src="../../../../../_/js/CNLanguageSwitcher.js"></script>
+  </body>
+</html>

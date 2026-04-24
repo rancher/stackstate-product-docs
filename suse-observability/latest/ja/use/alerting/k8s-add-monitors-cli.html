@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLIを使用してコンポーネントにしきい値モニターを追加します | SUSE Observability  Latest</title>
+    <link rel="prev" href="../../setup/otel/troubleshooting.html">
+    <link rel="next" href="k8s-dynamic-threshold-monitors.html">
+    <meta name="description" content="SUSE Observability">
+    <meta name="generator" content="Antora 3.1.10">
+    <link rel="stylesheet" href="../../../../../_/css/site.css">
+<meta http-equiv="last-modified" content="2025-07-10"/>
+<link rel="stylesheet" href="../../../../../_/css/search.css">
+<link rel="icon" href="../../../../../_/img/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../../../../_/css/font-styles.css">
+<link rel="stylesheet" href="../../../../../_/fonts/css/all.css">
+<link rel="stylesheet" href="../../../../../_/css/site-extra.css">
+<link rel="stylesheet" href="../../../../../_/css/vendor/tabs.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=SUSE:wght@100..800&display=swap&family=SUSE+Mono:ital,wght@0,100..800;1,100..800" rel="stylesheet">
+<link href="https://documentation.suse.com/docserv/res/fonts/poppins/poppins.css" rel="stylesheet">
+<link rel="stylesheet" href="../../../../../_/css/vendor/light.css">
+<script src="/docserv/res/lightheaded/analytics.js" type="text/javascript"></script>
+<script type="module">
+  import { defineCustomElements, setAssetPath } from 'https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/shared-header.esm.js';
+  defineCustomElements();
+  setAssetPath("https://d12w0ryu9hjsx8.cloudfront.net/shared-header/1.10/assets");
+</script>
+<!-- Default English link -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/use/alerting/k8s-add-monitors-cli.html" hreflang="x-default" rel="alternate"/>
+<!-- Link for the currently processed page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/ja/use/alerting/k8s-add-monitors-cli.html" hrefLang="ja-JP" rel="alternate" />
+<!-- Link for the English page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/use/alerting/k8s-add-monitors-cli.html" hreflang="en-US" rel="alternate" />
+<!-- Link for the Chinese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/zh/use/alerting/k8s-add-monitors-cli.html" hreflang="zh-CN" rel="alternate" />
+<!-- Link for the German page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/de/use/alerting/k8s-add-monitors-cli.html" hreflang="de-DE" rel="alternate" />
+<!-- Link for the French page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/fr/use/alerting/k8s-add-monitors-cli.html" hreflang="fr-FR" rel="alternate" />
+<!-- Link for the Spanish page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/es/use/alerting/k8s-add-monitors-cli.html" hreflang="es-ES" rel="alternate" />
+<!-- Link for the Brazilian Portuguese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/pt/use/alerting/k8s-add-monitors-cli.html" hreflang="pt-BR" rel="alternate" />
+
+<!-- JSON-LD for doc metadata -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "CLIを使用してコンポーネントにしきい値モニターを追加します | SUSE Observability latest",
+  "headline": "CLIを使用してコンポーネントにしきい値モニターを追加します",
+  "description": "SUSE Observability",
+  "inLanguage": "ja",
+  "dateModified": "2025-07-10T00:00:00Z",
+  "author": {
+    "@type": "Organization",
+    "name": "SUSE Product & Solution Documentation Team",
+    "url": "https://documentation.suse.com"
+  },
+  "mentions": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "SUSE Observability",
+      "softwareVersion": "latest",
+      "applicationCategory": "Cloud Infrastructure",
+      "operatingSystem": "Linux"
+    }
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "SUSE",
+    "url": "https://documentation.suse.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.suse.com/assets/img/suse-white-logo-green.svg"
+    }
+  }
+}
+</script>
+<!-- end JSON-LD for doc metadata -->
+
+<!-- SUVA - Begin Ask Geeko-->
+<!--
+searchUnifyChatbot ("Ask Geeko") Copyright ©2024 Grazitti Interactive - All Rights Reserved. NOTICE: All information contained herein is, and remains the property of Grazitti Interactive and its suppliers, if any. The intellectual and technical concepts contained herein are proprietary to Grazitti Interactive and its suppliers and may be covered by India, U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained from Grazitti Interactive.
+-->
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/Allow/an.js?c485cb3c-93d4-4942-99e8-91f3b8ca5636"></script>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/js/index.js?q=gAAAAABp3JBN9VuEJTi5tFafLIMwgMkCPdJS3Qm56lSYx93ir3Twt9hgSvd3OHEt6-nYfSbY3yHq0Zv8PRPsSy4nbqZiaJ4cZvRc6ItVZdvwz9Urf35cH6OUyPOwdA0phlS-zVIznQ2rWW438p-91NlTHuxJuOFpnA=="></script>
+<link rel="stylesheet" href="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/css/index.css">
+<div id="searchUnifyChatbot"></div>
+<!-- SUVA - End Ask Geeko-->
+<!--BEGIN QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+<script type='text/javascript' src="../../../../../_/js/qualtrics.js" defer></script>
+<!--END QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+    <script>var uiRootPath = '../../../../../_'</script>
+  </head>
+  <body class="article">
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs'; mermaid.initialize({"startOnLoad":true});</script><shared-header
+language="en"
+languages='{
+    "en": { "label": "English", "url": "https://documentation.suse.com/en-us/" },
+    "de": { "label": "Deutsch", "url": "https://documentation.suse.com/de-de/" },
+    "fr": { "label": "Français", "url": "https://documentation.suse.com/fr-fr/" },
+    "es": { "label": "Español", "url": "https://documentation.suse.com/es-es/" },
+    "zh_CN": { "label": "中文", "url": "https://documentation.suse.com/zh-cn/" },
+    "pt_BR": { "label": "Português Brasileiro", "url": "https://documentation.suse.com/pt-br/" }
+}'
+enable-search='false'>
+</shared-header>
+
+<!-- Leaving as a comment, I expect it will be required again next year.
+<a target=_blank"" class="survey-link" href="https://suselinux.fra1.qualtrics.com/jfe/form/SV_bEiGZbUNzLD8Tcy"> Documentation survey </a>
+-->
+<div class="body">
+<div class="nav-container" data-component="suse-observability" data-version="latest">
+  <aside class="nav">
+    <div class="panels">
+<div class="nav-panel-menu is-active" data-panel="menu">
+  <nav class="nav-menu">
+    <button class="nav-menu-toggle" aria-label="Toggle expand/collapse all" style="display: none"></button>
+    <h3 class="title">SUSE Observability</h3>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="0">
+<ul class="nav-list">
+  <li class="nav-item" data-depth="1">
+    <a class="nav-link" href="../../classic.html">SUSE Observability ドキュメント</a>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">リリース</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">リリースノート</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.1.adoc">v2.8.1 - 2026年3月17日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.8.0.adoc">v2.8.0 - 2026年3月3日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.7.0.adoc">v2.7.0 - 2026年1月14日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.3.adoc">v2.6.3 - 2025年11月25日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.2.adoc">v2.6.2 - 2025年11月3日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.1.adoc">v2.6.1 - 2025年10月13日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.6.0.adoc">v2.6.0 - 2025年9月29日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.5.0.adoc">v2.5.0 - 2025年9月8日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.4.0.adoc">v2.4.0 - 2025年8月25日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.7.adoc">v2.3.7 - 2025年7月28日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.6.adoc">v2.3.6 - 2025年7月23日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.5.adoc">v2.3.5 - 2025年6月19日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.4.adoc">v2.3.4 - 2025年6月4日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.3.adoc">v2.3.3 - 2025年5月7日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.2.adoc">v2.3.2 - 2025年4月22日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.1.adoc">v2.3.1 - 2025年3月17日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.3.0.adoc">v2.3.0 - 2025年1月30日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.1.adoc">v2.2.1 - 2024年12月10日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.2.0.adoc">v2.2.0 - 2024年12月9日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/v2.1.0.adoc">v2.1.0 - 2024年10月29日</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20241001154902.adoc">v2.0.2 - 01/10/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240918082712.adoc">v2.0.1 - 18/09/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="#setup/release-notes/20240911112250.adoc">v2.0.0 - 2024年9月11日</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="#setup/release-notes/Release Strategy.adoc">リリース戦略</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">インストール</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">プラットフォーム: セルフホスト型</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/install-stackstate/Compatibility%20Self%20Hosted.html">互換性マトリックス</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">はじめにと要件</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/requirements.html">システム要件とサイズ設定</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/initial_run_guide.html">初回ログインとデフォルトの認証情報</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">インストールガイド</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/kubernetes_install.html">Kubernetesのインストール</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/openshift_install.html">OpenShift install</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/ack.html">Alibaba Cloud ACKのインストール</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-air-gapped.html">エアギャップ(された)プラットフォームのインストール</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">高度な構成</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">認証</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/authentication_options.html">認証オプション</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/oidc.html">Open ID Connect (OIDC)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/keycloak.html">KeyCloak</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/oidc/microsoft-entra-id.html">Microsoft Entra ID</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/ldap.html">LDAP</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/file.html">ファイルベース</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/single_password.html">単一のパスワード</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ストレージとリソース</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/storage.html">ストレージクラスとカスタマイズ</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/data_retention.html">データ保持期間とサイズ変更</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/affinity.html">Kubernetesのアフィニティの設定</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ネットワークとセキュリティ</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/ingress.html">Kubernetesのingressを使用してSUSE Observabilityを公開する</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/self-signed-certificates.html">自己署名証明書</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/k8s-service-tokens.html">サービストークン</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/k8s-ingestion-api-keys.html">APIキー</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/disabling-tls-verification.html">TLS検証を無効にする</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/external-secrets.html">外部でのシークレット管理</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/required_permissions.html">必要な権限とPodセキュリティ</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/customize_config.html">デフォルトのHelm値を上書きする</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/security/authentication/troubleshooting.html">認証と認可のトラブルシューティング</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../advanced/analytics.html">分析機能</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">通知</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/configure-stackstate/slack-notifications.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/configure-stackstate/email-notifications.html">［電子メール］</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">バックアップと復元</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/backup_restore/backup_enable.html">バックアップを有効にする</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/backup_restore/backup_restore.html">バックアップを復元する</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">レガシーバックアップ</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/backup_restore/kubernetes_backup.html">Kubernetesバックアップ（レガシー）</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/backup_restore/configuration_backup.html">設定のバックアップ（レガシー）</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">トラブルシューティング</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/troubleshooting.html">クイックトラブルシューティングガイド</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/advanced-troubleshooting.html">高度なトラブルシューティング</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/extension-troubleshooting.html">UI拡張のトラブルシューティング</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/support-package-logs.html">サポートパッケージ（ログ）</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/install-stackstate/support-package-performance.html">サポートパッケージ（パフォーマンス）</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">アップグレードとアンインストール</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">アップグレード</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/upgrade-stackstate/migrate-from-6.html">StackStateからの移行</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/upgrade-stackstate/steps-to-upgrade.html">アップグレード手順</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/upgrade-stackstate/version-specific-upgrade-instructions.html">バージョン固有のアップグレード手順</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">アンインストール</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/install-stackstate/kubernetes_openshift/uninstall.html">Helmチャートとリソースの削除</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../setup/data-management/clear_stored_data.html">データの消去</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">プラットフォーム: SUSEによるホスティング</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">SUSE Cloud Observability</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../suse-cloud-observability-quick-start-guide.html">クイックスタートガイド</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../suse-cloud-observability/user-management.html">Keycloakを介したユーザー管理</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">エージェント</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/agent/supported-architectures.html">ハードウェアアーキテクチャのサポート</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-quick-start-guide.html">クイックスタートガイド</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-getting-started.html">SUSE Observabilityのウォークスルー</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-agent-air-gapped.html">Helmチャートを使用したエアギャップ(された)インストール</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/k8s-network-configuration-saas.html">SaaSのためのネットワーク設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/agent/k8s-network-configuration-proxy.html">プロキシ接続のための設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/agent/k8s-custom-secrets-setup.html">カスタムシークレット管理</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/agent/k8sTs-agent-request-tracing.html">リクエストトレース管理</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/agent/k8sTs-agent-request-tracing-certificates.html">サイドカーインジェクション用の証明書</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Rancher UI拡張</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime.html">SUSE Rancher Primeのインストール</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ロールベースのアクセス制御（RBAC）</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/security/rbac/rbac_permissions.html">権限</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/security/rbac/rbac_roles.html">役割</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/security/rbac/rbac_rancher.html">Rancher</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../setup/security/rbac/rbac_scopes.html">スコープ</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">使用方法</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">機能とユーザーインターフェース</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-views.html">Kubernetesのビュー</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-view-structure.html">フィルターと視点の理解</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-custom-views.html">カスタムビューの作成と保存</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-explore-views.html">ビューの探索</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-overview-perspective.html">ビューとカードの一覧</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-highlights-perspective.html">リソース概要ページ</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-topology-perspective.html">トポロジーグラフの使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-events-perspective.html">イベントタイムライン</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/k8sTs-explore-metrics.html">メトリクスの探索</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-metrics-perspective.html">コンポーネントメトリクス</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../traces/k8sTs-explore-traces.html">トレースの探索</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-traces-perspective.html">トレースの視点</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../logs/k8sTs-explore-logs.html">ログブラウザ</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../views/k8s-filters.html">トポロジーとイベントフィルターの使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../stackstate-ui/k8sTs-keyboard-shortcuts.html">キーボードのショートカット</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../stackstate-ui/k8sTs-timeline-time-travel.html">タイムラインとタイムトラベルの使用</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ダッシュボード</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../dashboards/dashboards.html">ダッシュボードの作成と管理</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../dashboards/dashboard-widgets.html">ウィジェットの設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../dashboards/dashboard-variables.html">変数の使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../dashboards/dashboard-organize.html">レイアウトと整理</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">モニターとアラート</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="k8s-monitors.html">モニター</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="kubernetes-monitors.html">標準のK8sモニター</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="k8s-override-monitor-arguments.html">標準モニターのカスタマイズ</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="notifications/configure.html">通知の設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">通知</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="notifications/channels/slack.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="notifications/channels/teams.html">チーム</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="notifications/channels/webhook.html">Webhook</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="notifications/channels/opsgenie.html">Opsgenie</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="notifications/troubleshooting.html">通知のトラブルシューティング</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ガイド付きトラブルシューティング</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../troubleshooting/k8s-guided-troubleshooting.html">ガイド付きトラブルシューティングとは？</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../troubleshooting/k8s-configuration.html">YAMLの設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../troubleshooting/k8s-changes.html">変更の差分確認</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../troubleshooting/k8s-logs.html">ポッドログの表示</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">データの取り込みと統合</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetry (OTel) コレクター</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/overview.html">概要</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/otelmappings/concepts.html">トレース、メトリクス、シグナル</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/otelmappings/getting-started.html">一般的なOTelガイド</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/concepts.html">概念</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/collector.html">コレクターの設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/proxy-collector.html">セキュアプロキシの設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/sampling.html">ヘッドとテールのサンプリング</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/otlp-apis.html">OTLP用APIエンドポイント</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetryインストゥルメンテーションガイド</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/getting-started/getting-started-k8s.html">Kubernetes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/getting-started/getting-started-k8s-operator.html">OTelオペレーターの使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/getting-started/getting-started-linux.html">Linux ホスト</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/getting-started/getting-started-lambda.html">AWS Lambda</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/instrumentation/node.js/auto-instrumentation-of-lambdas.html">Node.js Lambda details</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/instrumentation/dot-net.html">.NET</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/instrumentation/java.html">Java</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/instrumentation/node.js.html">Node.js SDKの設定</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/instrumentation/sdk-exporter-config.html">SDKエクスポーターの設定</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">統合</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/k8s-prometheus-remote-write.html">Prometheusメトリクスの送信</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/k8s-stackstate-grafana-datasource.html">Grafanaデータソース</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/open-metrics.html">Scraping OpenMetrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../logs/k8sTs-log-shipping.html">Promtailの設定</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">プラットフォーム拡張</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">CLI</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/cli/cli-sts.html">インストールと使用</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/security/authentication/service_tokens.html">サービストークン</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">カスタム統合</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <span class="nav-text">スタックパック</span>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../stackpacks/about-stackpacks.html">スタックパックのインストール</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/otel/troubleshooting.html">oTelマッピングのトラブルシューティング</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">標準モニターのカスタマイズ。</span>
+<ul class="nav-list">
+  <li class="nav-item is-current-page" data-depth="3">
+    <a class="nav-link" href="k8s-add-monitors-cli.html">CLIを使用してモニターを追加する</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="k8s-dynamic-threshold-monitors.html">K8s動的閾値モニター</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="k8s-derived-state-monitors.html">K8s派生状態モニター</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/monitors/remediation-guide.html">修復ガイド</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">ヘルス</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/health-synchronization.html">外部健康同期</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/send-health-data.html">HTTP経由で健康データを送信</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/repeat_snapshots.html">Repeat Snapshots JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/transactional_increments.html">Transactional Increments JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/debug-health-sync.html">健康同期のデバッグ</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">カスタムチャート</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/k8s-add-charts.html">コンポーネントにカスタムチャートを追加する</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../metrics/k8s-writing-promql-for-charts.html">代表的なチャートのためのPromQLクエリの作成</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/metric-bindings/troubleshooting.html">カスタムメトリックチャートのトラブルシューティング</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/metric-bindings/writing-promql.html">PromQLの作成</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../setup/custom-integrations/metric-bindings/cli.html">メトリックバインディングのためのCLIサポート</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">リファレンス</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-stql_reference.html">SUSE Observability クエリ言語（STQL）</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-chart-units.html">チャートのユニット</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../metrics/k8sTs-metric-reference.html">メトリクスの参照</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../configure/topology/identifiers.html">トポロジー識別子</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </nav>
+</div>
+<div class="nav-panel-explore" data-panel="explore">
+  <div class="context">
+    <span class="title">SUSE Observability</span>
+    <span class="version">Latest</span>
+  </div>
+  <ul class="components">
+        <li class="component is-current">
+          <div class="title"><a href="../../../en/classic.html">SUSE Observability</a></div>
+          <ul class="versions">
+            <li class="version is-current is-latest">
+              <a href="../../../en/classic.html">Latest</a>
+            </li>
+          </ul>
+        </li>
+  </ul>
+</div>
+    </div>
+  </aside>
+</div>
+<main class="article">
+<div class="toolbar" role="navigation">
+<button class="nav-toggle"></button>
+<nav class="breadcrumbs" aria-label="breadcrumbs">
+<ul>
+    <li>
+      <a class="home-link-dsc" href="https://documentation.suse.com/" title="documentation.suse.com" aria-label="SUSE Documentation Home"></a>
+    </li>
+    <li>
+      <a href="https://documentation.suse.com/cloudnative/suse-observability" title="SUSE Observability" aria-label="SUSE Documentation - SUSE Observability">
+        SUSE Observability
+      </a>
+    </li>
+      <li>
+          プラットフォーム拡張
+      </li>
+  </ul>
+</nav>      <div class="navbar-item search hide-for-print">
+        <div id="search-field" class="field">
+          <label class="visual-search-label-bc" for="search-input">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+          <input label="Search" aria-label="Search" id="search-input" type="text" placeholder="ドキュメントを検索" >
+          <label class="filter checkbox" style="display: none">
+            <input type="checkbox" data-facet-filter="component:suse-observability" checked> Only this project
+          </label>
+        </div>
+      </div>
+</div>
+  <div class="content">
+<aside
+  class="toc sidebar"
+  data-title="このページで" data-levels="2">
+  <div class="toc-menu">
+    <!-- start qualtrics -->
+    <div id='ZN_8qZUmklKYbBqAYe'><!--DO NOT REMOVE-CONTENTS PLACED HERE--></div>
+    <div id="qualtrics_container"></div>
+    <!-- end qualtrics -->
+  </div>
+</aside><article class="doc">
+<h1 class="page">CLIを使用してコンポーネントにしきい値モニターを追加します</h1>
+<div class="sect1">
+<h2 id="_概要"><a class="anchor" href="#_概要"></a>概要</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>SUSE Observabilityは<a href="k8s-monitors.html" class="xref page">標準でモニターを提供</a>しており、Kubernetesクラスターで発生しうる一般的な問題の監視を行います。SUSE Observabilityによって収集されたメトリックや<a href="../metrics/k8s-prometheus-remote-write.html" class="xref page">Prometheusから取り込まれた</a>アプリケーションメトリックのカスタムモニターを構成することも可能です。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_手順"><a class="anchor" href="#_手順"></a>手順</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>モニターを作成する手順：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p><a href="#_write_the_outline_of_the_monitor">モニターの概要を書く</a></p>
+</li>
+<li>
+<p><a href="#_bind_the_results_of_the_monitor_to_the_correct_components">モニターの結果を正しいコンポーネントにバインドする</a></p>
+</li>
+<li>
+<p><a href="#_write_the_remediation_hint">修正ヒントを書く</a></p>
+</li>
+<li>
+<p><a href="#_create_or_update_the_monitor_in_suse_observability">SUSE Observabilityでメトリックバインディングを作成または更新します。</a></p>
+</li>
+<li>
+<p><a href="#_verifying_the_results_of_a_monitor">モニターが期待される結果を生成することを確認する</a></p>
+</li>
+<li>
+<p><a href="#_common_issues">よくある問題</a></p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>例として、これらの手順はKubernetesデプロイメントの`Replica counts`に対するモニターを追加します。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_モニターの概要を書く"><a class="anchor" href="#_モニターの概要を書く"></a>モニターの概要を書く</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>`monitor.yaml`という新しいYAMLファイルを作成し、このYAMLテンプレートを追加して独自のモニターを作成します。お気に入りのコードエディタで開いて、このガイド全体で変更してください。最後に、SUSE Observability CLIを使用して、SUSE Observability内のモニターを作成および更新します。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>nodes:
+- _type: Monitor
+  arguments:
+    metric:
+      query:
+      unit:
+      aliasTemplate:
+    comparator:
+    threshold:
+    failureState:
+    urnTemplate:
+    titleTemplate:
+  description:
+  function: {{ get "urn:stackpack:common:monitor-function:threshold"  }}
+  identifier: urn:custom:monitor:...
+  intervalSeconds: 30
+  name:
+  remediationHint:
+  status:
+  tags: {}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>このテンプレートのフィールドは次のとおりです：</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>_type</code>:SUSE Observabilityは、これがモニターであることを知る必要があるため、値は常に`Monitor`である必要があります。</p>
+</li>
+<li>
+<p><code>query</code>:PromQLクエリ。SUSE Observabilityインスタンスの<a href="../metrics/k8sTs-explore-metrics.html" class="xref page">メトリックエクスプローラー</a>を使用し、http://your-instance/#/metrics,を使用して関心のあるメトリックのクエリを構築します。</p>
+</li>
+<li>
+<p><code>unit</code>:クエリまたはクエリによって返される時系列の値の単位で、チャートのY軸を描画するために使用されます。すべての単位については、<a href="../../develop/reference/k8sTs-chart-units.html" class="xref page">サポートされている単位</a>のリファレンスを参照してください。</p>
+</li>
+<li>
+<p><code>aliasTemplate</code>:メトリックチャート内の時系列のエイリアス。これは、`${my_label}`プレースホルダーを使用して時系列からラベルを置き換えることができるテンプレートです。</p>
+</li>
+<li>
+<p><code>comparator</code>:しきい値とメトリックを比較するためにLTE/LT/GTE/GTのいずれかを選択します。`&lt;metric&gt; &lt;comparator&gt; &lt;threshold&gt;`が真である時系列は、エラー状態を生成します。</p>
+</li>
+<li>
+<p><code>threshold</code>:比較するための数値しきい値です。</p>
+</li>
+<li>
+<p><code>failureState</code>:「CRITICAL」または「DEVIATING」のいずれかです。「CRITICAL」はSUSE Observabilityで赤色で表示され、「DEVIATING」はオレンジ色で表示され、異なる重大度を示します。</p>
+</li>
+<li>
+<p><code>urnTemplate</code>:モニターの結果がバインドされる<a href="#_bind_the_results_of_the_monitor_to_the_correct_components">コンポーネント</a>のURNを構築するためのテンプレートです。</p>
+</li>
+<li>
+<p><code>titleTemplate</code>:モニターの結果のタイトルです。複数のモニター結果が同じコンポーネントにバインドできるため、`${my_label}`プレースホルダーを使用して時系列ラベルを置き換えることが可能です。</p>
+</li>
+<li>
+<p><code>description</code>:モニターの説明です。</p>
+</li>
+<li>
+<p><code>function</code>:モニターを実行するモニター関数への参照です。現在、`{{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}`のみがサポートされています。</p>
+</li>
+<li>
+<p><code>identifier</code>:設定を更新する際にモニターを一意に識別する形式の識別子が`urn:custom:monitor:&#8230;&#8203;.`です。</p>
+</li>
+<li>
+<p><code>intervalSeconds</code>:モニターが実行される間隔です。通常のリアルタイムメトリックには30秒が推奨されます。長時間実行される分析メトリッククエリには、より大きな間隔が推奨されます。</p>
+</li>
+<li>
+<p><code>name</code>:モニターの名前です。</p>
+</li>
+<li>
+<p><code>remediationHint</code>:モニターが失敗した場合にユーザーができることの説明です。フォーマットはマークダウンで、時系列やその他のデータに基づいてヒントをカスタマイズするためにハンドルバー変数をオプションで使用できます（<a href="#_write_the_remediation_hint">more explanation below</a>）。</p>
+</li>
+<li>
+<p><code>status</code>:`"DISABLED"`または`"ENABLED"`のいずれかです。モニターが実行されるかどうかを決定します。</p>
+</li>
+<li>
+<p><code>tags</code>:モニターにタグを追加して、SUSE Observabilityインスタンスのモニターの概要で整理するのに役立ててください。http://your-SUSE Observability-instance/#/monitors</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>例えば、これはデプロイメントの利用可能なレプリカを監視するモニターの開始点となる可能性があります。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>nodes:
+- _type: Monitor
+  arguments:
+    metric:
+      query: "kubernetes_state_deployment_replicas_available"
+      unit: "short"
+      aliasTemplate: "Deployment replicas"
+    comparator: "LTE"
+    threshold: 0.0
+    failureState: "DEVIATING"
+    urnTemplate:
+  description: "Monitor whether a deployment has replicas.
+  function: {{ get "urn:stackpack:kubernetes-v2:shared:monitor-function:threshold"  }}
+  identifier: urn:custom:monitor:deployment-has-replicas
+  intervalSeconds: 30
+  name: Deployment has replicas
+  remediationHint:
+  status: "ENABLED"
+  tags:
+  - "deployments"</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>`urnTemplate`と`remediationHint`は次のステップで入力されます。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_モニターの結果を正しいコンポーネントにバインドします"><a class="anchor" href="#_モニターの結果を正しいコンポーネントにバインドします"></a>モニターの結果を正しいコンポーネントにバインドします。</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>モニターの結果は、SUSE Observabilityのコンポーネントにバインドする必要があり、可視化および使用可能にするためです。モニターの結果は、コンポーネント`identifiers`を使用してコンポーネントにバインドされます。SUSE Observabilityの各コンポーネントには、そのコンポーネントを一意に識別する1つ以上の識別子があります。モニターの結果をコンポーネントにバインドするには、`urnTemplate`を提供する必要があります。`urnTemplate`は、モニター結果の時系列内のラベルをテンプレートに置き換え、コンポーネントに一致する識別子を生成します。これは、次の例で最もよく示されます：</p>
+</div>
+<div class="paragraph">
+<p>この例で使用されるメトリックは、`kubernetes_state_deployment_replicas_available`メトリックです。メトリックエクスプローラーでメトリックを実行して、時系列で利用可能なラベルを観察します：</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="../../_images/k8s/available-replicas-metric-inspector.png" alt="メトリックエクスプローラーでの利用可能なレプリカ">
+</div>
+</div>
+<div class="paragraph">
+<p>上記の表では、メトリックに`cluster_name`、<code>namespace</code>、`deployment`のようなラベルがあることが示されています。</p>
+</div>
+<div class="paragraph">
+<p>メトリックがデプロイメントで観察されるため、モニターの結果をデプロイメントコンポーネントにバインドするのが最も論理的です。これを行うには、デプロイメントの識別子がどのように構成されるかを理解する必要があります：</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>UIで、`deployments`ビューに移動し、単一のデプロイメントを選択します。</p>
+</li>
+<li>
+<p>`Topology`ビューを開き、デプロイメントコンポーネントをクリックします。</p>
+</li>
+<li>
+<p>画面の右パネルで`Properties`を開くと、ホバーすると識別子が以下のように表示されます：</p>
+</li>
+</ol>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="../../_images/k8s/component-identifier.png" alt="コンポーネント識別子を見つける">
+</div>
+</div>
+<div class="paragraph">
+<p>識別子は`urn:kubernetes:/preprod-dev.preprod.stackstate.io:calico-system:deployment/calico-typha`として表示されます。これは、識別子がクラスター名、ネームスペース、およびデプロイメント名に基づいて構成されていることを示しています。これを知ることで、`urnTemplate`を構築することが可能になりました。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>  ...
+  urnTemplate: "urn:kubernetes:/${cluster_name}:${namespace}:deployment/${deployment}"
+  ...</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="#_verifying_the_results_of_a_monitor">確認する</a>ために、`urnTemplate`が正しいかどうかは、以下でさらに説明します。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_修正ヒントを書いてください"><a class="anchor" href="#_修正ヒントを書いてください"></a>修正ヒントを書いてください。</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>修正ヒントは、モニターが発火したときにユーザーが問題の原因を見つけるのを助けるためにあります。修正ヒントはhttps://en.wikipedia.org/wiki/Markdown[マークダウン]で書かれています。次の例のように、ハンドルバーズテンプレートを使用して、モニター結果の時系列にあるラベルを使用することも可能です。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>  ...
+  remediationHint: |-
+    To remedy this issue with the deployment {{ labels.deployment }}, consider taking the following steps:
+
+    1. Look at the logs of the pods created by the deployment
+  ...</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_suse_observabilityでモニターを作成または更新します"><a class="anchor" href="#_suse_observabilityでモニターを作成または更新します"></a>SUSE Observabilityでモニターを作成または更新します。</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>`monitor.yaml`を完了した後、<a href="../../setup/cli/cli-sts.html" class="xref page">SUSE Observability CLI</a>を使用してモニターを作成または更新します。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor apply -f monitor.yaml</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>モニターが期待される結果を生成するかどうかを、<a href="#_verifying_the_results_of_a_monitor">以下</a>の手順を使用して確認してください。</p>
+</div>
+<div class="admonitionblock caution">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-caution" title="Caution"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>識別子は、モニターの一意のキーとして使用されます。識別子を変更すると、既存のものを更新するのではなく、新しいモニターが作成されます。</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>`sts monitor`コマンドには、すべてのモニターをリストするなど、より多くのオプションがあります：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor list</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>モニターを削除するには、次を使用します。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor delete --id &lt;id&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>モニターを編集するには、適用されたモニターの元を編集し、再度適用します。また、SUSE Observabilityインスタンスで構成されたモニターを直接編集するための`sts monitor edit`コマンドがあります：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor edit --id &lt;id&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>このコマンドの`&lt;id&gt;`は識別子ではなく、`Id`出力の`sts monitor list`列の番号です。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_モニターを有効または無効にします"><a class="anchor" href="#_モニターを有効または無効にします"></a>モニターを有効または無効にします。</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>モニターは有効または無効にできます。有効とは、モニターが結果を生成することを意味し、無効とは、すべての出力を抑制することを意味します。以下のコマンドを使用して、有効/無効にします：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor enable/disable --id &lt;id&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_モニターの結果を確認する"><a class="anchor" href="#_モニターの結果を確認する"></a>モニターの結果を確認する</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>モニターが作成された後、期待される結果を生成しているかを検証することは良い習慣です。以下の手順を実行できます：</p>
+</div>
+<div class="sect2">
+<h3 id="_モニターの実行を確認する"><a class="anchor" href="#_モニターの実行を確認する"></a>モニターの実行を確認する</h3>
+<div class="paragraph">
+<p>モニターの概要ページ（http://your-SUSE Observability-instance/#/monitors）に移動し、モニターを見つけてください。</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>`Status`列が`Enabled`の状態にあることを確認してください。モニターが`Disabled`の状態にある場合は、<a href="#_enable_or_disable_the_monitor">有効にしてください</a>。ステータスが`Error`の状態にある場合は、以下の手順に従って<a href="#_the_monitor_is_showing_an_error_in_the_monitor_status_overview">デバッグを行ってください</a>。</p>
+</li>
+<li>
+<p><code>Clear</code>/<code>Deviating</code>/`Critical`列に期待される数の状態が表示されていることを確認してください。状態の数が監視する予定のコンポーネントの数よりも著しく少ないか多い場合、PromQLクエリが多すぎる結果を返している可能性があります。</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_モニターのバインディングを確認してください"><a class="anchor" href="#_モニターのバインディングを確認してください"></a>モニターのバインディングを確認してください。</h3>
+<div class="paragraph">
+<p>モニターが監視対象のコンポーネントの1つで結果を生成しているかを観察してください。モニターが表示されない場合は、<a href="#_the_result_of_the_monitor_isnt_showing_on_a_component">これらの手順</a>に従って解決してください。</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_よくある問題"><a class="anchor" href="#_よくある問題"></a>よくある問題</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_モニターの結果がコンポーネントに表示されていません"><a class="anchor" href="#_モニターの結果がコンポーネントに表示されていません"></a>モニターの結果がコンポーネントに表示されていません</h3>
+<div class="paragraph">
+<p>まず、モニターが実際に<a href="#_verify_the_execution_of_the_monitor">結果を生成しているか</a>確認してください。これが当てはまる場合でも、モニターの結果がコンポーネントに表示されない場合は、バインディングに問題がある可能性があります。まず、次のコマンドを使用して確認してください：</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor status --id &lt;id&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>出力に`Monitor health states with identifier which has no matching topology element (&lt;nr&gt;): &#8230;&#8203;.`が含まれている場合、これは`urnTemplate`がトポロジーに一致する識別子を生成していない可能性があることを示しています。これを解決するために<a href="#_bind_the_results_of_the_monitor_to_the_correct_components">urnTemplateを再確認してください</a>。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_モニターのステータス概要にエラーが表示されています"><a class="anchor" href="#_モニターのステータス概要にエラーが表示されています"></a>モニターのステータス概要にエラーが表示されています</h3>
+<div class="paragraph">
+<p>CLIを通じてモニターのステータスを取得してください</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">sts monitor status --id &lt;id&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>セクション`Monitor Stream errors:`は、モニターで発生しているエラーを表示し、さらなる支援を提供します。</p>
+</div>
+</div>
+</div>
+</div>
+<nav class="pagination">
+  <span class="prev"><a href="../../setup/otel/troubleshooting.html">oTelマッピングのトラブルシューティング</a></span>
+  <span class="next"><a href="k8s-dynamic-threshold-monitors.html">K8s動的閾値モニター</a></span>
+</nav>
+</article>
+  </div>
+</main>
+</div>
+<script src="../../../../../_/js/site.js"></script>
+<script async src="../../../../../_/js/vendor/highlight.js"></script>
+<script src="../../../../../_/js/vendor/lunr.js"></script>
+<script src="../../../../../_/js/search-ui.js" id="search-ui-script" data-site-root-path="../../../../.." data-snippet-length="100" data-stylesheet="../../../../../_/css/search.css"></script>
+<script async src="../../../../../search-index.js"></script>
+<script src="../../../../../_/js/vendor/langSelection.js"></script>
+<script async src="../../../../../_/js/vendor/tabs.js"></script>
+
+
+<script src="../../../../../_/js/CNLanguageSwitcher.js"></script>
+  </body>
+</html>
