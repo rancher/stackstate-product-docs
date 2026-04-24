@@ -29,22 +29,22 @@ input:
   signal: ["TRACES" | "METRICS" | "LOGS"]
   resource:
     condition: <cel-boolean>        # default: true
-    action: CONTINUE                # default
+    action: <cel-string>            # default: "'CONTINUE'"
     scope:
       condition: <cel-boolean>      # default: true
-      action: CONTINUE              # default
+      action: <cel-string>          # default: "'CONTINUE'"
       span:                         # TRACES only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
      log:                           # LOGS only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
       metric:                       # METRICS only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
         datapoint:                  # METRICS only
           condition: <cel-boolean>  # default: true
-          action: CONTINUE          # default
+          action: <cel-string>      # default: "'CONTINUE'"
 vars:                               # Optional
   - name: string
     value: <cel-expression>
@@ -102,22 +102,22 @@ input:
   signal: ["TRACES" | "METRICS" | "LOGS"]
   resource:
     condition: <cel-boolean>        # default: true
-    action: CONTINUE                # default
+    action: <cel-string>            # default: "'CONTINUE'"
     scope:
       condition: <cel-boolean>      # default: true
-      action: CONTINUE              # default
+      action: <cel-string>          # default: "'CONTINUE'"
       span:                         # TRACES only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
      log:                           # LOGS only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
       metric:                       # METRICS only
         condition: <cel-boolean>    # default: true
-        action: CONTINUE            # default
+        action: <cel-string>        # default: "'CONTINUE'"
         datapoint:                  # METRICS only
           condition: <cel-boolean>  # default: true
-          action: CONTINUE          # default
+          action: <cel-string>      # default: "'CONTINUE'"
 vars:                               # Optional
   - name: string
     value: <cel-expression>
@@ -251,24 +251,46 @@ input:
     - "TRACES"
   resource:
     condition: "'service.name' in resource.attributes"
-    # action omitted since the default is `CONTINUE`
+    # action omitted since the default is `'CONTINUE'`
     scope:
-      action: "CREATE" # input block describes that it expects to filter until this level only
+      action: "'CREATE'" # input block describes that it expects to filter until this level only
       condition: "scope.name.contains('http') && resource.attributes['service.name'] == 'cart-svc'" # it's allowed to access resource-level fields at scope-level
 ----
 
 **Actions**
 
-Supported actions:
+The action field is a CEL string expression that must evaluate to one of the supported action values. Action values must be specified as CEL string literals using single quotes (e.g., `'CREATE'`).
 
-* CONTINUE – continue evaluation to the next level.
-* CREATE – create a component or relation at this level.
+Supported action values:
+
+* `'CONTINUE'` – continue evaluation to the next level.
+* `'CREATE'` – create a component or relation at this level.
+* `'DELETE'` – delete a component at this level (only valid at the `log` level).
 
 Defaults:
 
-* Actions default to 'CONTINUE'.
+* Actions default to `'CONTINUE'`.
 
-This means an explicit `CREATE` action needs to be specified at an input-level for the mapping to be applied.
+This means an explicit `'CREATE'` action needs to be specified at an input-level for the mapping to be applied.
+
+Because the action field is a CEL expression, conditional actions using the ternary operator are supported. This allows a single mapping to take different actions based on telemetry data:
+
+[,yaml]
+----
+log:
+  condition: "log.attributes['k8s.resource.api_group'] == 'apps'"
+  action: |
+    (log.body['type'] == 'ADDED' || log.body['type'] == 'MODIFIED') ?
+      'CREATE' :
+      (log.body['type'] == 'DELETED' ?
+        'DELETE' :
+        'CONTINUE')
+----
+
+[NOTE]
+====
+When a ternary action expression can produce a terminal action (`'CREATE'` or `'DELETE'`) at a non-leaf level, any child-level input fields (e.g., datapoint attributes) will not be available in `vars` and `output` expressions, because the input traverser will not descend further when a terminal action is reached.
+====
 
 Here are a few more examples of valid input declarations:
 
@@ -281,11 +303,11 @@ input:
     - "TRACES"
   resource:
     condition: "'service.name' in resource.attributes"
-    # action omitted since the default is `CONTINUE`
+    # action omitted since the default is `'CONTINUE'`
     scope:
-      # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+      # action and condition have been omitted since the defaults are `'CONTINUE'` and `true` respectively
       span:
-        action: "CREATE"
+        action: "'CREATE'"
         condition: "span.attributes['http.method'] == 'POST'"
 ----
 
@@ -297,14 +319,14 @@ input:
   signal:
     - "METRICS"
   resource:
-    # action and condition have been omitted since the defaults are `CONTINUE` and `true` respectively
+    # action and condition have been omitted since the defaults are `'CONTINUE'` and `true` respectively
     scope:
       condition: "scope.name == 'traces_service_graph'"
       metric:
-        # action omitted since the default is `CONTINUE`
+        # action omitted since the default is `'CONTINUE'`
         condition: "metric.name == 'traces_service_graph_request_total'"
         datapoint:
-          action: "CREATE"
+          action: "'CREATE'"
           condition: |
             'client' in datapoint.attributes &&
             'server' in datapoint.attributes
