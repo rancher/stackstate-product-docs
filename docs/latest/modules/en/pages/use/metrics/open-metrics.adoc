@@ -68,10 +68,64 @@ Kubernetes, OpenShift::
  ** *ssl_cert* - If your OpenMetrics endpoint is secured, enter the path to the certificate and specify the private key in the `ssl_private_key` parameter, or give the path to a file containing both the certificate and the private key.
  ** *ssl_private_key* - required if the certificate linked in `ssl_cert` doesn't include the private key. Note that the private key to your local certificate must be unencrypted.
  ** *ssl_ca_cert* - the path to the trusted CA used for generating custom certificates.
- ** *extra_headers* -  a dictionary mapping HTTP header names to their corresponding values to send in queries to the OpenMetrics endpoint. The values can dynamically include environment variables using the `%%env_VARIABLE%%` syntax. For example, `"Authorization: Bearer %%env_TOKEN%%"` automatically substitutes the value of the `TOKEN` environment variable.
+ ** *extra_headers* -  a dictionary mapping HTTP header names to their corresponding values to send in queries to the OpenMetrics endpoint. The values can dynamically include environment variables from the *Agent process* using the `%%env_VARIABLE%%` syntax. For example, `"Authorization: Bearer %%env_TOKEN%%"` automatically substitutes the value of the `TOKEN` environment variable as set on the Agent pod (e.g. via `global.extraEnv.open` in the Agent Helm values). 
++
+[NOTE]
+==== 
+This reads from the Agent's own environment, not from the target pod.
+====
 . Wait for the Agent to collect data from the OpenMetrics endpoint and send it to SUSE Observability.
 
 --
+====
+
+=== Authenticated endpoints
+
+When the OpenMetrics endpoint requires a bearer token (for example, Rancher metrics at `https://%%host%%:443/metrics`), the token must be available as an environment variable on the *Agent pod*. The `%%env_VARIABLE%%` template variable in annotations resolves from the Agent process environment, not from the target pod.
+
+To securely inject the token, use `global.extraEnv.secret` in the Agent Helm values. This stores the token in a Kubernetes Secret and mounts it as an environment variable on the Agent pod:
+
+[,yaml]
+----
+# agent-values.yaml
+global:
+  extraEnv:
+    secret:
+      TOKEN: "<your-bearer-token>"
+----
+
+[,bash]
+----
+helm upgrade suse-observability-agent suse-observability/suse-observability-agent \
+  --namespace suse-observability \
+  --reuse-values \
+  -f agent-values.yaml
+----
+
+Then annotate the target pod:
+
+[,yaml]
+----
+metadata:
+  annotations:
+    ad.stackstate.com/<CONTAINER_NAME>.check_names: '["openmetrics"]'
+    ad.stackstate.com/<CONTAINER_NAME>.init_configs: '[{}]'
+    ad.stackstate.com/<CONTAINER_NAME>.instances: |
+      [
+        {
+          "prometheus_url": "https://%%host%%:<METRICS_PORT>/<METRICS_PATH>",
+          "namespace": "<METRICS_NAMESPACE>",
+          "metrics": ["*"],
+          "extra_headers": {
+            "Authorization": "Bearer %%env_TOKEN%%"
+          }
+        }
+      ]
+----
+
+[NOTE]
+====
+If the environment variable is not set on the Agent pod, the check silently fails to resolve the variable and no metrics are scraped. Check the Agent logs for `failed to retrieve envvar` messages if metrics do not appear.
 ====
 
 == Data collected
