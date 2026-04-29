@@ -145,7 +145,7 @@ input:
   signal:
     - "TRACES"
   resource:
-    condition: |
+    condition: >-
       'host.name' in resource.attributes &&
       'process.pid' in resource.attributes
     action: "CREATE"
@@ -157,12 +157,12 @@ vars:
   - name: "executableName"
     value: >-
       'process.executable.name' in resource.attributes ?
-       resource.attributes['process.executable.name'] :
-        'process.command' in resource.attributes ?
-         resource.attributes['process.command'] :
-          'process.command_args' in resource.attributes ?
-           resource.attributes['process.command_args'] :
-              resource.attributes['process.executable.path']
+      resource.attributes['process.executable.name'] :
+      'process.command' in resource.attributes ?
+      resource.attributes['process.command'] :
+      'process.command_args' in resource.attributes ?
+      resource.attributes['process.command_args'] :
+      resource.attributes['process.executable.path']
 output:
   identifier: "'urn:opentelemetry:process/' + vars.hostname + ':' + vars.pid"
   name: "vars.hostname + '/' + vars.executableName + ':' + vars.pid"
@@ -209,7 +209,7 @@ input:
   signal:
     - "TRACES"
   resource:
-    condition: |
+    condition: >-
       'service.name' in resource.attributes &&
       'host.name' in resource.attributes &&
       'process.pid' in resource.attributes
@@ -217,13 +217,16 @@ input:
 vars:
   - name: "namespace"
     value: >-
-      'service.namespace' in resource.attributes && resource.attributes['service.namespace'] != '' ?
-      resource.attributes['service.namespace'] : 'default'
+      'service.namespace' in resource.attributes &&
+      resource.attributes['service.namespace'] != '' ?
+      resource.attributes['service.namespace'] :
+      'default'
   - name: "service"
     value: "resource.attributes['service.name']"
   - name: "instanceId"
     value: >-
-      'service.instance.id' in resource.attributes && resource.attributes['service.instance.id'] != '' ?
+      'service.instance.id' in resource.attributes &&
+      resource.attributes['service.instance.id'] != '' ?
       resource.attributes['service.instance.id'] :
       resource.attributes['service.name']
   - name: "hostname"
@@ -231,7 +234,8 @@ vars:
   - name: "pid"
     value: "string(int(resource.attributes['process.pid']))"
 output:
-  sourceId: "'urn:opentelemetry:namespace/' + vars.namespace + ':service/' + vars.service + ':serviceInstance/' + vars.instanceId"
+  sourceId: >-
+    'urn:opentelemetry:namespace/' + vars.namespace + ':service/' + vars.service + ':serviceInstance/' + vars.instanceId
   targetId: "'urn:opentelemetry:process/' + vars.hostname + ':' + vars.pid"
   typeName: "'executes'"
 expireAfter: 900000
