@@ -7,6 +7,8 @@
 
 The {stackstate-product-name} 2.10.0 Helm chart includes a large maintainability and consistency cleanup of `values.yaml`. Many internal constants are no longer exposed as values, several subchart toggles have been removed, and a number of defaults were moved into the subcharts where they belong.
 
+The keys removed in this release fall into two categories: keys that were already deprecated in earlier {stackstate-product-name} releases (most notably `stackstate.experimental.*`, which previous chart versions emitted a deprecation banner for during `helm upgrade`), and keys that were never documented as user-tunable but happened to be exposed in `values.yaml` as an implementation detail. None of the removals affect documented, supported configuration surfaces.
+
 This page describes the changes that may require updates to your `values.yaml` before upgrading to {stackstate-product-name} 2.10.0.
 
 [IMPORTANT]
@@ -84,6 +86,8 @@ opentelemetry:
 
 The `stackstate.experimental` subtree has been removed. All keys previously available under `stackstate.experimental.*` are now consumed exclusively from `stackstate.features.*` (after sizing-profile defaults are applied).
 
+This subtree was deprecated in earlier {stackstate-product-name} releases. Previous chart versions kept the legacy keys working as a fallback and emitted a deprecation banner during `helm upgrade` that listed every `experimental.*` key alongside its `features.*` replacement. The fallback and the banner are removed in 2.10.0; setting any `stackstate.experimental.*` key now fails the upgrade.
+
 Setting any value under `stackstate.experimental` will fail the upgrade with:
 
 ----
@@ -116,7 +120,7 @@ stackstate:
 
 == Internal constants removed
 
-A number of values that were previously exposed in `values.yaml` but never intended to be user-configurable have been replaced with named templates baked into the chart. Setting any of them will fail the upgrade with an explicit error.
+A number of values that were previously exposed in `values.yaml` but never documented as user-configurable have been replaced with named templates baked into the chart. These keys held internal wiring constants (component ports, ClickHouse connection parameters used between in-cluster services, the cache backend selection, VMAgent naming, backup-job naming patterns) that were not safe to override and were not part of the supported configuration surface. Setting any of them will fail the upgrade with an explicit error.
 
 === Removed keys
 
