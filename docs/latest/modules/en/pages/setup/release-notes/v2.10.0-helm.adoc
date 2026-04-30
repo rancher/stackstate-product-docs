@@ -1,0 +1,312 @@
+= Helm chart migration guide for v2.10.0
+:revdate: 2026-04-30
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Upgrading to {stackstate-product-name} 2.10.0
+
+The {stackstate-product-name} 2.10.0 Helm chart includes a large maintainability and consistency cleanup of `values.yaml`. Many internal constants are no longer exposed as values, several subchart toggles have been removed, and a number of defaults were moved into the subcharts where they belong.
+
+This page describes the changes that may require updates to your `values.yaml` before upgrading to {stackstate-product-name} 2.10.0.
+
+[IMPORTANT]
+====
+A number of removed keys are now enforced by fail-fast validations. If your `values.yaml` still sets any of them, `helm upgrade` will refuse to render with an explicit error message naming the key. Review the sections below and update your values file before upgrading.
+====
+
+== What changed at a glance
+
+[cols="2,3", options="header"]
+|===
+| Category | Action required
+
+| Subchart `enabled: false` toggles removed
+| Remove the keys from your values file. The affected subcharts are now always installed.
+
+| `stackstate.experimental.*` removed
+| Rename to `stackstate.features.*` (1:1, identical schema).
+
+| Internal constants removed (MCP/AI ports, ClickHouse connection settings, cache backend, VMAgent internals, backup naming)
+| Delete the keys from your values file. They are now hardcoded.
+
+| ClickHouse backup configuration moved to the subchart
+| Set per-pod scheduling overrides under `clickhouse.backup.*` instead of `stackstate.components.backup.*` / `stackstate.components.all.*`.
+
+| Defaults pushed down into subcharts (Kafka, Zookeeper, Elasticsearch, ClickHouse, HBase, anomaly-detection, OpenTelemetry collector, victoria-metrics-single)
+| No action required for parent chart users — defaults are unchanged. Standalone subchart consumers should review the new defaults.
+
+| Rendered-output changes on s3proxy and ClickHouse backup `Service`
+| Audit cluster policy if you use negative label selectors (`DoesNotExist`, `NotIn`).
+|===
+
+== Subchart toggles removed
+
+The following subcharts are now always installed and can no longer be disabled:
+
+* `elasticsearch`
+* `kafka`
+* `zookeeper`
+* `clickhouse`
+* `hbase`
+* `opentelemetry`
+
+Setting `<chart>.enabled: false` will fail the upgrade with an error like:
+
+----
+elasticsearch.enabled is removed. Elasticsearch is always installed and cannot be
+disabled by setting `enabled: false`. Please remove this key from your values file.
+----
+
+The fail-fast validation only fires when `enabled: false` is set explicitly, since that intent is silently overridden by the chart. Setting `enabled: true` or leaving the key unset is tolerated, but it has no effect — remove the key for clarity.
+
+=== Migration
+
+Remove the following keys from your `values.yaml` if present:
+
+[,yaml]
+----
+# Remove all of these
+elasticsearch:
+  enabled: false   # or true — both should be removed
+kafka:
+  enabled: false
+zookeeper:
+  enabled: false
+clickhouse:
+  enabled: false
+hbase:
+  enabled: false
+opentelemetry:
+  enabled: false
+----
+
+== `stackstate.experimental.*` removed
+
+The `stackstate.experimental` subtree has been removed. All keys previously available under `stackstate.experimental.*` are now consumed exclusively from `stackstate.features.*` (after sizing-profile defaults are applied).
+
+Setting any value under `stackstate.experimental` will fail the upgrade with:
+
+----
+stackstate.experimental is removed. Use stackstate.features instead.
+----
+
+=== Migration
+
+Rename every occurrence of `stackstate.experimental.X` to `stackstate.features.X`. The schema is identical:
+
+Old configuration:
+
+[,yaml]
+----
+stackstate:
+  experimental:
+    someFeature:
+      enabled: true
+----
+
+New configuration:
+
+[,yaml]
+----
+stackstate:
+  features:
+    someFeature:
+      enabled: true
+----
+
+== Internal constants removed
+
+A number of values that were previously exposed in `values.yaml` but never intended to be user-configurable have been replaced with named templates baked into the chart. Setting any of them will fail the upgrade with an explicit error.
+
+=== Removed keys
+
+[cols="2,1", options="header"]
+|===
+| Removed key | Hardcoded value
+
+| `stackstate.components.mcp.listenAddress` | `:8080`
+| `stackstate.components.mcp.service.port` | `8080`
+| `stackstate.components.aiAssistant.service.port` | `8081`
+| `stackstate.components.all.clickHouse.port` | `8123`
+| `stackstate.components.all.clickHouse.database` | `otel`
+| `stackstate.components.all.clickHouse.username` | `stackstate`
+| `stackstate.components.all.clickHouse.password` | `""`
+| `stackstate.components.all.clickHouse.protocol` | `http`
+| `stackstate.components.all.clickHouse.parameters.health_check_interval` | `5000`
+| `stackstate.components.all.metricStore.remoteWritePath` | `/api/v1/write`
+| `stackstate.components.healthSync.cache.backend` | `mapdb`
+| `stackstate.components.sync.cache.backend` | `mapdb`
+| `stackstate.components.vmagent.fullNameOverride` | `suse-observability-vmagent`
+| `stackstate.components.vmagent.agentMetricsFilter` | `["vm*", "go*"]`
+| `backup.elasticsearch.snapshotRepositoryName` | `sts-backup`
+| `backup.elasticsearch.restore` | (internal constant)
+| `backup.elasticsearch.scheduled.indices` | `sts*`
+| `backup.elasticsearch.scheduled.snapshotPolicyName` | `auto-sts-backup`
+| `backup.elasticsearch.scheduled.snapshotNameTemplate` | `<sts-backup-{now{yyyyMMdd-HHmm}}>`
+| `backup.stackGraph.scheduled.backupNameTemplate` | (internal constant)
+| `backup.stackGraph.scheduled.backupNameParseRegexp` | (internal constant)
+| `backup.stackGraph.scheduled.backupDatetimeParseFormat` | (internal constant)
+| `backup.configuration.scheduled.backupNameTemplate` | (internal constant)
+| `backup.configuration.scheduled.backupNameParseRegexp` | (internal constant)
+| `backup.configuration.scheduled.backupDatetimeParseFormat` | (internal constant)
+|===
+
+[NOTE]
+
+=== Migration
+
+Delete the keys above from your `values.yaml`. The chart will fail-fast if they remain set, with messages of the form:
+
+----
+stackstate.components.all.clickHouse.port is removed.
+Please delete it from your values file.
+----
+
+== Kafka topic settings removed
+
+The following Kafka topic settings have also been hardcoded as named templates and removed from `values.yaml`:
+
+[cols="2,1", options="header"]
+|===
+| Removed key | Hardcoded value
+
+| `kafka.topicRetention` | `86400000`
+| `kafka.topic.stsMetricsV2.partitionCount` | `10`
+|===
+
+Setting either will fail the upgrade. Delete them from your values file.
+
+== ClickHouse backup configuration moved to the subchart
+
+The ClickHouse backup CronJob, Service, and ConfigMaps have been moved from the parent chart into the `clickhouse` subchart. Existing parent-side overrides under `clickhouse.backup.*` continue to work unchanged because Helm forwards parent values to subcharts at the same key path.
+
+However, two cases require explicit attention.
+
+=== Pod scheduling overrides on the ClickHouse backup CronJob
+
+[CAUTION]
+====
+This is a *silent* behavior change: pod scheduling overrides previously inherited from `stackstate.components.{all,backup}.*` no longer apply to the ClickHouse backup CronJob.
+====
+
+Before 2.10.0, the ClickHouse backup CronJob's `nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, and `podLabels` were merged from `stackstate.components.all.*`, `stackstate.components.backup.*`, and `clickhouse.backup.*`.
+
+After 2.10.0, only `clickhouse.backup.*` (and `global.*` for cluster-wide settings) is consulted for the ClickHouse backup CronJob. Anything set under `stackstate.components.all.*` or `stackstate.components.backup.*` is silently dropped for ClickHouse backup pods.
+
+For other backup workloads (Elasticsearch and StackGraph backup jobs), `stackstate.components.backup.*` continues to apply.
+
+A fail-fast validation surfaces the most likely misconfiguration: setting `stackstate.components.backup.{podAnnotations,podLabels,nodeSelector,tolerations,affinity}` without a corresponding `clickhouse.backup.<key>`.
+
+=== Migration
+
+Old configuration:
+
+[,yaml]
+----
+stackstate:
+  components:
+    backup:
+      nodeSelector:
+        workload: backup
+      tolerations:
+        - key: backup
+          operator: Exists
+          effect: NoSchedule
+----
+
+New configuration (apply to all backup pods including ClickHouse):
+
+[,yaml]
+----
+stackstate:
+  components:
+    backup:
+      nodeSelector:
+        workload: backup
+      tolerations:
+        - key: backup
+          operator: Exists
+          effect: NoSchedule
+clickhouse:
+  backup:
+    nodeSelector:
+      workload: backup
+    tolerations:
+      - key: backup
+        operator: Exists
+        effect: NoSchedule
+----
+
+If you intentionally do *not* want these overrides on ClickHouse backup pods, acknowledge that by setting an explicit empty value, which silences the validation:
+
+[,yaml]
+----
+clickhouse:
+  backup:
+    podAnnotations: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    podLabels: {}
+----
+
+[NOTE]
+====
+`stackstate.components.all.*` overrides also no longer flow into the ClickHouse backup CronJob, but the chart cannot fail-fast on those keys because they are still consumed by every other StackState pod. If you relied on `stackstate.components.all.{nodeSelector,tolerations,affinity,podAnnotations,podLabels}` reaching ClickHouse backup pods, copy the values explicitly to `clickhouse.backup.*`.
+====
+
+== Defaults moved to subcharts
+
+For the following subcharts, defaults that previously lived in the parent `values.yaml` have been pushed down into the subchart's own `values.yaml`. The defaults themselves are unchanged for parent-chart users, so no action is required when upgrading {stackstate-product-name}.
+
+Affected subcharts:
+
+* `zookeeper`
+* `kafka`
+* `elasticsearch`
+* `clickhouse`
+* `hbase`
+* `anomaly-detection`
+* `opentelemetry-collector`
+* `victoria-metrics-single`
+
+== Behavior changes worth verifying
+
+=== VictoriaMetrics secondary instance scrape filter
+
+The `victoria-metrics-1` instance previously had its OpenMetrics autodiscovery annotation set to scrape all metric names (`["*"]`). After this upgrade, `victoria-metrics-1` inherits the same filter as `victoria-metrics-0`: `["vm*", "go*"]`.
+
+If you rely on OpenMetrics autodiscovery to scrape non-`vm*` / non-`go*` metrics from `victoria-metrics-1`, update your configuration to set the filter explicitly.
+
+
+== Rendered-output changes — audit if you use negative label selectors
+
+The following resources now render with the standard Helm labels (`app.kubernetes.io/instance`, `app.kubernetes.io/managed-by`, `app.kubernetes.io/name`, `app.kubernetes.io/version`, `helm.sh/chart`), where they previously did not:
+
+* `Service/<release>-clickhouse-backup`
+
+For most installations this is invisible. The change only matters if your cluster has policy resources that select on the *absence* of these labels using negation operators (`DoesNotExist`, `NotIn`, `!=`). Resources that previously matched such selectors will no longer match.
+
+Examples of cluster policy that may be affected:
+
+* `NetworkPolicy` resources targeting pods that do not carry `helm.sh/chart`
+* `ServiceMonitor` resources excluding pods by `app.kubernetes.io/instance`
+* Pod anti-affinity rules using `NotIn` against Helm-standard labels
+* RBAC `ClusterRole` rules selecting by absence of these labels
+* Admission policies referencing these labels
+
+If your cluster does not have such resources, no action is required.
+
+== Migration checklist
+
+Before running `helm upgrade` to {stackstate-product-name} 2.10.0, work through this checklist against your `values.yaml`:
+
+. Remove any `<subchart>.enabled` keys for `elasticsearch`, `kafka`, `zookeeper`, `clickhouse`, `hbase`, and `opentelemetry`.
+. Rename `stackstate.experimental.*` to `stackstate.features.*`.
+. Delete the internal-constant keys listed in the table above (MCP/AI ports, ClickHouse connection settings, metric-store path, cache backend, VMAgent internals, backup naming).
+. Delete `kafka.topicRetention` and `kafka.topic.stsMetricsV2.partitionCount`.
+. If you set `stackstate.components.backup.{podAnnotations,podLabels,nodeSelector,tolerations,affinity}`, copy the values to `clickhouse.backup.<key>` (or set them to an explicit empty value to acknowledge they don't apply to ClickHouse backup pods).
+. If you relied on `stackstate.components.all.{nodeSelector,tolerations,affinity,podAnnotations,podLabels}` reaching ClickHouse backup pods, copy the values explicitly to `clickhouse.backup.*`.
+. Verify `victoria-metrics-1` Datadog scrape coverage if you depend on it.
+. Audit external HBase scrape configs for the new `<release>-hbase-hdfs-snn` Service.
+. Audit any cluster policy that uses negative label selectors against `Service/<release>-clickhouse-backup`.
