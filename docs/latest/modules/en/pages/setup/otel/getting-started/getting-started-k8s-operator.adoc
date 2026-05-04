@@ -125,6 +125,12 @@ metadata:
   name: otel-collector
 spec:
   mode: deployment
+  env:
+  - name: MY_POD_IP
+    valueFrom:
+      fieldRef:
+        apiVersion: v1
+        fieldPath: status.podIP
   envFrom:
   - secretRef:
       name: open-telemetry-collector
@@ -204,7 +210,12 @@ spec:
           exporters: [nop]
       telemetry:
         metrics:
-          address: ${env:MY_POD_IP}:8888
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: ${env:MY_POD_IP}
+                    port: 8888
 ----
 
 
