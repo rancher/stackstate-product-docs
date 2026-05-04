@@ -62,9 +62,10 @@ manager:
     # Uses chart.appVersion for the tag
     repository: ghcr.io/open-telemetry/opentelemetry-operator/opentelemetry-operator
   collectorImage:
-    # find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
     repository: otel/opentelemetry-collector-k8s
-    tag: 0.123.0
+    # Example tag, update with the latest version
+    # Find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
+    tag: 0.151.0
   targetAllocatorImage:
     repository: ""
     tag: ""
@@ -124,6 +125,12 @@ metadata:
   name: otel-collector
 spec:
   mode: deployment
+  env:
+  - name: MY_POD_IP
+    valueFrom:
+      fieldRef:
+        apiVersion: v1
+        fieldPath: status.podIP
   envFrom:
   - secretRef:
       name: open-telemetry-collector
@@ -203,7 +210,12 @@ spec:
           exporters: [nop]
       telemetry:
         metrics:
-          address: ${env:MY_POD_IP}:8888
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: ${env:MY_POD_IP}
+                    port: 8888
 ----
 
 
