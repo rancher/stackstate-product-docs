@@ -18,19 +18,14 @@
 
 == Upgrade Warnings & Breaking Changes
 
-* *Helm Chart Structure Refactoring:* The Helm chart `values.yaml` has undergone a major refactoring to improve readability and maintainability. 
-** The `templates/` directory is now reorganized into per-component subfolders.
-** PVC, RBAC, and s3proxy resources now utilize the `common` library chart.
-** Non-configurable values have been replaced with named templates and fail-fast validations to prevent invalid overrides. 
-** Subchart defaults (for Zookeeper, Kafka, Elasticsearch, ClickHouse, HBase, Victoria Metrics, Anomaly Detection, and OpenTelemetry Collector) have been moved out of the parent `values.yaml` and directly into their respective subcharts. 
-** ClickHouse backup resources (CronJob, Service, ConfigMaps) have moved into the `clickhouse` subchart. 
-** The `*.enabled` toggles for ClickHouse, HBase, and OpenTelemetry have been removed; these subcharts now install unconditionally.
-** *Action Required:* Before upgrading, you must review the xref:setup/release-notes/v2.10.0-helm.adoc[Helm chart migration guide for v2.10.0] and update your `values.yaml` accordingly.
-* *Victoria Metrics Storage Format Change:* Victoria Metrics `v1.133.0` introduces a *non-reversible* storage format change (per-partition index). 
-** On the first startup after the upgrade, Victoria Metrics will re-index all time series. You should expect slower ingestion and query performance during this one-time migration. 
-** *Action Required:* A full backup *before* upgrading is mandatory. Rolling back to `v1.109.0` is impossible without restoring from a pre-upgrade backup.
-* *Minio Replaced by S3Proxy:* Minio has been replaced with S3Proxy as the storage proxy for backups. 
+* *Helm Chart Structure Refactoring:* The Helm chart `values.yaml` has undergone a major refactoring to improve readability and maintainability.
+** *Action Required:* Before upgrading, you must review the xref:setup/upgrade-stackstate/v2.10.0-helm.adoc[Helm chart migration guide for v2.10.0] and update your `values.yaml` accordingly.
+* *Minio Replaced by S3Proxy:* Minio has been replaced with S3Proxy as the storage proxy for backups.
 ** *Action Required:* Follow the xref:setup/data-management/backup_restore/migration_to_s3proxy.adoc[migration to S3Proxy guide] to update your configuration. This is a breaking change for IRSA users (the service account name has changed). For other setups, the existing configuration is deprecated but still supported. You must also download the latest version of the `sts-backup` CLI tool when restoring backups.
+* *Victoria Metrics Storage Format Change:* Victoria Metrics `v1.133.0` introduces a *non-reversible* storage format change (per-partition index).
+** On the first startup after the upgrade, Victoria Metrics will re-index all time series. You should expect slower ingestion and query performance during this one-time migration.
+
+
 
 == Security Hardening & Platform Evolution
 
@@ -45,11 +40,12 @@ This release represents a major step forward in our commitment to a "continuous 
 
 == New Features & Enhancements
 
+* *Overview Page Performance:* Improved the loading performance of the Platform overview page.
+* *HA Profile Scaling Updates:*
+** *500-ha Profile:* Updated the memory settings for the HBase region server and Elasticsearch.
+** *4000-ha Profile:* Now deploys 5 datanodes with increased replication to improve availability and resilience.
 * *StackPack Version Management:* Users can now manually remove old, uploaded StackPack versions. Additionally, the system will automatically clean up old StackPack versions that are no longer in use.
 * *VictoriaMetrics Smart Backups:* Replaced the single-generation incremental backup system with a more robust two-tier smart backup strategy based on the VictoriaMetrics smart backups pattern.
-* *HA Profile Scaling Updates:* ** *500-ha Profile:* Updated the memory settings for the HBase region server and Elasticsearch.
-** *4000-ha Profile:* Now deploys 5 datanodes with increased replication to improve availability and resilience.
-* *Overview Page Performance:* Improved the loading performance of the Platform overview page.
 * *Image Updates:* Upgraded the base images for Envoy and Kafka to their latest supported versions.
 * *Log Noise Reduction:* Suppressed spurious `X-Forwarded-For` messages originating from the API.
 
@@ -73,14 +69,14 @@ This release represents a major step forward in our commitment to a "continuous 
 * *Monitor Sort Order:* Established a stable, predictable sort order for monitors on the component highlight page.
 
 === Backup & Restore
-* *StackPack Backups:* Backups now correctly include all active StackPacks, including manually uploaded ones. Previously, only the configuration was backed up, forcing users to re-upload the StackPacks themselves after a restore.
+* *StackPack Backups:* Backups now correctly include all active StackPacks, including manually uploaded ones. Previously, only the configuration was backed up, requiring a manual upload of the StackPacks after a restore.
 * *Settings Backup Code Point Limit:* Fixed an issue where settings backups failed to restore due to a SnakeYAML 'code point limit' error.
 * *sts-backup KUBECONFIG:* The `sts-backup` CLI tool now correctly respects the `KUBECONFIG` environment variable.
 * *sts-backup Elasticsearch:* Fixed an issue within the Elasticsearch sub-command where partial snapshots failed to restore.
 
 == Agent Bug Fixes
 
-* *Critical Vulnerability Patches:* Fixed two critical CVEs in the `stackstate-process-agent` (CVE-2025-68121 and CVE-2026-33186).
 * *Kubernetes Resource Status:* Fixed an issue where the agent failed to send node status information. This resolves missing Kubernetes resource status in the UI and fixes failing readiness monitors on Kubernetes nodes.
+* *Critical Vulnerability Patches:* Fixed two critical CVEs in the `stackstate-process-agent` (CVE-2025-68121 and CVE-2026-33186).
 * *Startup Script Compatibility:* Updated the agent startup script to use `bash` instead of `sed`, resolving errors on systems missing the `sed` command.
 * *Rancher Installation Resources:* Fixed an issue with `spec.template.spec.containers[0].resources.override` when installing the agent via Rancher.
