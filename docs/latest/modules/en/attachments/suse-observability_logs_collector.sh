@@ -104,6 +104,8 @@ collect_yaml_configs() {
     kubectl -n "$NAMESPACE" get cronjob -o yaml > "$OUTPUT_DIR/yaml/cronjob.yaml"
     # PV,PVC YAML
     kubectl -n "$NAMESPACE" get pv,pvc -o yaml  > "$OUTPUT_DIR/yaml/pv-pvc.yaml"
+    # Ingress YAML
+    kubectl -n "$NAMESPACE" get ingress -o yaml  > "$OUTPUT_DIR/yaml/ingress.yaml"
 }
 
 # Function to collect pod logs
@@ -355,6 +357,9 @@ kubectl -n "$NAMESPACE" get cronjob -o wide > "$OUTPUT_DIR/cronjob"
 
 techo "Collecting PV and PVC information"
 kubectl -n "$NAMESPACE" get pv,pvc -o wide > "$OUTPUT_DIR/pv-pvc"
+
+techo "Collecting ingress information"
+kubectl -n "$NAMESPACE" get ingress -o wide > "$OUTPUT_DIR/ingress"
 
 techo "Collecting events in $NAMESPACE ..."
 kubectl -n "$NAMESPACE" get events --sort-by='.metadata.creationTimestamp' > "$OUTPUT_DIR/events"
