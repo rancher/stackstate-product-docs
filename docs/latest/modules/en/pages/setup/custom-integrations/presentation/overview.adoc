@@ -1,0 +1,79 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Presentation Overview
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-05-11
+:page-revdate: {revdate}
+:description: Component Presentation Schema
+
+== Overview
+
+Defines columns shown in overview tables.
+
+Columns may override or extend columns defined by other matching presentations.
+
+=== Main menu
+
+Controls whether matching components appear in the main menu.  The menu item will open an overview page with components that match the binding query.
+
+[,yaml]
+----
+mainMenu: 
+  group: "Open Telemetry"
+  icon: !icon "service.svg"
+  order: 2
+----
+
+When the `icon` field is left empty, the icon on the `ComponentPresentation` itself will be used. The group matches a main menu group by name.  The `order` field determines the position of the menu item in the group.  An item with a higher value comes closer to the top.
+
+The referenced menu group must be defined separately using `MainMenuGroup`:
+[,yaml]
+----
+_type: MainMenuGroup
+identifier: urn:...:main-menu-group:<group-name>
+name: string
+description: string           # Optional description
+defaultOpen: boolean
+order: number                 # Optional order.
+iconbase64: string            # Either a base64-encoded image, or a `!icon` reference to a separate image file
+items:                        # Optional - kept for backwards compability, not needed for component presentations
+  - viewIdentifier: string    # identifier for a (legacy) view
+----
+For backwards compatibility it is possible to list views in a group under `items`.  Component presentations are added automatically to the group; they do not need to be added explicitly.
+
+Although the field name suggests otherwise, the icon can be specified as `!icon path-to-the-icon`.  This is again for backwards compatibility.  
+
+=== Columns
+
+The overview section in the component presentation defines which columns should be shown and in what order.  It also specifies what columns should remain in-view when scrolling horizontally, when the browser windows is too narrow to show all columns in full.
+
+Column definitions can be completely spelled out, including title and projection, but it is also possible to inherit from other presentations.  Based on the binding query, other component presentations with the same query or a strictly more generic one are considered.
+
+== Filters
+
+Defines filters shown for overview pages.  They can inherit their definition from more generic component presentations, in which case just specifying the `filterId` is sufficient.  Other properties (`displayName`, `filter` and `menuSection`) are merged.  The most specific component presentation with a property set for a filter, determines its value.
+
+The `menuSection` is relevant when there are more filters than fit in the available area in the overview menu.  Filters with the same `menuSection` are then grouped together in a dropdown.
+
+There is currently one type of filter available:
+* `TagFilter`: allows filtering on a tag key-value combination
+
+[,yaml]
+----
+- filterId: "otel_service"
+  displayName:
+    singular: "OTEL service"
+    plural: "OTEL services"
+  filter:
+    _type: "TagFilter"
+    tagKey: "service.name"
+  menuSection: Otel
+----
+
+The intention is for filters to persist when navigating between overview pages.  So if at all possible, try to reuse the same filter ids (with the same semantics) across different component  presentations.  The filters defined for all OTEL components are
+
+* `otel_namespace` (tag key `service.namespace`, menu section "Otel")
+* `otel_service` (tag key `service.name`, menu section "Otel")
+* `k8s_namespace` (tag key `namespace`, menu section "K8s")
+* `k8s_cluster` (tag key `cluster-name`, menu section "K8s")
+
+endif::ss-ff-stackpacks2_enabled[]
