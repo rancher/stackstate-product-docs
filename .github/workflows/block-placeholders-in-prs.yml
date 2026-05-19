@@ -1,0 +1,23 @@
+name: Block placeholders in PRs
+
+on:
+  # Runs on every Pull Request targeting the main branch
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-no-placeholders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan for {next-release-version}
+        run: |
+          # Grep recursively for the exact placeholder string, excluding the .git directory
+          if grep -rnF --exclude-dir=".git" "{next-release-version}" .; then
+            echo "::error::Validation Failed: Placeholder '{next-release-version}' found in this Pull Request! Please replace it with the release version before merging."
+            exit 1
+          else
+            echo "Validation Passed: No placeholders found. Safe to merge!"
+          fi
