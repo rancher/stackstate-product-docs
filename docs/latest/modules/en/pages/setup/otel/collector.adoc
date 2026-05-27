@@ -69,7 +69,7 @@ exporters:
     compression: snappy
 ----
 
-The SUSE Observability exporter requires authentication using an api key, to configure that an <<_extensions,authentication extension>> is used. The opentelemetry-collector-contrib repository has https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[all exporters] with documentation on their configuration.
+The SUSE Observability exporter requires authentication using a service token, to configure that an <<_extensions,authentication extension>> is used. The opentelemetry-collector-contrib repository has https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[all exporters] with documentation on their configuration.
 
 If the gRPC exporter doesn't work for you (see also xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[troubleshooting]), you can switch to the, slightly less efficient, OTLP over HTTP protocol by using the `otlphttp` exporter instead. Replace all references to `otlp/suse-observability` in the `pipelines` and `exporter` section  with `otlphttp/suse-observability` and make sure to update the exporter config to:
 
@@ -94,7 +94,7 @@ The OTLP HTTP endpoint for SUSE Observability is different from the OTLP endpoin
 
 === Service pipeline
 
-For each telemetry signal a separate pipeline is configured. The pipelines are configured in the `service.pipeline` section and define which receivers, processors and exporters should be used in which order. Before using a component in the pipeline it must first be defined in its configuration section. The `batch` processor, for example, doesn't have any configuration but still has to be declared in the `processors` section. Components that are configured but are not included in a pipeline will not be active at all.
+For each telemetry signal a separate pipeline is configured. The pipelines are configured in the `service.pipeline` section and define which receivers, processors and exporters should be used in which order. Before using a component in the pipeline it must first be defined in its configuration section. The `batch` processor, for example, does not have any configuration but still has to be declared in the `processors` section. Components that are configured but are not included in a pipeline will not be active.
 
 [,yaml]
 ----
@@ -112,7 +112,12 @@ service:
 
 === Extensions
 
-Extensions are not used directly in pipelines for processing data but extend the capabilities of the collector in other ways. For SUSE Observability it is used to configure the authentication using an api key. Extensions must be defined in a configuration section before they can be used. Similar to the pipeline components an extension is only active when it is enabled in the `service.extensions` section.
+Extensions are not used directly in pipelines for processing data but extend the capabilities of the collector in other ways. For SUSE Observability it is used to configure the authentication using a service token. Extensions must be defined in a configuration section before they can be used. Similar to the pipeline components an extension is only active when it is enabled in the `service.extensions` section.
+
+[IMPORTANT]
+====
+A service token must be used instead of API_KEY as they are synonymous. The environment variable remains referred to `API_KEY` in the below code snippet for backwards compatibility.
+====
 
 [,yaml]
 ----

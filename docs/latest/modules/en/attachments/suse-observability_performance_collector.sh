@@ -147,6 +147,33 @@ collect_network_performance() {
     done
 }
 
+# Detect Kafka layout (Bitnami vs SUSE Application Collection) from the first kafka pod.
+# Sets KAFKA_BIN_DIR and KAFKA_DATA_DIR globally.
+detect_kafka_paths() {
+    local first_pod
+    first_pod=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component==kafka -o jsonpath="{.items[0].metadata.name}" 2>/dev/null)
+    if [ -z "$first_pod" ]; then
+      techo "No kafka pods found; defaulting to Bitnami paths."
+      KAFKA_BIN_DIR="/opt/bitnami/kafka/bin"
+      KAFKA_DATA_DIR="/bitnami/kafka"
+      return
+    fi
+
+    if kubectl -n "$NAMESPACE" exec "$first_pod" -c kafka -- sh -c "test -d /opt/bitnami/kafka/bin" &>/dev/null; then
+      KAFKA_BIN_DIR="/opt/bitnami/kafka/bin"
+      KAFKA_DATA_DIR="/bitnami/kafka"
+      techo "Detected Bitnami Kafka image (bin: $KAFKA_BIN_DIR, data: $KAFKA_DATA_DIR)."
+    elif kubectl -n "$NAMESPACE" exec "$first_pod" -c kafka -- sh -c "test -d /usr/share/kafka/bin" &>/dev/null; then
+      KAFKA_BIN_DIR="/usr/share/kafka/bin"
+      KAFKA_DATA_DIR="/data/kafka"
+      techo "Detected SUSE Application Collection Kafka image (bin: $KAFKA_BIN_DIR, data: $KAFKA_DATA_DIR)."
+    else
+      techo "Could not detect Kafka image layout from pod '$first_pod'; defaulting to Bitnami paths."
+      KAFKA_BIN_DIR="/opt/bitnami/kafka/bin"
+      KAFKA_DATA_DIR="/bitnami/kafka"
+    fi
+}
+
 create_kafka_topics() {
   # Topics cannot be removed because topic deletion is disabled by default on the broker
     techo "Creating topics"
@@ -161,7 +188,7 @@ create_kafka_topics() {
     for pod in $PODS; do
       # Topics are pinned to a particular broker using replica-assignment, allowing to test localhost/networked traffic
         kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-          JMX_PORT="" /opt/bitnami/kafka/bin/kafka-topics.sh --create --if-not-exists --topic perf-test-topic-$index --bootstrap-server localhost:9092 --replica-assignment $index --config retention.ms=300000 --config retention.bytes=1073741824 \
+          JMX_PORT="" $KAFKA_BIN_DIR/kafka-topics.sh --create --if-not-exists --topic perf-test-topic-$index --bootstrap-server localhost:9092 --replica-assignment $index --config retention.ms=300000 --config retention.bytes=1073741824 \
         " > "$SUBDIR/$pod.log" 2>&1
 
         ((index++))
@@ -181,7 +208,7 @@ collect_kafka_broker_performance_local() {
     index=0
     for pod in $PODS; do
        kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-                 JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+                 JMX_PORT="" $KAFKA_BIN_DIR/kafka-producer-perf-test.sh --topic perf-test-topic-$index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
                " > "$SUBDIR/$pod.log" 2>&1
 
         ((index++))
@@ -209,7 +236,7 @@ collect_kafka_broker_performance_remote() {
       ((prev_index--))
       for pod in $PODS; do
           kubectl -n "$NAMESPACE" exec "$pod" -c "kafka" -- bash -xc "\
-            JMX_PORT="" /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
+            JMX_PORT="" $KAFKA_BIN_DIR/kafka-producer-perf-test.sh --topic perf-test-topic-$prev_index --num-records 500000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=localhost:9092 acks=1\
           " > "$SUBDIR/$pod.log" 2>&1
           prev_index=$index
           ((index++))
@@ -333,8 +360,9 @@ collect_disk_performance "HDFS Disk Buffered"       "hdfs-dn"    "datanode" "/ha
 collect_disk_performance "HDFS Disk Direct"         "hdfs-dn"    "datanode" "/hadoop-data/testfile"      "oflag=direct"
 collect_network_performance "HDFS Network"             "hdfs-dn"    "datanode"
 
-collect_disk_performance "Kafka Disk Buffered"      "kafka"      "kafka"    "/bitnami/kafka/testfile"
-collect_disk_performance "Kafka Disk Direct"        "kafka"      "kafka"    "/bitnami/kafka/testfile"    "oflag=direct"
+detect_kafka_paths
+collect_disk_performance "Kafka Disk Buffered"      "kafka"      "kafka"    "$KAFKA_DATA_DIR/testfile"
+collect_disk_performance "Kafka Disk Direct"        "kafka"      "kafka"    "$KAFKA_DATA_DIR/testfile"   "oflag=direct"
 # The kafka images is missing both the `hostname` command and `nc`, so we skip this one
 # collect_network_performance "Kafka Network"            "kafka"      "kafka"
 collect_kafka_broker_performance

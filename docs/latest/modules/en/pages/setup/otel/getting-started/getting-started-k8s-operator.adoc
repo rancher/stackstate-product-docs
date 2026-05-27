@@ -116,6 +116,11 @@ The operator manages one or more collector deployments via a Kubernetes custom r
 
 It uses the secret created earlier in the guide. Make sure to replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
 
+[IMPORTANT]
+====
+A service token must be used instead of api key as they are synonymous. Any environment variable that continues to refer to API_KEY is for backwards compatibility.
+====
+
 .collector.yaml
 [,yaml]
 ----
@@ -149,14 +154,14 @@ spec:
         config:
           scrape_configs:
           - job_name: opentelemetry-collector
-            scrape_interval: 10s
+            scrape_interval: 30s
             static_configs:
             - targets:
               - ${env:MY_POD_IP}:8888
     extensions:
       health_check:
         endpoint: ${env:MY_POD_IP}:13133
-      # Use the API key from the env for authentication
+      # Use the service token from the env for authentication
       bearertokenauth:
         scheme: SUSEObservability
         token: "${env:API_KEY}"

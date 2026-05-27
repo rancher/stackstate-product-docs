@@ -24,7 +24,7 @@ Install the OTel (Open Telemetry) collector in cluster A and configure it to:
 * Receive data from, potentially many, instrumented applications.
 * Enrich collected data with Kubernetes attributes.
 * Generate metrics for traces.
-* Forward the data to {stackstate-product-name}, including authentication using the API key.
+* Forward the data to {stackstate-product-name}, including authentication using the service token.
 
 NOTE: {stackstate-product-name} also retries sending data when there are connection problems.
 
@@ -53,6 +53,11 @@ kubectl create secret generic open-telemetry-collector \
 
 We install the collector with a Helm chart provided by the Open Telemetry project. Make sure you have the Open Telemetry helm charts repository configured:
 
+[IMPORTANT]
+====
+A service token must be used instead of api key as they are synonymous. Any environment variable that continues to refer to API_KEY is for backwards compatibility.
+====
+
 [,bash]
 ----
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
@@ -63,7 +68,7 @@ Create a `otel-collector.yaml` values file for the Helm chart. Here is a good st
 .otel-collector.yaml
 [,yaml]
 ----
-# Set the API key from the secret as an env var:
+# Set the service token from the secret as an env var:
 extraEnvsFrom:
   - secretRef:
       name: open-telemetry-collector
@@ -93,12 +98,12 @@ config:
       config:
         scrape_configs:
         - job_name: opentelemetry-collector
-          scrape_interval: 10s
+          scrape_interval: 30s
           static_configs:
           - targets:
             - ${env:MY_POD_IP}:8888
   extensions:
-    # Use the API key from the env for authentication
+    # Use the service token from the env for authentication
     bearertokenauth:
       scheme: SUSEObservability
       token: "${env:API_KEY}"
