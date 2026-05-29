@@ -66,6 +66,8 @@ manager:
     # Example tag, update with the latest version
     # Find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
     tag: 0.151.0
+  # RBAC permissions are needed for the k8sattributes processor which adds k8s attributes to telemetry data
+  createRbacPermissions: true
   targetAllocatorImage:
     repository: ""
     tag: ""
@@ -112,62 +114,6 @@ This only installs the operator. Continue to install the collector and enable au
 
 == The Open Telemetry collector
 
-=== Create a cluster role and cluster role binding for the collector
-
-The OTel collector configuration we use in this guide includes a k8sattributes processor that enriches the telemetry data with Kubernetes metadata to have the best experience in SUSE Observability. This processor needs permissions to query the Kubernetes API for this metadata, so we need to create a service account, cluster role and cluster role binding for the collector.
-
-Create a file `otel-collector-rbac.yaml` with the following content, we're again using `open-telemetry` as the namespace:
-
-.otel-collector-rbac.yaml
-[,yaml]
-----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: otel-collector
-  namespace: open-telemetry
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: otel-collector
-rules:
-- apiGroups: [""]
-  resources: ["pods", "namespaces", "nodes"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["apps"]
-  resources: ["replicasets", "deployments", "statefulsets", "daemonsets"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["batch"]
-  resources: ["jobs"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["extensions"]
-  resources: ["replicasets"]
-  verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: otel-collector
-subjects:
-- kind: ServiceAccount
-  name: otel-collector
-  namespace: open-telemetry
-roleRef:
-  kind: ClusterRole
-  name: otel-collector
-  apiGroup: rbac.authorization.k8s.io
----
-
-Now apply this file to create the cluster role and cluster role binding:
-
-[,bash]
-----
-kubectl apply -f otel-collector-rbac.yaml
----- 
-
-=== Install a collector
-
 The operator manages one or more collector deployments via a Kubernetes custom resource of kind `OpenTelemetryCollector`. We'll create one using the same configuration as used in the xref:/setup/otel/getting-started/getting-started-k8s.adoc[Kubernetes getting started guide].
 
 It uses the secret created earlier in the guide. Make sure to replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
@@ -195,7 +141,8 @@ spec:
   envFrom:
   - secretRef:
       name: open-telemetry-collector
-  serviceAccount: otel-collector
+  # optional service-account for pulling the collector image from a private registries
+  # serviceAccount: otel-collector
   config:
     receivers:
       otlp:
