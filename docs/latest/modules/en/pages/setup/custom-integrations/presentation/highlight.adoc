@@ -12,14 +12,18 @@ Defines fields and sections shown on highlight pages.  For a component, all appl
 Each field contains a *title* and a *projection*. The title is displayed as the name of the field.  The projection determines how a value, or a combination of values, are shown.  Values are either expressed using CEL expressions, evaluated against the various attributes of a component, or they represent a (metric) query that can be executed.  For example a `ComponentLinkProjection` expects 2 arguments, a `name` and an `identifier`:
 [,yaml]
 ----
-fields:
-  - fieldId: "namespace"
-    title: "Namespace"
-    order: 85.0
-    projection:
-      _type: ComponentLinkProjection
-      name: "tags['service.namespace']"
-      identifier: "'urn:opentelemetry:namespace/' + tags['service.namespace']"
+rank:
+  specificity: 10
+presentation:
+  highlight:
+    fields:
+      - fieldId: "namespace"
+        title: "Namespace"
+        order: 85.0
+        projection:
+          _type: ComponentLinkProjection
+          name: "tags['service.namespace']"
+          identifier: "'urn:opentelemetry:namespace/' + tags['service.namespace']"
 ----
 
 A more specific presentation can override field definitions of a more generic one, e.g. for reordering or suppression.  A field provided by the generic presentation can be hidden by including a field with the same `fieldId`, but without a `projection`.
@@ -36,6 +40,8 @@ Overrides:: A specialized presentation can hide a generic section (like health) 
 The "Show Configuration", "Show Last Change" and "Show Status" buttons reveal provisioning data.  Such data is received in "External Components" - one or more sources of data.
 [,yaml]
 ----
+presentation:
+  highlight:
     provisioning:
       externalComponentSelector: "matches(external.identifier, '^urn:open-telemetry:.*')"
       showConfiguration: true
@@ -50,18 +56,19 @@ A related resource references another `ComponentPresentation` by identifier, reu
 
 [,yaml]
 ----
-highlight:
-  relatedResources:
-    - resourceId: "related-pods"
-      title: "Related Pods"
-      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
-      order: 100
-      presentationIdentifier: "urn:stackpack:otel:component-presentation:pod"
-    - resourceId: "related-endpoints"
-      title: "Related Endpoints"
-      topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
-      order: 200
-      presentationIdentifier: "urn:stackpack:otel:component-presentation:endpoint"
+presentation:
+  highlight:
+    relatedResources:
+      - resourceId: "related-pods"
+        title: "Related Pods"
+        topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "pod"'
+        order: 100
+        presentationIdentifier: "urn:stackpack:otel:component-presentation:pod"
+      - resourceId: "related-endpoints"
+        title: "Related Endpoints"
+        topologyQuery: 'withNeighborsOf(direction = "both", components = (id = "${identifiers[0]}"), levels = "1") AND type = "endpoint"'
+        order: 200
+        presentationIdentifier: "urn:stackpack:otel:component-presentation:endpoint"
 ----
 
 === STQL templates
