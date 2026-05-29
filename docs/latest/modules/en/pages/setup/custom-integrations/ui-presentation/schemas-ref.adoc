@@ -81,6 +81,10 @@ presentation:
           _type: string
           ...                 # Additional properties dependent on projection type
 
+    sort:                     # Optional default sort order
+      - columnId: string      # References a column defined in `columns`
+        direction: string     # Optional - Ascending (default) or Descending
+
   highlight:                                      # Optional highlight page configuration
     title: string
     fields:
@@ -204,6 +208,67 @@ Although the field name suggests otherwise, the icon can be specified as `!icon 
 The overview section in the component presentation defines which columns should be shown and in what order.  It also specifies what columns should remain in-view when scrolling horizontally, when the browser windows is too narrow to show all columns in full.
 
 Column definitions can be completely spelled out, including title and projection, but it is also possible to inherit from other presentations.  Based on the binding query, other component presentations with the same query or a strictly more generic one are considered.
+
+==== Sorting
+
+The `sort` field defines the default sort order for the overview table.  Each entry references a `columnId` from the `columns` list and an optional `direction`.
+
+[,yaml]
+----
+overview:
+  columns:
+    - columnId: "health"
+      title: "Health"
+      projection:
+        _type: HealthProjection
+        value: healthState
+    - columnId: "name"
+      title: "Name"
+      projection:
+        _type: TextProjection
+        value: name
+  sort:
+    - columnId: "health"
+      direction: Descending
+----
+
+If `direction` is omitted, it defaults to `Ascending`.  When no `sort` is defined at all, the overview table sorts by the first sortable column in ascending order.
+
+===== Which columns are sortable
+
+Not every projection type supports sorting.  The table below shows which projections are sortable:
+
+[cols="1,^1"]
+|===
+|Projection |Sortable
+
+|HealthProjection          | icon:check[role="green"]
+|TextProjection            | icon:check[role="green"] ^1^
+|NumericProjection         | icon:check[role="green"] ^1^
+|ComponentLinkProjection   | icon:check[role="green"] ^1^
+|ContainerImageProjection  | icon:check[role="green"] ^1^
+|RatioProjection           | icon:check[role="green"] ^2^
+|MetricProjection          | icon:times[role="red"]
+|DurationProjection        | icon:times[role="red"]
+|MapProjection             | icon:times[role="red"]
+|===
+
+^1^ Sortable only when the CEL expression is fully index-based (uses indexed component attributes only). +
+^2^ Sortable only when the `status` expression is present and fully index-based.
+
+===== Validation and runtime behavior
+
+Sort configuration is checked at two stages:
+
+Ingestion validation::
+When a `ComponentPresentation` is ingested, the following is validated:
++
+* The `columnId` in each sort entry must reference a column defined in `overview.columns`.
+* If the referenced column has a locally defined projection, that projection must be sortable.
+* If the column's projection is not locally defined (it will be inherited from a more generic presentation), validation is deferred to runtime.
+
+Runtime resolution::
+At runtime, after all matching presentations are merged, any sort entries that reference non-sortable columns are silently filtered out.  A warning is logged when this happens.  If all configured sort entries are filtered out, the overview falls back to sorting by the first sortable resolved column in ascending order.
 
 === Highlight
 
