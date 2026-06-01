@@ -1,4 +1,3 @@
-ifdef::ss-ff-stackpacks2_enabled[]
 = Add custom charts to components
 :page-languages: [en, de, es, fr, ja, pt, zh]
 :revdate: 2025-07-10
@@ -29,6 +28,7 @@ For example, the steps will add a metric binding for the `Replica counts`  of Ku
 
 Open the `metricbindings.yaml` YAML file in your favorite code editor to change it throughout this guide.  You can use the CLI to xref:/setup/custom-integrations/develop.adoc#_test_your_stackpack[Test Your StackPack].
 
+[,yaml]
 ----
 - _type: MetricBinding
   chartType: line
@@ -83,7 +83,7 @@ Copy the query into the `expression` property of the first entry in the `queries
 
 [NOTE]
 ====
-In {stackstate-product-name}, the size of the metric chart automatically determines the granularity of the metric shown in the chart. PromQL queries can adjusted to make optimal use of this behavior to get a representative chart for the metric. xref:/setup/custom-integrations/metric-bindings/writing-promql.adoc[Writing PromQL for charts] explains this in detail.
+In {stackstate-product-name}, the size of the metric chart automatically determines the granularity of the metric shown in the chart. PromQL queries can adjusted to make optimal use of this behavior to get a representative chart for the metric. xref:/develop/reference/writing-promql.adoc[Writing PromQL for charts] explains this in detail.
 ====
 
 
@@ -91,6 +91,7 @@ In {stackstate-product-name}, the size of the metric chart automatically determi
 
 The metric binding with all fields filled in:
 
+[,yaml]
 ----
 _type: MetricBinding
 chartType: line
@@ -112,6 +113,7 @@ image::k8s/k8s-replica-counts-without-binding.png[The incorrect chart for a sing
 
 To fix this make the PromQL query specific for a component using information from the component. Filter on enough metric labels to select only the specific time series for the component. This is the "binding" of the correct time series to the component. For anyone experienced in making Grafana dashboards this is similar to a dashboard with parameters that are used in queries on the dashboard. Let's change the query in the metric binding to this:
 
+[,yaml]
 ----
 max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
 ----
@@ -155,6 +157,7 @@ For the first option an example is given in the xref:/setup/custom-integrations/
 
 To add more queries to a metric binding simply repeat xref:/setup/custom-integrations/metric-bindings/index.adoc#_steps[steps] 3. and 4. and add the query as an extra entry in the list of queries. For the deployment replica counts there are several related metrics that can be included in the same chart:
 
+[,yaml]
 ----
 - _type: MetricBinding
   chartType: line
@@ -182,6 +185,7 @@ image::k8s/k8s-replica-counts-multiple-timeseries.png[Metric binding with multip
 
 When a single query returns multiple time series per component, this will show as multiple lines in the chart. But in the legend they will all use the same alias. To be able to see the difference between the different time series the alias can include references to the metric labels using the `+${label}+` syntax. For example here is a metric binding for the "Container restarts" metric on a pod, note that a pod can have multiple containers:
 
+[,yaml]
 ----
 type: MetricBinding
 chartType: line
@@ -208,4 +212,23 @@ Any MetricsBinding without a specified layout will be displayed in a tab and sec
 
 Here is an example configuration:
 
-endif::ss-ff-stackpacks2_enabled[]
+[,yaml]
+----
+layout:
+  metricPerspective:
+    tab: Kubernetes Pod
+    section: Performance
+    weight: 2
+  componentSummary:
+    weight: 2
+----
+
+Fields:
+
+* `layout.metricPerspective` - Defines metrics to display on `Metrics Perspective`. Metrics are grouped into tabs and then sections.
+* `layout.metricPerspective.tab` - Tab name. Tabs are sorted alphabetically.
+* `layout.metricPerspective.section` - Section name. Sections are sorted alphabetically.
+* `layout.metricPerspective.weight` - Metrics within a section are sorted primarily by weight (ascending) and secondarily by name (alphabetical).
+* `layout.componentSummary` - Specifies metrics to display in the `Components details` sidebar upon component selection. Charts appear only when this property is defined.
+* `layout.componentSummary.weight` - This represents the weight of the chart. Charts are sorted in ascending order by weight and then displays first 3 charts.
+
