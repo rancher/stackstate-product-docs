@@ -50,7 +50,7 @@ The operator is installed with a Helm chart, so first configure the chart reposi
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 ----
 
-Let's create a `otel-operator.yaml` file to configure the operator:
+Let's create an `otel-operator.yaml` file to configure the operator:
 
 .otel-operator.yaml
 [,yaml]
@@ -66,6 +66,8 @@ manager:
     # Example tag, update with the latest version
     # Find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
     tag: 0.151.0
+  # RBAC permissions are needed for the k8sattributes processor which adds k8s attributes to telemetry data
+  createRbacPermissions: true
   targetAllocatorImage:
     repository: ""
     tag: ""
@@ -154,7 +156,7 @@ spec:
         config:
           scrape_configs:
           - job_name: opentelemetry-collector
-            scrape_interval: 10s
+            scrape_interval: 30s
             static_configs:
             - targets:
               - ${env:MY_POD_IP}:8888
@@ -179,6 +181,33 @@ spec:
         check_interval: 5s
         limit_percentage: 80
         spike_limit_percentage: 25
+      k8sattributes:
+        extract:
+          labels:
+          - from: pod
+            key_regex: (.*)
+            tag_name: $$1
+          metadata:
+          - k8s.namespace.name
+          - k8s.deployment.name
+          - k8s.statefulset.name
+          - k8s.daemonset.name
+          - k8s.cronjob.name
+          - k8s.job.name
+          - k8s.node.name
+          - k8s.pod.name
+          - k8s.pod.uid
+          - k8s.pod.start_time
+        passthrough: false
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.ip
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+        - sources:
+          - from: connection
       batch: {}
       resource:
         attributes:
@@ -203,11 +232,11 @@ spec:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, resource, batch]
+          processors: [memory_limiter, k8sattributes, resource, batch]
           exporters: [debug, spanmetrics, otlp/suse-observability]
         metrics:
           receivers: [otlp, spanmetrics, prometheus]
-          processors: [memory_limiter, resource, batch]
+          processors: [memory_limiter, k8sattributes, resource, batch]
           exporters: [debug, otlp/suse-observability]
         logs:
           receivers: [otlp]
