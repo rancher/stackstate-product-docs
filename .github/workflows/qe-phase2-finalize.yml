@@ -1,0 +1,53 @@
+name: Phase 2 - Finalize Release and Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to finalize (e.g., 2.0.0)'
+        required: true
+        type: string
+      pr_target:
+        description: 'Target branch for the PR (e.g., production)'
+        required: true
+        type: string
+        default: 'production'
+
+jobs:
+  finalize-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Merge Release Branch to Main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin release-${{ inputs.version }}
+          git merge origin/release-${{ inputs.version }} --no-edit
+          git push origin main
+
+      - name: Merge Main to Staging
+        run: |
+          git checkout staging
+          git pull origin staging
+          git merge main --no-edit
+          git push origin staging
+
+      - name: Raise Release PR from Main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base ${{ inputs.pr_target }} \
+            --head main \
+            --title "Releasing ${{ inputs.version }}" \
+            --body "Automated release PR triggered after QE release notes addition."
