@@ -1,0 +1,163 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Scraping OpenMetrics with ServiceMonitor and PodMonitor
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-06-16
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+The SUSE Observability Agent bundles an OpenTelemetry Collector and a Target Allocator that scrape any Kubernetes workload exposing a Prometheus / OpenMetrics endpoint. The Target Allocator watches the `ServiceMonitor` and `PodMonitor` Custom Resources defined by the https://prometheus-operator.dev[Prometheus Operator], distributes the scrape targets across collector pods, and ships the collected metrics over OTLP to SUSE Observability.
+
+In practice this means you can:
+
+* Reuse existing `ServiceMonitor` and `PodMonitor` manifests written for the Prometheus Operator — no per-pod Agent annotations needed.
+* Run alongside an existing Prometheus Operator install, or use the SUSE Observability Agent as a drop-in replacement.
+* Opt workloads in or out with Kubernetes labels.
+
+== Step 1 — Enable OTel and Prometheus scraping on the Agent
+
+First, install the SUSE Observability Agent on your cluster by following the xref:/k8s-quick-start-guide.adoc[quick start guide].
+
+When you install (or upgrade) the agent Helm chart, set these values to turn on the OpenTelemetry Collector pipeline and the Prometheus scraping sub-pipeline:
+
+[,yaml]
+----
+otel:
+  enabled: true
+  prometheusScraping:
+    crds:
+      # Set to true if you do not already have the Prometheus Operator
+      # installed (this ships the ServiceMonitor and PodMonitor CRDs).
+      # Leave false if those CRDs are already managed by another chart or 
+      # if you want to install them manually.
+      enabled: false
+----
+
+Apply the values:
+
+[,bash]
+----
+helm upgrade --install suse-observability-agent suse-observability/suse-observability-agent \
+  --namespace suse-observability \
+  -f agent-values.yaml
+----
+
+This deploys an OpenTelemetry Collector and a Target Allocator alongside the rest of the agent.
+
+== Step 2 — Define a ServiceMonitor or PodMonitor
+
+By default the Target Allocator only picks up monitors that carry the `observability.suse.com/agent: scrape` label. This keeps the agent from accidentally scraping every monitor in a cluster that already runs the Prometheus Operator.
+
+A minimal `ServiceMonitor` for an HTTP `/metrics` endpoint behind a Service:
+
+[,yaml]
+----
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-app-metrics
+  namespace: my-app
+  labels:
+    observability.suse.com/agent: scrape
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-app
+  endpoints:
+    - port: metrics
+      path: /metrics
+----
+
+A `PodMonitor` for pods that aren't fronted by a Service:
+
+[,yaml]
+----
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: my-app-metrics
+  namespace: my-app
+  labels:
+    observability.suse.com/agent: scrape
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-app
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+----
+
+For the full set of fields supported by these resources — scrape interval, relabeling, TLS, multiple endpoints, and so on — see the upstream Prometheus Operator reference:
+
+* https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.ServiceMonitor[`ServiceMonitor` API reference]
+* https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.PodMonitor[`PodMonitor` API reference]
+
+[TIP]
+====
+To change which label the Target Allocator selects on, set `otel.prometheusScraping.targetAllocator.prometheusCR.serviceMonitorSelector` and `podMonitorSelector` on the agent Helm release.
+====
+
+== Step 3 — Authenticated endpoints
+
+If your `/metrics` endpoint requires authentication, reference a Kubernetes `Secret` from the monitor:
+
+[,yaml]
+----
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-app-metrics
+  namespace: my-app
+  labels:
+    observability.suse.com/agent: scrape
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-app
+  endpoints:
+    - port: metrics
+      path: /metrics
+      authorization:
+        # type defaults to Bearer; set to Basic or another scheme if needed
+        credentials:
+          name: my-app-metrics-auth
+          key: token
+----
+
+The Target Allocator does not have cluster-wide secret access, so two extra steps are required:
+
+. List the secret's namespace in `otel.prometheusScraping.targetAllocator.prometheusCR.secretNamespaces`.
+. Deploy a `Role` and `RoleBinding` in that namespace granting the agent's `ServiceAccount` (which lives in the release namespace) read access to secrets.
+
+By default the Target Allocator also will not serve those secrets to the collector pods. Choose one of the options below to allow it:
+
+* *Recommended — mTLS:* enable mutual TLS between the Target Allocator and collectors so secrets travel encrypted. Requires https://cert-manager.io[cert-manager] to be installed:
++
+[,yaml]
+----
+otel:
+  prometheusScraping:
+    targetAllocator:
+      mtlsEnabled: true
+----
+* *Only for isolated clusters — plain HTTP:* allow secrets to be served over plain HTTP between agent components. Credentials travel unencrypted inside the cluster:
++
+[,yaml]
+----
+otel:
+  prometheusScraping:
+    targetAllocator:
+      allowInsecureAuthSecrets: true
+----
+
+== Step 4 — Browse the collected metrics
+
+Once the agent, collectors and your `ServiceMonitor` / `PodMonitor` are in place, metrics start flowing into SUSE Observability within a scrape interval. Find them in the xref:/use/metrics/k8sTs-explore-metrics.adoc[telemetry inspector] and bind them to topology components with xref:/setup/custom-integrations/metric-bindings/index.adoc[metric bindings].
+
+== See also
+
+* https://prometheus-operator.dev/docs/operator/design/[Prometheus Operator design — ServiceMonitor and PodMonitor concepts]
+* xref:/use/metrics/k8s-prometheus-remote-write.adoc[Sending Prometheus metrics with `remote_write`]
+endif::ss-ff-stackpacks2_enabled[]
