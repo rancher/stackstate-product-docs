@@ -69,9 +69,9 @@ exporters:
     compression: snappy
 ----
 
-The SUSE Observability exporter requires authentication using a service token, to configure that an <<_extensions,authentication extension>> is used. The opentelemetry-collector-contrib repository has https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[all exporters] with documentation on their configuration.
+The [stackstate-product-name] exporter requires authentication using a service token, to configure that an <<extensions,authentication extension>> is used. The opentelemetry-collector-contrib repository has https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter[all exporters] with documentation on their configuration.
 
-If the gRPC exporter doesn't work for you (see also xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[troubleshooting]), you can switch to the, slightly less efficient, OTLP over HTTP protocol by using the `otlphttp` exporter instead. Replace all references to `otlp/suse-observability` in the `pipelines` and `exporter` section  with `otlphttp/suse-observability` and make sure to update the exporter config to:
+If the gRPC exporter does not work for you (see also xref:/setup/otel/troubleshooting.adoc#_some_proxies_and_firewalls_dont_work_well_with_grpc[troubleshooting]), you can switch to the, slightly less efficient, OTLP over HTTP protocol by using the `otlphttp` exporter instead. Replace all references to `otlp/suse-observability` in the `pipelines` and `exporter` section  with `otlphttp/suse-observability` and make sure to update the exporter config to:
 
 [,yaml]
 ----
@@ -91,7 +91,6 @@ exporters:
 The OTLP HTTP endpoint for SUSE Observability is different from the OTLP endpoint. Use the xref:/setup/otel/otlp-apis.adoc[OTLP APIs] to find the correct URL.
 ====
 
-
 === Service pipeline
 
 For each telemetry signal a separate pipeline is configured. The pipelines are configured in the `service.pipeline` section and define which receivers, processors and exporters should be used in which order. Before using a component in the pipeline it must first be defined in its configuration section. The `batch` processor, for example, does not have any configuration but still has to be declared in the `processors` section. Components that are configured but are not included in a pipeline will not be active.
@@ -110,6 +109,7 @@ service:
       exporters: [debug, otlp/suse-observability]
 ----
 
+[#extensions]
 === Extensions
 
 Extensions are not used directly in pipelines for processing data but extend the capabilities of the collector in other ways. For SUSE Observability it is used to configure the authentication using a service token. Extensions must be defined in a configuration section before they can be used. Similar to the pipeline components an extension is only active when it is enabled in the `service.extensions` section.
@@ -131,6 +131,7 @@ service:
 
 The opentelemetry-collector-contrib repository has https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension[all extensions] with documentation on their configuration.
 
+[#transforming-telemetry]
 == Transforming telemetry
 
 There are many processors in the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[opentelemetry-collector-contrib repository]. Here we try to give an overview of commonly used processors and their capabilities. For more details and many more processors use the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor[opentelemetry-collector-contrib repository].
@@ -192,11 +193,16 @@ processors:
       - set(span.status.code, STATUS_CODE_OK) where span.attributes["http.request.status_code"] == 400
 ----
 
-It supports many more transformations, like modifying the span name, converting metric types or modifying log events. See it's https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[readme] for all the possibilities. It uses the https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Open Telemetry Transformation Lanuage (OTTL)] to define the filters.
+It supports many more transformations, like modifying the span name, converting metric types or modifying log events. See the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor[readme] for all the possibilities. It uses the https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/README.md[Open Telemetry Transformation Lanuage (OTTL)] to define the filters.
 
 == Scrub sensistive data
 
-The collector is the ideal place to remove or obfuscate sensitive data, because it sits right between your applications and SUSE Observability and has processors to <<_transforming_telemetry,filter and transform your data>>. Next to the filtering and transformation capabilities already discussed there is also a https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/redactionprocessor[redaction processor] available that can mask attribute values that match a block list. It can also remove attributes that don't match a specified list of allowed attributes, however using this can quickly result in dropping most attributes resulting in very limited observability capabilities. Note that it does not process resource attributes.
+The collector is the ideal place to remove or obfuscate sensitive data, because it sits right between your applications and SUSE Observability and has processors to <<transforming-telemetry,filter and transform your data>>. Next to the filtering and transformation capabilities already discussed there is also a https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/redactionprocessor[redaction processor] available that can mask attribute values that match a block list. It can also remove attributes that do not match a specified list of allowed attributes, however using this can quickly result in dropping most attributes resulting in limited observability capabilities. 
+
+[NOTE]
+====
+It does not process resource attributes.
+====
 
 An example that only masks specific attributes and/or values:
 
@@ -217,7 +223,7 @@ processors:
 
 == Trying out the collector
 
-The getting started guides show how to deploy the collector to Kubernetes or using Linux packages for a production ready setup. It is also possible to run it, for example for tests, directly as a docker container to try it out:
+The getting started guides show how to deploy the collector to Kubernetes or using Linux packages for a production ready setup. It is also possible to run it, for example, for tests, directly as a docker container to try it out:
 
 [,bash]
 ----
