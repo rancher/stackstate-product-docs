@@ -62,6 +62,21 @@ rank:
 presentation:
   icon: !icon path            # Optional icon
 
+  topology:                   # Optional - controls how matching components show up in the topology view
+    layer:                    # Optional - layer assigned to matching components
+      name: string            # Layer name (free-form; the same name across presentations resolves to a single layer)
+      order: number           # Vertical ordering of the layer in the view (higher numbers come first)
+    domain:                   # Optional - domain assigned to matching components (same shape as layer)
+      name: string
+      order: number
+    groupedByLayers: boolean         # Optional - default grouping toggle
+    groupedByDomains: boolean        # Optional - default grouping toggle
+    groupingEnabled: boolean         # Optional
+    minimumGroupSize: number         # Optional
+    autoGrouping: boolean            # Optional
+    connectedComponents: boolean     # Optional
+    showIndirectRelations: boolean   # Optional
+
   overview:                   # Optional overview page configuration
     name:                     # Naming configuration
       plural: string
@@ -207,6 +222,19 @@ Presentation sections are composed when multiple definitions apply to the same c
 
 Defines iconography and naming used across the UI.  Icons can be included by using the `!icon` yaml tag, followed by the path of an icon relative to the `icons/` folder.
 E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the file `icons/services/main-menu.svg`.
+
+=== Topology grouping (layer & domain)
+
+`topology.layer` and `topology.domain` place matching components in the topology view's layers and domains.
+Both have the same shape: a `name` (used as the label) and an `order` (used to position it vertically — higher numbers come first).
+
+When multiple presentations match a component, the *most-specific* one (highest `rank.specificity`) contributes its `topology.layer` / `topology.domain`.
+If no matching presentation provides one, the component shows up under `unknown`.
+
+Two notes worth keeping in mind:
+
+* *Specificity decides per component, not order.* A less-specific presentation cannot override a more-specific one by declaring a higher `order`.
+* When several components contribute different orders for the *same* layer or domain name, the snapshot reports the *highest* order across them.  This keeps the vertical position stable regardless of which component is queried first.
 
 === Other sections
 
