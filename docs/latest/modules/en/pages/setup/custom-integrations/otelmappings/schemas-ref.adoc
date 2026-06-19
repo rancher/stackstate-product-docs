@@ -52,7 +52,6 @@ output:
   identifier: <cel-string>
   name: <cel-string>
   typeName: <cel-string>
-  typeIdentifier: <cel-string>      # Optional
   required:                         # Optional (required means that if any expression fails, the mapping fails)
     version: <cel-string>           # Optional
     additionalIdentifiers:          # Optional
@@ -78,6 +77,7 @@ output:
     configuration: <cel-expression> # Optional
     status:        <cel-expression> # Optional
 expireAfter: duration-ms
+specificity: float                  # Used during component merge to pick the winning typeName / name
 ----
 
 === OtelRelationMapping
@@ -152,6 +152,27 @@ The relation identity is a composite of the form `output.sourceId-output.targetI
 Each mapping defines an `expireAfter` duration. This value controls how long a component or relation remains in the topology without being refreshed by new matching telemetry. If no refresh happens the component or relation is removed from the topology.
 
 Internally, the OTel collector continuously refreshes components as telemetry matches - this refresh window is based on the `expireAfter` field per mapping.
+
+=== Component merging
+
+When multiple sources contribute to the same component (matched by identifier), {stackstate-product-name} merges them into a single component. The merger applies per-field rules to pick the winning `name` and `typeName`:
+
+* If one side is an external-topology sync (ExtTopo) and the other is an OTel mapping, the ExtTopo side wins for `name` and `typeName` regardless of specificity.
+* Otherwise the side with the higher `specificity` wins. Ties are broken by an internal stable ordering.
+
+`specificity` is declared at the top level of each `OtelComponentMapping`. Use a higher value to specialise a more specific mapping over a more general one for the same component identifier. Default is `0.0`; mappings without an explicit value behave as `0.0`.
+
+For each contributing source, the merged component additionally carries two preserved labels so the original per-source values remain queryable:
+
+* `source-type:<value>` — the `typeName` produced by that source.
+* `source-name:<value>` — the `name` produced by that source.
+
+These labels are injected at synthesis time, so they appear on every component (single-source as well as merged). Query them with STQL (for example, `label = 'source-type:pod'`) or, in CEL contexts, with the multi-value accessor `tagsAll['source-type']` described in <<Multi-value tag access in CEL>>.
+
+[NOTE]
+====
+Duplicate values for the same key (for example, two sources both contributing `source-type:pod`) are currently retained as repeated labels. A future improvement will dedupe identical values; today only the multi-value access path is required to handle the duplicates explicitly.
+====
 
 == Input traversal model
 
@@ -570,6 +591,30 @@ output:
 ----
 
 This pattern separates component configuration (spec) from operational state (status).
+
+[#Multi-value tag access in CEL]
+=== Multi-value tag access in CEL
+
+Component tags are exposed to CEL expressions through two accessors:
+
+* `tags['key']` — single-value access. Returns the value of the matching tag. If a key has multiple values (for example, after merging two contributing sources that both produced a `source-type` label), the values are joined with `,` (sorted) so existing templates that expect a string keep working.
+* `tagsAll['key']` — multi-value access. Returns the full list of values for the key, including duplicates if any. Useful for:
+** set-membership matching, e.g., ``'pod' in tagsAll['source-type']``
+** explicit join control, e.g., ``tagsAll['source-type'].join('|')``
+
+[,yaml]
+----
+# Single-value access — returns 'pod,virt-launcher' if both sources contributed
+${tags['source-type']}
+
+# Multi-value access — returns ['pod', 'virt-launcher']
+${tagsAll['source-type']}
+
+# Membership test — true if any contributing source produced source-type:pod
+${'pod' in tagsAll['source-type']}
+----
+
+Prefer `tagsAll` whenever you intend to react to *any* of several merged values; reserve `tags` for places where a single string is required (for example, templated PromQL or STQL where the resulting value is interpolated into another query).
 
 == Common patterns and best practices
 
