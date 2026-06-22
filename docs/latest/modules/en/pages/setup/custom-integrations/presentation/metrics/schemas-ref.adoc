@@ -11,28 +11,107 @@ ifdef::ss-ff-stackpacks2_enabled[]
 ----
 metricId: string
 name: string
-chartType: "line"                     # "line" is the only type for now
-unit?: string
 description?: string
-queries:
+metricQueries:
   - expression: string                # promql query
     alias: string                     # name in legend
     componentIdentifierTemplate?: string    # URN template for linking
-    primary?: boolean                 # is this query the primary one
-tags:
-  <key>: <value>
+chart: 
+  _type: 'TimeSeriesChart' | 'BarChart' | 'GaugeChart' | 'StatChart'
+  ...
 ----
 
 * `metricId` The id of the metric, used for overriding/referencing when used in any of the charts
 * `name`: The name for the metric binding
-* `chartType`: {stackstate-product-name} will support different chart types (`line`, `bar`, etc.), currently only `line` is supported
-* `unit`: The unit of the values in the time series returned by the query or queries, used to render the Y-axis of the chart. See the xref:/develop/reference/k8sTs-chart-units.adoc[supported units] reference for all units
 * `description`: Optional description, displayed on-hover of the name
-* `queries`: A list of queries to show in the chart for the metric (see xref:/develop/reference/writing-promql.adoc[Writing PromQL queries])
+* `metricQueries`: A list of queries to show in the chart for the metric (see xref:/develop/reference/writing-promql.adoc[Writing PromQL queries])
 ** `expression`: The (templated) promql query
 ** `alias`: Name for the query in the legend
 ** `componentIdentifierTemplate`: Template for identifier of related component, populated with labels of timeseries resulting from the query
-** `primary`: Is this query the primary one
-* `tags`: Will be used to organize metrics in the user interface, can be left empty using `{}`
+* `chart`: see below
+
+=== Chart Types
+
+The `chart` field defines how the metric will be rendered in the UI.  Four different kinds of chart are supported
+* `TimeSeriesChart`
+* `BarChart`
+* `GaugeChart`
+* `StatChart`
+
+[,yaml]
+----
+_type: 'TimeSeriesChart'
+unit?: string
+decimals?: integer
+min?: double
+max?: double
+connectNulls?: boolean
+thresholds?:
+  mode?: "absolute" | "percentage"
+  defaultColor: string (hex color)
+  steps:
+    - value: double
+    - color?: string (hex color)
+    - name?: string
+----
+
+[,yaml]
+----
+_type: 'BarChart'
+unit?: string
+decimals?: integer
+min?: double
+max?: double
+thresholds?:
+  mode?: "absolute" | "percentage"
+  defaultColor: string (hex color)
+  steps:
+    - value: double
+    - color?: string (hex color)
+    - name?: string
+----
+
+[,yaml]
+----
+_type: 'GaugeChart'
+unit?: string
+decimals?: integer
+max?: double
+calculation?: "mean" | "sum" | "min" | "max" | "first" | "first-number" | "last" | "last-number"
+thresholds?:
+  mode?: "absolute" | "percentage"
+  defaultColor: string (hex color)
+  steps:
+    - value: double
+    - color?: string (hex color)
+    - name?: string
+----
+
+[,yaml]
+----
+_type: 'StatChart'
+unit?: string
+decimals?: integer
+sparkline?: boolean
+calculation?: "mean" | "sum" | "min" | "max" | "first" | "first-number" | "last" | "last-number"
+thresholds?:
+  defaultColor: string (hex color)
+  steps:
+    - value: double
+    - color?: string (hex color)
+    - name?: string
+----
+
+* `unit`: The unit of the values in the time series returned by the query or queries, used to render the Y-axis of the chart. See the xref:/develop/reference/k8sTs-chart-units.adoc[supported units] reference for all units
+* `decimals`: Number of decimal places to show for values - when rendered directly or when shown on hover
+* `min`: lowest value that the metric value can take.
+* `max`: highest value that the metric value can take.
+* `sparkline`: should a mini-chart be shown (small, no axis, no legend)
+* `calculation`: how to select or calculate a single value out of a timeseries.  The `first-number` and `last-number` variants select the first, respectively last, non-null values from a timeseries
+* `connectNulls`: when a timeseries is missing values, should the rendered graph interpolate
+* `thresholds`:
+** `mode`: are values in the steps absolute, or relative to the max
+** `defaultColor`: color for a step when it is not specified.  Specified in HEX, e.g. `#33A02C`
+** `steps`: different threshold values and the color used to display the metric value
 
 endif::ss-ff-stackpacks2_enabled[]
