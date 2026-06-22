@@ -47,16 +47,17 @@ presentation:
                 order: 100
   metrics:
     - metricId: node-memory-bytes-available-scheduling
-      chartType: line
       name: Memory available for scheduling (Custom)
-      queries:
+      metricQueries:
       - alias: ${cluster_name} - ${node}
         expression: max_over_time(kubernetes_state_node_memory_allocatable{cluster_name="${tags['cluster-name']}", node="${name}"}[${__interval}])
-      unit: bytes(IEC)
+      chart:
+        _type: TimeSeriesChart
+        unit: bytes(IEC)
 ----
 
 In the above setting, the metric is shown in the metrics perspective; alternative locations are <<attach-the-metric-to-a-ui-location,shown below>>.
-The queries and scope section will be filled in the next steps. 
+The metricQueries section will be filled in the next steps. 
 
 [NOTE] 
 ====
@@ -91,13 +92,13 @@ The metric with all fields filled in:
 [,yaml]
 ----
 metricId: my-deployment-replica-counts
-chartType: line
-tags: {}
-unit: short
 name: Replica counts
-queries:
+metricQueries:
   - expression: max_over_time(kubernetes_state_deployment_replicas[${__interval}])
     alias: Total replicas
+chart:
+  _type: TimeSeriesChart
+  unit: short
 ----
 
 Creating it in {stackstate-product-name} and viewing the "Replica count" chart on a deployment component gives an unexpected result. The chart shows the replica counts for all deployments. Logically one would expect only one time series: the replica count for this specific deployment.
@@ -161,11 +162,8 @@ To add more queries to a metric simply repeat xref:/setup/custom-integrations/pr
 [,yaml]
 ----
 - metricId: my-deployment-replica-counts
-  chartType: line
-  tags: {}
-  unit: short
   name: Replica counts
-  queries:
+  metricQueries:
     - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
       alias: Total replicas
     - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
@@ -174,6 +172,9 @@ To add more queries to a metric simply repeat xref:/setup/custom-integrations/pr
       alias: Unavailable - ${cluster_name} - ${namespace} - ${deployment}
     - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
       alias: Desired - ${cluster_name} - ${namespace} - ${deployment}
+  chart:
+    _type: TimeSeriesChart
+    unit: short
 ----
 
 image::k8s/k8s-replica-counts-multiple-timeseries.png[Metric binding with multiple metrics]
@@ -189,12 +190,13 @@ If the multiple time series naturally correspond to other components in the syst
 ----
 - metricId: my-pod-restart-count
   name: Container restarts
-  chartType: line
   queries:
   - alias: Restarts - ${container}
     componentIdentifierTemplate: urn:kubernetes:/${cluster_name}:${namespace}:pod/${pod_name}:container/${container}
     expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags['cluster-name']}", namespace="${tags['namespace']}", pod_name="${name}"})
-  unit: short
+  chart:
+    _type: TimeSeriesChart
+    unit: short
 ----
 
 Note that the `alias` references the `container` label of the metric. Make sure the label is present on the query result, when the label is missing the `+${container}+` will be rendered as literal text to help troubleshooting.  Similarly, the `componentIdentifierTemplate` uses the other labels on the returned time series.
