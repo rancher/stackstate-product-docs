@@ -159,9 +159,9 @@ Internally, the OTel collector continuously refreshes components as telemetry ma
 When multiple sources contribute to the same component (matched by identifier), {stackstate-product-name} merges them into a single component. The merger applies per-field rules to pick the winning `name` and `typeName`:
 
 * If one side is an external-topology sync (ExtTopo) and the other is an OTel mapping, the ExtTopo side wins for `name` and `typeName` regardless of specificity.
-* Otherwise the side with the higher `specificity` wins. Ties are broken by an internal stable ordering.
+* Otherwise the side with the higher `specificity` wins.
 
-`specificity` is declared under `rank` in each `OtelComponentMapping` (as `rank.specificity`). Use a higher value to specialise a more specific mapping over a more general one for the same component identifier. Default is `0.0`; mappings without an explicit `rank` block behave as `0.0`.
+`specificity` is declared under the required `rank` block in each `OtelComponentMapping` (as `rank.specificity`). Use a higher value to specialise a more specific mapping over a more general one for the same component identifier.
 
 ==== Specificity ranges
 
@@ -190,7 +190,7 @@ The following ranges are recommended for `rank.specificity` to ensure consistent
 | User / customer overrides
 |===
 
-Higher specificity wins when multiple mappings contribute to the same component identifier. Ties are broken by an internal stable ordering. Default (when `rank` is omitted) is `0.0`.
+Higher specificity wins when multiple mappings contribute to the same component identifier.
 
 For each contributing source, the merged component additionally carries two preserved labels so the original per-source values remain queryable:
 
@@ -630,10 +630,9 @@ Component-presentation CEL contexts expose component tags as a multi-value map:
 [source]
 ----
 tags: map<string, list<string>>
-source.tags: map<string, list<string>>
 ----
 
-There is no separate `tagsAll` accessor. A tag key can have zero, one, or many values. This preserves labels from merged sources without comma-joining values, for example:
+A tag key can have zero, one, or many values, for example:
 
 [source]
 ----
@@ -649,9 +648,6 @@ ${'source-type' in tags}
 
 # Standard CEL: check whether a key exists and one of its values is present
 ${'source-type' in tags && 'pod' in tags['source-type']}
-
-# Standard CEL: same check for source-component tags
-${'source-type' in source.tags && 'pod' in source.tags['source-type']}
 ----
 
 For tag keys that are valid CEL identifiers, field selection is also supported as standard CEL shorthand for map access. It returns the list of values for the key:
