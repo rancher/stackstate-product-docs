@@ -43,80 +43,36 @@ kubectl create secret generic open-telemetry-collector \
 
 === Configure & Install the operator
 
-The operator is installed with a Helm chart, so first configure the chart repository.
+We install the operator with the Helm chart provided by the xref:https://apps.rancher.io/applications/opentelemetry-operator[SUSE Application Collection]. Please check their xref:https://docs.apps.rancher.io/get-started/authentication[authentication guide] to configure Application Collection OCI credentials in your Kubernetes cluster.
+
+By default, OpenTelemetry Operator for Kubernetes depends on cert-manager to issue and renew the self-signed certificate for the webhook component. You can install it from xref:https://docs.apps.rancher.io/reference-guides/opentelemetry-operator#install-cert-manager[Application Collection] if you don't have it installed or disable the cert-manager dependency entirely as we do in the command below.
+
+Install the operator using Application Collection image pull secret named `application-collection`:
 
 [,bash]
 ----
-helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-----
-
-Let's create an `otel-operator.yaml` file to configure the operator:
-
-.otel-operator.yaml
-[,yaml]
-----
-# Add image pull secret for private registries
-imagePullSecrets: []
-manager:
-  image:
-    # Uses chart.appVersion for the tag
-    repository: ghcr.io/open-telemetry/opentelemetry-operator/opentelemetry-operator
-  collectorImage:
-    repository: otel/opentelemetry-collector-k8s
-    # Example tag, update with the latest version
-    # Find the latest collector releases at https://github.com/open-telemetry/opentelemetry-collector-releases/releases
-    tag: 0.151.0
-  # RBAC permissions are needed for the k8sattributes processor which adds k8s attributes to telemetry data
-  createRbacPermissions: true
-  targetAllocatorImage:
-    repository: ""
-    tag: ""
-  # Only needed when overriding the image repository, make sure to always specify both the image and tag:
-  autoInstrumentationImage:
-    java:
-      repository: ""
-      tag: ""
-    nodejs:
-      repository: ""
-      tag: ""
-    python:
-      repository: ""
-      tag: ""
-    dotnet:
-      repository: ""
-      tag: ""
-    # The Go instrumentation support in the operator is disabled by default.
-    # To enable it, use the operator.autoinstrumentation.go feature gate.
-    go:
-      repository: ""
-      tag: ""
-
-admissionWebhooks:
-  # A production setup should use certManager to generate the certificate, without certmanager the certificate will be generated during the Helm install
-  certManager:
-    enabled: false
-  # The operator has validation and mutation hooks that need a certificate, with this we generate that automatically
-  autoGenerateCert:
-    enabled: true
-----
-
-
-Now install the collector, using the configuration file:
-
-[,bash]
-----
-helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+helm upgrade --install opentelemetry-operator oci://dp.apps.rancher.io/charts/opentelemetry-operator \
   --namespace open-telemetry \
-  --values otel-operator.yaml
+  --set global.imagePullSecrets={application-collection} \
+  --set manager.createRbacPermissions=true \
+  --set admissionWebhooks.certManager.enabled=false \
+  --set admissionWebhooks.autoGenerateCert.enabled=true
 ----
 
-This only installs the operator. Continue to install the collector and enable auto-instrumentation.
+The 2 `admissionWebhooks` values disable cert-manager and enable the operator to generate its own self-signed certificate for the webhook component. The `manager.createRbacPermissions` option creates the necessary RBAC permissions for the operator to manage the OpenTelemetryCollector and Instrumentation custom resources.
 
 == The Open Telemetry collector
 
 The operator manages one or more collector deployments via a Kubernetes custom resource of kind `OpenTelemetryCollector`. We'll create one using the same configuration as used in the xref:/setup/otel/getting-started/getting-started-k8s.adoc[Kubernetes getting started guide].
 
-It uses the secret created earlier in the guide. Make sure to replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
+To be able to pull the Collector image from Application Collection, you first need to define a service account with the imagePullSecrets attribute to be able to pull images from Application Collection and attach it to the Collector CR via the spec.serviceAccount attribute:
+
+```
+kubectl create serviceaccount otel-collector
+kubectl patch serviceaccount otel-collector --patch '{"imagePullSecrets": [{"name": "application-collection"}]}'
+```
+
+Make sure to replace `<otlp-suse-observability-endpoint:port>` with your OTLP endpoint (see xref:/setup/otel/otlp-apis.adoc[OTLP API] for your endpoint) and insert the name for your Kubernetes cluster instead of `<your-cluster-name>`:
 
 [IMPORTANT]
 ====
@@ -141,8 +97,7 @@ spec:
   envFrom:
   - secretRef:
       name: open-telemetry-collector
-  # optional service-account for pulling the collector image from a private registries
-  # serviceAccount: otel-collector
+  serviceAccount:  otel-collector
   config:
     receivers:
       otlp:
@@ -252,12 +207,10 @@ spec:
                     port: 8888
 ----
 
-
 [CAUTION]
 ====
 *Use the same cluster name as used for installing the SUSE Observability agent* if you also use the SUSE Observability agent with the Kubernetes stackpack. Using a different cluster name will result in an empty traces perspective for Kubernetes components and will overall make correlating information much harder for SUSE Observability and your users.
 ====
-
 
 Now apply this `collector.yaml` in the `open-telemetry` namespace to deploy a collector:
 
@@ -266,7 +219,7 @@ Now apply this `collector.yaml` in the `open-telemetry` namespace to deploy a co
 kubectl apply --namespace open-telemetry -f collector.yaml
 ----
 
-The collector offers a lot more configuration receivers, processors and exporters, for more details see our xref:/setup/otel/collector.adoc[collector page]. For production usage often large amounts of spans are generated and you will want to start setting up xref:/setup/otel/sampling.adoc[sampling].
+The collector offers a lot more options for receivers, processors, and exporters. For more details see our xref:/setup/otel/collector.adoc[collector page]. For production usage often large amounts of spans are generated and you will want to start setting up xref:/setup/otel/sampling.adoc[sampling]. 
 
 == Auto-instrumentation
 
@@ -276,7 +229,7 @@ Now we need to tell the operator how to configure the auto instrumentation for t
 
 It can be defined in a single place and used by all pods in the cluster, but it is also possible to have a different `Instrumentation` in each namespace. We'll be doing the former here. Note that if you used a different namespace or a different name for the otel collector the endpoint in this file needs to be updated accordingly.
 
-Create an `instrumentation.yaml`:
+Create an `instrumentation.yaml` (you can remove all the languages that you don't need) with the following content:
 
 .instrumentation.yaml
 [,yaml]
@@ -310,42 +263,35 @@ spec:
       # Go autoinstrumentation uses http/proto by default, so data must be sent to 4318 instead of 4317.
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://otel-collector-collector.open-telemetry.svc.cluster.local:4318
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
 ----
 
 
-Now apply the `instrumentation.yaml` also in the `open-telemetry` namespace:
+Now apply the `instrumentation.yaml` in the namespace of your application:
 
 [,bash]
 ----
-kubectl apply --namespace open-telemetry -f instrumentation.yaml
+kubectl apply -f instrumentation.yaml
 ----
 
-=== Enable auto-instrumentation for a pod
+Go auto-instrumentation uses eBPF and needs to be enabled on the operator. To enable it (re)deploy the operator with `--set manager.autoInstrumentation.go.enabled=true`:
 
-To instruct the operator to auto-instrument your applicaction pods we need to add an annotation to the pod:
-
-* Java: `instrumentation.opentelemetry.io/inject-java: open-telemetry/otel-instrumentation`
-* NodeJS: `instrumentation.opentelemetry.io/inject-nodejs: open-telemetry/otel-instrumentation`
-* Python: `instrumentation.opentelemetry.io/inject-python: open-telemetry/otel-instrumentation`
-* Go: `instrumentation.opentelemetry.io/inject-go: open-telemetry/otel-instrumentation`
-
-Note that the value of the annotation refers to the namespace and name of the `Instrumentation` resource that we created. Other options are:
-
-* "true" - inject and `Instrumentation` custom resource from the namespace.
-* "my-instrumentation" - name of `Instrumentation` custom resource in the current namespace.
-* "my-other-namespace/my-instrumentation" - namespace and name of `Instrumentation` custom resource in another namespace.
-* "false" - do not inject
-
-When a pod with one of the annotations is created the operator modifies the pod via a mutation hook:
-
-* It adds an init container that provides the auto-instrumentation library
-* It modifies the first container of the pod to load the instrumentation during start up and it adds environment variables to configure the instrumentation
-
-If you need to customize which containers should be instrumented use the https://github.com/open-telemetry/opentelemetry-operator?tab=readme-ov-file#_multi_container_pods_with_multiple_instrumentations[operator documentation].
+[,bash]
+----
+helm upgrade --install opentelemetry-operator oci://dp.apps.rancher.io/charts/opentelemetry-operator \
+  --namespace open-telemetry \
+  --set global.imagePullSecrets={application-collection} \
+  --set manager.createRbacPermissions=true \
+  --set admissionWebhooks.certManager.enabled=false \
+  --set admissionWebhooks.autoGenerateCert.enabled=true \
+  --set manager.autoInstrumentation.go.enabled=true
+----
 
 [CAUTION]
 ====
-Go auto-instrumentation requires elevated permissions. These permissions are set automatically by the operator:
+Go auto-instrumentation requires elevated permissions. These permissions are set automatically by the operator when opting into Go auto-instrumentation:
 
 [,yaml]
 ----
@@ -356,6 +302,39 @@ securityContext:
 
 ====
 
+
+=== Enable auto-instrumentation for a pod
+
+To instruct the operator to auto-instrument your application pods we need to add an annotation to the pod:
+
+* Java: `instrumentation.opentelemetry.io/inject-java: true`
+* NodeJS: `instrumentation.opentelemetry.io/inject-nodejs: true`
+* Python: `instrumentation.opentelemetry.io/inject-python: true`
+* Go: `instrumentation.opentelemetry.io/inject-go: true`
+
+Note that the value of the annotation refers to the namespace and name of the `Instrumentation` resource that we created. Other options are:
+
+* "true" - inject and use the `Instrumentation` custom resource from the same namespace.
+* "my-instrumentation" - name of an `Instrumentation` custom resource in the current namespace, use this if you have multiple `Instrumentation` resources in the same namespace.
+* "my-other-namespace/my-instrumentation" - namespace and name of `Instrumentation` custom resource in another namespace.
+* "false" - do not inject
+
+When a pod with one of the annotations is created the operator modifies the pod via a mutation hook:
+
+* It adds an init container that provides the auto-instrumentation library
+* It modifies the first container of the pod to load the instrumentation during start up and it adds environment variables to configure the instrumentation
+
+Application Collection only provides the instrumentation image for Go, for other languages the operator will fallback to the upstream Open Telemetry instrumentation images. To be able to pull the extra image the application that is going to be auto-instrumented must have the credentials to pull images from Application Collection.
+
+Example for auto-instrumenting Alertmanager with Go auto-instrumentation.
+
+[,bash]
+----
+kubectl run alertmanager --image quay.io/prometheus/alertmanager --port 9093 \
+    --overrides='{"spec": {"imagePullSecrets":[{"name": "application-collection"}]}}' \
+    --annotations=instrumentation.opentelemetry.io/inject-go=true \
+    --annotations=instrumentation.opentelemetry.io/otel-go-auto-target-exe=/bin/alertmanager
+----
 
 == View the results
 
@@ -372,7 +351,7 @@ For xref:/setup/security/rbac/rbac_rancher.adoc[Rancher RBAC] to work, telemetry
 * `k8s.cluster.name` - the *Cluster* name as used by the Kubernetes stackpack
 * `k8s.namespace.name` - a *Namespace* managed by a Rancher *Project*
 
-The Kubernetes Operator will inject these attributes by default into any telemetry data that is sent.
+The collector will inject these attributes by default into any telemetry data that is sent with the example configuration that is provided.
 
 == Next steps
 
@@ -392,4 +371,6 @@ The operator, the `OpenTelemetryCollector`, and the `Instrumentation` custom res
 * xref:/setup/otel/otlp-apis.adoc[Open Telemetry API]
 * xref:/setup/otel/collector.adoc[Customizing Open Telemetry Collector configuration]
 * xref:/setup/otel/instrumentation/README.adoc[Open Telemetry SDKs]
-* https://github.com/open-telemetry/opentelemetry-operator[Open Telemetry Operator]
+* xref:https://opentelemetry.io/docs/platforms/kubernetes/operator/[Open Telemetry Operator]
+* xref:https://opentelemetry.io/docs/platforms/kubernetes/operator/automatic/[Open Telemetry Operator auto-instrumentation]
+* xref:https://docs.apps.rancher.io/reference-guides/opentelemetry-operator[Open Telemetry Operator reference guide from SUSE Application Collection]
