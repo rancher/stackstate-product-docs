@@ -83,6 +83,7 @@ arguments:
 
 * `componentTypes`: The component types that contribute to derived states.  Specified as a single string of `,` (comma) separated values
 
+[#topological-threshold]
 === Topological Threshold
 
 Triggers a health state when a given threshold is exceeded for a specified metric query. The metric query can reference the name, tags and properties from the components returned by the topology query. Different thresholds can be set on particular resources with the xref:/use/alerting/k8s-override-monitor-arguments.adoc[help of annotations].
@@ -112,6 +113,7 @@ arguments:
 * `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in {stackstate-product-name} and "DEVIATING" as orange, to denote different severity.
 * `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
 
+[#dynamic-threshold]
 === Dynamic Threshold
 
 Alerts when the current value is outside the predicted baseline interval, which is dynamically calculated based on historical data, taking into account weekly and daily seasonal patterns.
@@ -147,5 +149,29 @@ arguments:
 * `historySizeWeeks`: say `2` - the number of weeks that data is taken from for historic context.  Can be `1`, `2` or `3`.
 * `removeTrend`: for metrics that have trend behavior (say, number of requests), such that the absolute value differs from week to week, this trend (the average value) can be accounted for.
 * `includePreviousDay`: typically `false` - for metrics that do not have a weekly but only a daily pattern, this allows the use of more recent data
+
+== PromQL interpolation
+
+When a <<topological-threshold>> or <<dynamic-threshold>> monitor function is used, the PromQL query is interpolated.  Example:
+
+[,bash]
+----
+the_metric{namespace="${tags.namespace}",ip="${properties.ip_address}"}
+----
+
+For each component that matches the topology query, these variables are available:
+
+[cols="1,1,3"]
+|===
+|Variable               | Type                | Description
+
+|name                   | string              | The name of the component
+|type                   | string              | The type of the component
+|layer                  | string              | The layer of the component
+|domain                 | string              | The domain of the component
+|tags                   | map<string,string>  | Labels of the component, in key-value pairs
+|properties             | map<string,dyn>     | Properties of the component
+|===
+
 
 endif::ss-ff-stackpacks2_enabled[]

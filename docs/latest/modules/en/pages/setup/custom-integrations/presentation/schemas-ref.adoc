@@ -1,0 +1,251 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Component Presentation Schema
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: Component Presentation Schema
+
+[IMPORTANT]
+====
+*Status:* Under active development.
+
+*Availability:* Behind the StackPacks 2.0 feature flag. Refer to xref:/setup/custom-integrations/overview.adoc[Custom Integrations Overview] on how to enable the feature.
+
+This documentation describes the current design intent and high-level configuration surface.
+
+Note: no behavior and capabilities have been implemented yet.
+
+As this feature is under active development; behavior, schemas, and capabilities may change as the model evolves.
+====
+
+== Overview
+
+This page documents the configuration schema used by the UI Presentation model.
+It is intended as a reference for authors defining UI presentation behavior.
+
+All schemas described here are part of *StackPacks 2.0* and are under active development.
+
+== UI pages populated by `ComponentPresentation`
+
+See the following screenshots to get an idea of which pages and UI elements on the respective pages the `ComponentPresentation` configuration pertains to.
+
+=== Component Overview Page
+
+In the schema reference below, see the `overview` section.
+
+image:custom-integrations/presentation/ui_presentation_schema_ref_overview_page.png[Overview page]
+
+=== Component Highlight Page
+
+In the schema reference below, see the `highlight` section.
+
+image:custom-integrations/presentation/ui_presentation_schema_ref_highlight_page.png[Highlight page]
+
+== ComponentPresentation
+
+A `ComponentPresentation` defines how matching components are presented in the UI
+for a given mode and context.
+
+[,yaml]
+----
+type: ComponentPresentation
+identifier: urn:...:component-presentation:<presentation-name>
+name: string
+description: string           # Optional description
+
+binding:
+  query: string               # Primitive STQL query that defines to which components does the presentation applies to
+
+rank:
+  specificity: number         # Higher values indicate more specific definitions
+
+presentation:
+  icon: !icon path            # Optional icon
+
+  topology:                   # Optional - controls how matching components show up in the topology view
+    layer:                    # Optional - layer assigned to matching components
+      name: string            # Layer name (free-form; the same name across presentations resolves to a single layer)
+      order: number           # Vertical ordering of the layer in the view (higher numbers come first)
+    domain:                   # Optional - domain assigned to matching components (same shape as layer)
+      name: string
+      order: number
+    groupedByLayers: boolean         # Optional - default grouping toggle
+    groupedByDomains: boolean        # Optional - default grouping toggle
+    groupingEnabled: boolean         # Optional
+    minimumGroupSize: number         # Optional
+    autoGrouping: boolean            # Optional
+    connectedComponents: boolean     # Optional
+    showIndirectRelations: boolean   # Optional
+
+  overview:                   # Optional overview page configuration
+    name:                     # Naming configuration
+      plural: string
+      singular: string
+      title: string
+
+    mainMenu:                 # Optional main menu entry
+      group: string           # Name of an existing MainMenuGroup
+      order: number           # Order in the group - higher numbers come first
+      icon: !icon path        # Optional reference to icon
+
+    fixedColumns: number      # Optional number of columns that remain fixed when scrolling horizontally
+    columns:
+      - columnId: string      # identifier for the column, to be aligned with more specific/generic presentations
+        title: string         # Optional
+        projection:           # Optional Projection
+          _type: string
+          ...                 # Additional properties dependent on projection type
+
+    sort:                     # Optional default sort order
+      - columnId: string      # References a column defined in `columns`
+        direction: string     # Optional - Ascending (default) or Descending
+
+  highlight:                                      # Optional highlight page configuration
+    title: string
+    fields:
+      - fieldId: string
+        title: string
+        description: string                       # Optional
+        order: number                             # Order in the about section - higher numbers come first
+        projection:                               # Optional Projection - when absent, a field defined in a more generic presentation is suppressed
+          _type: string
+          ...                                     # Additional properties dependent on projection type
+    relatedResources:                             # Optional - related resources to display
+      - resourceId: string                        # Stable identity key for merging
+        title: string                             # Section heading in the UI
+        order: number                             # Display order - higher numbers come first
+        topologyQuery: string                     # Optional - STQL query template with ${CEL_EXPRESSION} placeholders
+        presentationIdentifier: string            # Optional - references a ComponentPresentation by identifier
+    provisioning:                                 # Optional section to specify how provisioning details are shown
+      topologySourceSelector: cel:boolean          # Optional predicate to select the source component with provisioning details
+      showConfiguration: boolean                  # Optional - should provisioning configuration be accessible
+      showStatus: boolean                         # Optional - should provisioning status be accessible
+    events:                                       # Optional section to configure events
+      showEvents: boolean                         # Should events be shown
+      relatedResourcesQuery: cel:string           # Optional - topology query for components to include
+      excludeRelatedResourcesQuery: cel:string    # Optional - topology query for components to exclude of events
+    metrics:
+      - sectionId: string
+        title: string
+        order: double
+        metrics:
+          - metricId: string
+            order: double
+            ...
+
+  summary:
+    metrics:
+      - metricId: string
+        order: double
+        ...
+
+  metricPerspective:
+    tabs:
+      - tabId: string
+        title: string
+        order: double
+        sections:
+          - sectionId: string
+            title: string
+            order: double
+            metrics:
+              - metricId: string
+                order: double
+                ...
+
+  filters:                    # Optional overview filters
+    - filterId: string
+      displayName:            # Optional - name in the menu
+        singular: string
+        plural: string
+      menuSection: string     # Optional - section for the menu item
+      filter:                 # Optional Filter
+        _type: string
+        ...
+
+  metrics:
+    - metricId: string
+      name: string
+      description?: string
+      metricQueries:
+        - expression: string                # promql query
+          alias: string                     # name in legend
+          componentIdentifierTemplate?: string    # URN template for linking
+          primary?: boolean                 # is this query the primary one
+      chart?:
+        _type: 'TimeSeriesChart' | 'BarChart' | 'GaugeChart' | 'StatChart'
+        unit?: string
+        decimals?: integer
+        ...                                 # depends on chart type
+----
+
+=== Identifier
+
+Identifiers should follow the {stackstate-product-name} identifier (i.e., `urn:...:<type>:<name>`) format. Refer to xref:/configure/topology/identifiers.adoc[identifiers] documentation for more information.
+
+=== Binding
+
+The binding determines which components a `ComponentPresentation` applies to.  Bindings are evaluated against component data and must be simple and efficient, as they are used during UI evaluation.
+
+Currently supported `binding` type:
+
+* `ComponentPresentationQueryBinding`: a simple STQL query (refer to the xref:/develop/reference/k8sTs-stql_reference.adoc[STQL] for more information).  All field-based selectors (labels, layer, domain, identifiers, health state and name) are available, as is boolean logic to combine them.  Only graph traversal (`withNeighborsOf`) is not allowed.
+
+For overview pages, the set of `ComponentPresentations` that can contribute columns is determined on a query level.  When there is a logical possibility for a component to match the overview query, but not the query for a particular `ComponentPresentation`, that presentation will not be considered.
+
+=== Rank
+
+The `rank` section controls how multiple matching `ComponentPresentation` definitions are combined.
+
+It reflects how far down the resource hierarchy a presentation applies: from global/shared context to highly specific workload instances.  Higher specificity values indicate more specialized definitions and take precedence over lower values when composing presentation behavior.
+
+Values are user-defined but should generally increase as bindings become more specific along the resource hierarchy; the ranges below are guidelines, not enforced rules.
+
+[cols="1,1"]
+|===
+| Range   | Use
+
+| 0       | Universal base (`common`)
+| 1–99    | Environment & infrastructure (cloud, account, cluster)
+| 100–199 | Platform & orchestration (k8s, otel base)
+| 200–299 | Application / service
+| 300–399 | Runtime / SDK / language 
+| 400+    | User / customer overrides 
+|===
+
+== Presentation sections
+
+All fields under `presentation` are optional. A `ComponentPresentation` may define only a subset of presentation aspects.
+
+Presentation sections are composed when multiple definitions apply to the same component.
+
+=== Icon and name
+
+Defines iconography and naming used across the UI.  Icons can be included by using the `!icon` yaml tag, followed by the path of an icon relative to the `icons/` folder.
+E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the file `icons/services/main-menu.svg`.
+
+=== Topology grouping (layer & domain)
+
+`topology.layer` and `topology.domain` place matching components in the topology view's layers and domains.
+Both have the same shape: a `name` (used as the label) and an `order` (used to position it vertically — higher numbers come first).
+
+When multiple presentations match a component, the *most-specific* one (highest `rank.specificity`) contributes its `topology.layer` / `topology.domain`.
+If no matching presentation provides one, the component shows up under `unknown`.
+
+Two notes worth keeping in mind:
+
+* *Specificity decides per component, not order.* A less-specific presentation cannot override a more-specific one by declaring a higher `order`.
+* When several components contribute different orders for the *same* layer or domain name, the snapshot reports the *highest* order across them.  This keeps the vertical position stable regardless of which component is queried first.
+
+=== Other sections
+
+Other sections of the presentation are described separately:
+
+* xref:/setup/custom-integrations/presentation/overview.adoc[Overview]
+* xref:/setup/custom-integrations/presentation/highlight.adoc[Highlight]
+* xref:/setup/custom-integrations/presentation/metrics/summary.adoc[Summary]
+* xref:/setup/custom-integrations/presentation/metrics/perspective.adoc[Metric Perspective]
+* xref:/setup/custom-integrations/presentation/overview.adoc#filters[Filters]
+* xref:/setup/custom-integrations/presentation/metrics/README.adoc[Metrics]
+
+endif::ss-ff-stackpacks2_enabled[]

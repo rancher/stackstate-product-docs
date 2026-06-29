@@ -1,0 +1,62 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Presentation Interpolation
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-05-11
+:page-revdate: {revdate}
+:description: Component Presentation Schema
+
+== Interpolation
+
+When defining Component Presentations, a couple of different types of expressions are used.  When selecting a value to xref:/setup/custom-integrations/presentation/projections.adoc[project] in a highlight field, a CEL expression can be used.
+
+[#cel_context]
+=== CEL expression
+
+CEL expressions are evaluated in an environment representing the component.  This is the case on most projections in highlight fields or overview columns, or in metrics.  The following variables are available.  Example:
+
+[,bash]
+----
+'service.namespace' in resource.attributes ?  resource.attributes['service.namespace'] : 'default'
+----
+
+[cols="1,1,3"]
+|===
+|Variable               | Type                | Description
+
+|name                   | string              | The name of the component
+|typeName               | string              | The type of the component
+|identifiers            | list<string>        | Identifiers of the component
+|tags                   | map<string,string>  | Labels of the component, in key-value pairs
+|properties             | map<string,dyn>     | Properties of the component
+|healthState            | string              | One of the supported health states (CLEAR, DEVIATING, CRITICAL, UNKNOWN)
+|lastUpdateTimestamp    | uint                | Timestamp of last update, in milliseconds since epoch
+|===
+
+==== CEL provisioning expression
+
+When selecting an source component to provide configuration and status details, the `source` variable is available.  Example:
+
+[,bash]
+----
+external.mapping.identifier == 'service-instance'
+----
+
+[cols="2,1,2"]
+|===
+|Variable                       | Type                | Description
+
+|source.identifier            | string              | An identifier unique to the source component
+|source.tags                  | map<string,string>  | Tags contributed by the source component
+|source.configuration         | map<string,dyn>     | Configuration of the (external) component
+|source.mapping.identifier    | string              | The identifier of the OTEL component mapping (empty when not applicable)
+|source.mapping.name          | string              | The name of the OTEL component mapping (empty when not applicable)
+|source.topologySync.identifier | string            | The identifier of the topology sync (empty when not applicable)
+|source.topologySync.name     | string              | The name of the topology sync (empty when not applicable)
+|source.selectorProperties    | map<string,dyn>     | Additional properties published by the topology source for selection purposes
+|===
+
+=== Variable expression
+
+When the available variables are dependent on a query, straightforward variable interpolation is possible.  This is the case when dealing with time series returned by a PromQL query (the `alias` and `componentIdentifierTemplate` fields).
+
+endif::ss-ff-stackpacks2_enabled[]
