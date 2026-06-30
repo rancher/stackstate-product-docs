@@ -1,0 +1,77 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= OpenTelemetry pipeline
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-06-16
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+The SUSE Observability Agent ships with an OpenTelemetry Collector that supplements the existing agent components. It is the recommended path for ingesting telemetry from any workload that already speaks OTLP or exposes a Prometheus / OpenMetrics endpoint, and lets you consolidate metrics, traces and logs into the SUSE Observability pipeline without running a separate collector.
+
+The OTel pipeline covers two tracks, each implemented by its own sub-component and independently toggleable:
+
+* *Telemetry gateway* (`otel.telemetryGateway`) — receives *metrics and traces* pushed over OTLP from application-embedded OpenTelemetry SDKs and forwards them to SUSE Observability. This is the recommended path for natively instrumented workloads. Point your SDKs at the `suse-observability-telemetry-gateway` service in the agent's namespace on port `4317` (gRPC) or `4318` (HTTP).
+* *Prometheus / OpenMetrics scraping* (`otel.prometheusScraping`) — discovers `ServiceMonitor` and `PodMonitor` Custom Resources, scrapes the targets they describe, and ships the resulting *metrics* over OTLP. This track is metrics-only; use it for workloads that expose a Prometheus / OpenMetrics endpoint but are not instrumented with an OTel SDK. See xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor] for the full how-to.
+
+== Default state
+
+The OTel pipeline is *disabled by default* in the current release. To turn it on, set the master switch in your agent Helm values:
+
+[,yaml]
+----
+otel:
+  enabled: true
+  prometheusScraping:
+    monitorCrds:
+      # Leave at the default, false, if the SerivceMonitor and PodMonitor CRDs 
+      # are already managed by another chart (for example kube-prometheus-stack) or 
+      # if you want to install them manually.
+      enabled: true
+----
+
+[NOTE]
+====
+With the official release of stackpacks 2, the default will flip to `otel.enabled: true`. Once that happens, no action is needed to start using the pipeline.
+====
+
+== Opting out (after the default flips)
+
+Once `otel.enabled` defaults to `true`, you can opt out at two levels:
+
+* Disable the entire OTel pipeline (no collector, no telemetry gateway, no scraper):
++
+[,yaml]
+----
+otel:
+  enabled: false
+----
+* Keep OTel enabled but disable individual sub-pipelines. Each track has its own `enabled` toggle:
++
+[,yaml]
+----
+otel:
+  enabled: true
+  telemetryGateway:
+    enabled: false    # stop accepting OTLP push from SDKs
+  prometheusScraping:
+    enabled: false    # stop scraping ServiceMonitor / PodMonitor targets
+----
+
+== Resource impact
+
+When enabled, the OTel pipeline can add up to three workloads, depending on which sub-pipelines are turned on:
+
+* A *telemetry gateway* OpenTelemetry Collector (when `otel.telemetryGateway.enabled=true`) that terminates the OTLP push receiver and forwards metrics and traces to SUSE Observability.
+* A *scraper* OpenTelemetry Collector (when `otel.prometheusScraping.enabled=true`) that scrapes the targets selected by the Target Allocator.
+* A *Target Allocator* (when `otel.prometheusScraping.enabled=true`) that watches `ServiceMonitor` / `PodMonitor` resources and distributes scrape targets across the scraper collectors.
+
+All three have conservative CPU and memory requests / limits that can be tuned in the agent Helm values under `otel.telemetryGateway`, `otel.prometheusScraping.collector`, and `otel.prometheusScraping.targetAllocator`. Refer to the agent Helm chart `values.yaml` for the full set of knobs.
+
+== See also
+
+* xref:/k8s-quick-start-guide.adoc[Agent quick start guide]
+* xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor]
+* xref:/setup/otel/concepts.adoc[OpenTelemetry concepts]
+* xref:/setup/otel/troubleshooting.adoc[OpenTelemetry troubleshooting]
+endif::ss-ff-stackpacks2_enabled[]

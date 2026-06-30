@@ -12,10 +12,11 @@ SUSE Observability can observe connections between services and pods in differen
 
 Request tracing is done by injecting a unique header (the `X-Request-ID` header) into all HTTP traffic. This unique header is observed at both client and server through an eBPF probe installed with the SUSE Observability Agent. These observations are sent to SUSE Observability, which uses the observations to understand which clients and server are connected.
 
-The `X-Request-Id` headers are <<_enabling_the_trace_header_injection_sidecar,injected>> by a sidecar proxy that can be automatically injected by the SUSE Observability Agent. The sidecar gets injected by a https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#_mutatingadmissionwebhook[mutating webhook], which injects the sidecar into every pod for which the `http-header-injector.stackstate.io/inject: enabled` annotation is defined. Sidecar injection is not supported on OpenShift.
+The `X-Request-Id` headers are <<enabling-the-trace-header-injection-sidecar,Enabling the trace header injection sidecar>> by a sidecar proxy that can be automatically injected by the SUSE Observability Agent. The sidecar gets injected by a https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#_mutatingadmissionwebhook[mutating webhook], which injects the sidecar into every pod for which the `http-header-injector.stackstate.io/inject: enabled` annotation is defined. Sidecar injection is not supported on OpenShift.
 
-It's also possible to add the `X-Request-Id` header if your application <<_add_the_trace_header_id_to_an_existing_proxy,already has a proxy or LoadBalancer>>, is deployed to an <<_add_the_trace_header_id_with_envoy_filter,Istio service mesh>> enabled Kubernetes cluster or through <<_instrument_your_application,instrumenting your own code>>. Advantage of this is that the extra sidecar proxy isn't needed.
+It is also possible to add the `X-Request-Id` header if your application <<add-the-trace-header-id-to-an-existing-proxy,already has a proxy or LoadBalancer>>, is deployed to an <<add-the-trace-header-id-with-envoy-filter,Istio service mesh>> enabled Kubernetes cluster or through <<instrument-your-application,instrumenting your own code>>. Advantage of this is that the extra sidecar proxy is not needed.
 
+[#enabling-the-trace-header-injection-sidecar]
 == Enabling the trace header injection sidecar
 
 Enabling trace header injection is a two-step process:
@@ -48,8 +49,9 @@ If step 1 is skipped and only the mutating webhook is disabled, all pods need a 
 
 === Overhead
 
-Request tracing adds a small, fixed amount of CPU overhead for each HTTP request header that gets injected and observed. The exact amount is dependent on the system that it's ran on, so it's advised to enable this feature first in an acceptance environment to observe the impact before moving to production. The sidecar proxy takes a minimum of 25Mb of memory per pod it's deployed with, up to a maximum of 40Mb.
+Request tracing adds a small, fixed amount of CPU overhead for each HTTP request header that gets injected and observed. The exact amount is dependent on the system that it is ran on, so it is advised to enable this feature first in an acceptance environment to observe the impact before moving to production. The sidecar proxy takes a minimum of 25Mb of memory per pod it is deployed with, up to a maximum of 40Mb.
 
+[#add-the-trace-header-id-to-an-existing-proxy]
 == Add the trace header id to an existing proxy
 
 To add the `X-Request-Id` header from an existing proxy, two properties are important:
@@ -65,6 +67,7 @@ In envoy, the `X-Request-Id` header can be enabled by setting `generate_request_
 
 An https://istio.io/latest/docs/reference/config/networking/envoy-filter/[Envoy Filter] can be used to set the trace header for Envoy.
 
+[#add-the-trace-header-id-with-envoy-filter]
 === Add the trace header id with envoy filter
 
 Use `kubectl` to apply the following definition to the Kubernetes cluster,
@@ -97,9 +100,10 @@ spec:
   priority: 0
 ----
 
+[#instrument-your-application]
 == Instrument your application
 
-It's also possible to add the `X-Request-Id` header form either the client side to each request, or on the server side to each response. It's important to ensure each request/response gets a unique `X-Request-Id` value. Also, the `X-Request-Id` requires that if an ID is already present in a request, the response should contain that same ID.
+It is also possible to add the `X-Request-Id` header form either the client side to each request, or on the server side to each response. It is important to ensure each request/response gets a unique `X-Request-Id` value. Also, the `X-Request-Id` requires that if an ID is already present in a request, the response should contain that same ID.
 
 == Supported systems/technologies
 
