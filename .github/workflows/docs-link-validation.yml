@@ -1,0 +1,98 @@
+name: "Docs- Link validation & dead links check"
+
+on:
+  pull_request:
+    paths:
+      - '**/*.adoc'
+
+jobs:
+  # JOB 1: Verify AsciiDoc Link Syntax (for inter & intra-page links)
+  syntax-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Changed Files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: '**/*.adoc'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Inline script to enforce the explicit syntax rules
+      - name: Validate Link Syntax
+        run: |
+          cat << 'EOF' > syntax_check.py
+          import re
+          import sys
+          import json
+
+          changed_files = json.loads('${{ steps.changed-files.outputs.all_changed_files }}')
+          errors_found = False
+
+          # Regex patterns based on Jira 1 requirements & syntax corrections
+          markdown_pattern = re.compile(r'\[.+\]\(.+\)') # Catches standard Markdown links
+          legacy_internal = re.compile(r'link:[^http].+\.adoc\[') # Catches link:page.adoc[]
+          bad_intra_page = re.compile(r'xref:#') # Catches xref used for internal anchors
+          leading_slash_xref = re.compile(r'xref:/') # NEW: Catches incorrect leading slashes
+
+          for file_path in changed_files:
+              try:
+                  with open(file_path, 'r', encoding='utf-8') as f:
+                      for line_num, line in enumerate(f, 1):
+                          # 1. Block Markdown links
+                          if markdown_pattern.search(line):
+                              print(f"::error file={file_path},line={line_num}::Do not use Markdown syntax. Use AsciiDoc syntax.")
+                              errors_found = True
+                          
+                          # 2. Enforce inter-page linking uses 'xref:' instead of 'link:'
+                          if legacy_internal.search(line):
+                              print(f"::error file={file_path},line={line_num}::Inter-page links must use 'xref:file_path[title]' syntax, not 'link:'.")
+                              errors_found = True
+
+                          # 3. Enforce intra-page linking uses explicit anchors <<anchor>>
+                          if bad_intra_page.search(line):
+                              print(f"::error file={file_path},line={line_num}::Intra-page section links must use '<<anchor_id, title>>' syntax, not 'xref:#'.")
+                              errors_found = True
+
+                          # 4. Enforce no leading slash after xref:
+                          if leading_slash_xref.search(line):
+                              print(f"::error file={file_path},line={line_num}::Do not use a leading slash after xref:. Use 'xref:file_path[title]'.")
+                              errors_found = True
+              except FileNotFoundError:
+                  continue
+
+          if errors_found:
+              sys.exit(1)
+          print("All changed files passed syntax checks successfully.")
+          EOF
+          python syntax_check.py
+
+  # JOB 2: Check Dead Links against every PR (only modified files in PRs)
+  link-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Changed Files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: '**/*.adoc'
+          separator: ' '
+
+      # Lychee is used here to parse the modified files for both internal paths and external URLs
+      - name: Link Checker (Lychee)
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: lycheeverse/lychee-action@v2.0.2
+        with:
+          # Pass only the changed files space-separated
+          args: --verbose --max-concurrency 10 --retry-wait-time 5 ${{ steps.changed-files.outputs.all_changed_files }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
