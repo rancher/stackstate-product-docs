@@ -1,0 +1,224 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Telemetry gateway
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-06-30
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+The *telemetry gateway* is an OpenTelemetry Collector component in the SUSE Observability Agent that accepts metrics and traces pushed over OTLP from application-embedded OpenTelemetry SDKs. It enriches the data with Kubernetes metadata and forwards it to the SUSE Observability platform. The gateway includes a logs pipeline for future compatibility, but OTLP log ingestion is not supported by the platform yet.
+
+Use the telemetry gateway when your workloads are instrumented with an OTel SDK (Java, Go, Python, Node.js, etc.) and export telemetry using OTLP. It is the recommended integration path for natively instrumented services.
+
+[TIP]
+====
+If your workloads expose a Prometheus / OpenMetrics endpoint instead, see xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor].
+====
+
+== Enable
+
+The telemetry gateway is disabled by default. Enable it in your agent Helm values alongside the OTel master switch:
+
+[,yaml]
+----
+otel:
+  enabled: true
+  telemetryGateway:
+    enabled: true
+----
+
+After the Helm upgrade, a Deployment named `{release}-otel-telemetry-gateway` is created in the agent namespace, along with a ClusterIP Service, ClusterRole, and ServiceAccount.
+
+== Configure your SDKs
+
+Point your application SDKs at the telemetry gateway Service. The default Service name is `{release}-otel-telemetry-gateway` in the agent namespace (both default to `suse-observability-agent`).
+
+Set the following environment variables on each application pod. Most OTel SDKs pick these up automatically at startup without any code changes.
+
+[NOTE]
+====
+Log ingestion via OTLP is not yet supported. Set `OTEL_LOGS_EXPORTER=none` to suppress log export errors in your SDK.
+====
+
+=== gRPC (port 4317)
+
+[,bash]
+----
+OTEL_EXPORTER_OTLP_ENDPOINT=http://suse-observability-agent-otel-telemetry-gateway.suse-observability-agent.svc.cluster.local:4317
+OTEL_TRACES_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=none
+OTEL_SERVICE_NAME=<your-service-name>
+OTEL_RESOURCE_ATTRIBUTES=k8s.pod.uid=$(POD_UID)
+----
+
+=== HTTP (port 4318)
+
+[,bash]
+----
+OTEL_EXPORTER_OTLP_ENDPOINT=http://suse-observability-agent-otel-telemetry-gateway.suse-observability-agent.svc.cluster.local:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_TRACES_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=none
+OTEL_SERVICE_NAME=<your-service-name>
+OTEL_RESOURCE_ATTRIBUTES=k8s.pod.uid=$(POD_UID)
+----
+
+Inject `POD_UID` via the Kubernetes downward API:
+
+[,yaml]
+----
+env:
+  - name: POD_UID
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.uid
+----
+
+== Attribute ownership (security enforcement)
+
+The collector *overwrites* the following attributes on every received payload, regardless of what the client sends. Clients must not be trusted for these values; the collector queries the Kubernetes API for the authoritative values. This prevents a misbehaving or compromised workload from forging cluster or namespace identity.
+
+* `k8s.cluster.name` — set from the agent Helm release configuration
+* `k8s.namespace.name` — set from the Kubernetes API using the source pod's identity
+
+Attributes that applications *must* set:
+
+* `service.name` — the logical name of your service
+* `service.version` — the deployed version
+* `deployment.environment` — e.g. `production` or `staging`
+* `k8s.pod.uid` — recommended; inject via the downward API (see above) for reliable pod association. The collector also falls back to `k8s.pod.ip` and connection source address, but downward API injection is the most reliable method and should be preferred.
+
+== Span metrics
+
+The gateway automatically generates span metrics (request rate, error rate, duration histograms) from incoming traces using the `span_metrics` connector. The generated metrics use the `otel_span` namespace and follow OTel semantic conventions:
+
+* Attribute `span.name` (was `operation` in the legacy `spanmetrics` processor)
+* Histogram name `otel_span.duration` (was `latency`)
+* Counter without `_total` suffix
+
+These metrics are forwarded to SUSE Observability alongside your application metrics and can be used to build golden-signal dashboards without any additional instrumentation.
+
+== Operational monitoring
+
+The gateway exposes standard OpenTelemetry Collector self-metrics on its internal Prometheus endpoint (`:8888`). These include signals such as exporter failures, refused data, process memory, and pipeline throughput. The gateway scrapes its own endpoint with a built-in `prometheus/self` receiver and forwards those self-metrics to the platform for operational visibility.
+
+== Network policies
+
+The chart does *not* install NetworkPolicy resources. If your cluster enforces network policies, configure:
+
+* *Ingress* to the agent namespace on port `4317` (gRPC) or `4318` (HTTP) from application namespaces.
+* *Egress* from application pods to the agent namespace.
+
+To allow a specific namespace to send telemetry to the gateway:
+
+[,yaml]
+----
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-to-gateway
+  namespace: suse-observability-agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: otel-telemetry-gateway
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: my-app-namespace
+      ports:
+        - port: 4317
+        - port: 4318
+----
+
+To *block* a namespace from sending telemetry, deny its egress to the gateway namespace:
+
+[,yaml]
+----
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-otlp-egress
+  namespace: restricted-namespace
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: NotIn
+                values:
+                  - suse-observability-agent
+----
+
+=== Topology-aware routing
+
+To reduce cross-zone telemetry traffic in multi-zone clusters, annotate the gateway Service with the topology-mode annotation:
+
+[,yaml]
+----
+otel:
+  telemetryGateway:
+    service:
+      annotations:
+        service.kubernetes.io/topology-mode: Auto
+----
+
+== Scaling
+
+The default `replicaCount: 1` is suitable for most clusters. For high availability:
+
+[,yaml]
+----
+otel:
+  telemetryGateway:
+    replicaCount: 2
+----
+
+At two or more replicas, a PodDisruptionBudget is automatically created with `maxUnavailable: 1`, ensuring at least one pod remains available during voluntary disruptions.
+
+Resource limits and requests can be tuned in the Helm values:
+
+[,yaml]
+----
+otel:
+  telemetryGateway:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+----
+
+== Overload protection
+
+The collector includes `memory_limiter` as the first processor in every pipeline. It protects the process from OOM by rejecting data once memory usage exceeds 80% (with a 25% spike allowance). Under sustained overload, data is dropped to preserve collector stability — this is intentional behaviour. Per-producer rate limiting, sampling, and autoscaling are separate stories.
+
+== Product integration contract
+
+This section is for SUSE product teams integrating with the telemetry gateway.
+
+*Discovery*:: Before enabling auto-export, detect the presence of the `suseobservabilityagents.observability.suse.com` CRD. The agent installs this marker CRD when at least one product-facing OTel integration path is active. The CRD is a capability signal, not endpoint discovery; product charts must still make telemetry export, agent namespace, and endpoint configurable.
+
+*Endpoint*:: The stable Service name is `{release}-otel-telemetry-gateway` in the agent namespace. Both the Service name and namespace must be overrideable in product Helm values to support custom agent release names and namespaces.
+
+*Attribute ownership*:: The collector owns `k8s.cluster.name` and `k8s.namespace.name` (see xref:./telemetry-gateway.adoc#_attribute_ownership_security_enforcement[Attribute ownership]). Products *must not* set or rely on user-supplied values for these. Products must set `service.name`, `service.version`, and `deployment.environment`. Products should inject `k8s.pod.uid` via the downward API — this is the most reliable pod-association method; the collector falls back to pod IP and connection source address.
+
+*Log ingestion*:: Log signals are not yet supported. Products must not export logs to the gateway at this time.
+
+== See also
+
+* xref:/setup/otel/agent.adoc[OpenTelemetry pipeline overview]
+* xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor]
+* xref:/setup/otel/concepts.adoc[OpenTelemetry concepts]
+* xref:/setup/otel/troubleshooting.adoc[OpenTelemetry troubleshooting]
+endif::ss-ff-stackpacks2_enabled[]

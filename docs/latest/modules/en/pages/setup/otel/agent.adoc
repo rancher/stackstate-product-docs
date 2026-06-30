@@ -7,11 +7,11 @@ ifdef::ss-ff-stackpacks2_enabled[]
 
 == Overview
 
-The SUSE Observability Agent ships with an OpenTelemetry Collector that supplements the existing agent components. It is the recommended path for ingesting telemetry from any workload that already speaks OTLP or exposes a Prometheus / OpenMetrics endpoint, and lets you consolidate metrics, traces and logs into the SUSE Observability pipeline without running a separate collector.
+The SUSE Observability Agent ships with an OpenTelemetry Collector that supplements the existing agent components. It is the recommended path for ingesting telemetry from any workload that already speaks OTLP or exposes a Prometheus / OpenMetrics endpoint, and lets you consolidate metrics and traces into the SUSE Observability pipeline without running a separate collector. OTLP logs are accepted by the gateway pipeline for future compatibility, but platform log ingestion is not supported yet.
 
 The OTel pipeline covers two tracks, each implemented by its own sub-component and independently toggleable:
 
-* *Telemetry gateway* (`otel.telemetryGateway`) — receives *metrics and traces* pushed over OTLP from application-embedded OpenTelemetry SDKs and forwards them to SUSE Observability. This is the recommended path for natively instrumented workloads. Point your SDKs at the `suse-observability-telemetry-gateway` service in the agent's namespace on port `4317` (gRPC) or `4318` (HTTP).
+* *Telemetry gateway* (`otel.telemetryGateway`) — receives *metrics and traces* pushed over OTLP from application-embedded OpenTelemetry SDKs and forwards them to SUSE Observability. The gateway also has a logs pipeline, but OTLP log ingestion is not supported by the platform yet; keep SDK log export disabled. Point your SDKs at the `suse-observability-agent-otel-telemetry-gateway` service in the agent's namespace on port `4317` (gRPC) or `4318` (HTTP).
 * *Prometheus / OpenMetrics scraping* (`otel.prometheusScraping`) — discovers `ServiceMonitor` and `PodMonitor` Custom Resources, scrapes the targets they describe, and ships the resulting *metrics* over OTLP. This track is metrics-only; use it for workloads that expose a Prometheus / OpenMetrics endpoint but are not instrumented with an OTel SDK. See xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor] for the full how-to.
 
 == Default state
@@ -62,7 +62,7 @@ otel:
 
 When enabled, the OTel pipeline can add up to three workloads, depending on which sub-pipelines are turned on:
 
-* A *telemetry gateway* OpenTelemetry Collector (when `otel.telemetryGateway.enabled=true`) that terminates the OTLP push receiver and forwards metrics and traces to SUSE Observability.
+* A *telemetry gateway* OpenTelemetry Collector (when `otel.telemetryGateway.enabled=true`) that terminates the OTLP push receiver and forwards metrics and traces to SUSE Observability. The gateway logs pipeline is present for future compatibility, but platform log ingestion is not supported yet.
 * A *scraper* OpenTelemetry Collector (when `otel.prometheusScraping.enabled=true`) that scrapes the targets selected by the Target Allocator.
 * A *Target Allocator* (when `otel.prometheusScraping.enabled=true`) that watches `ServiceMonitor` / `PodMonitor` resources and distributes scrape targets across the scraper collectors.
 
@@ -71,6 +71,7 @@ All three have conservative CPU and memory requests / limits that can be tuned i
 == See also
 
 * xref:/k8s-quick-start-guide.adoc[Agent quick start guide]
+* xref:/setup/otel/telemetry-gateway.adoc[Telemetry gateway (OTLP push)]
 * xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor]
 * xref:/setup/otel/concepts.adoc[OpenTelemetry concepts]
 * xref:/setup/otel/troubleshooting.adoc[OpenTelemetry troubleshooting]
