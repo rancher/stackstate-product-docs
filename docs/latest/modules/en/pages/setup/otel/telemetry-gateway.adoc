@@ -202,11 +202,20 @@ otel:
 
 == Product integration contract
 
-This section is for SUSE product teams integrating with the telemetry gateway.
+This section is for SUSE product teams that want their Helm charts to export push-based OTLP telemetry through the telemetry gateway when the SUSE Observability Agent supports it.
 
-*Discovery*:: Before enabling auto-export, detect the presence of the `suseobservabilityagents.observability.suse.com` CRD. The agent installs this marker CRD when at least one product-facing OTel integration path is active. The CRD is a capability signal, not endpoint discovery; product charts must still make telemetry export, agent namespace, and endpoint configurable.
+*Capability detection*:: Before enabling auto-export by default, check for the marker CRD in Helm:
++
+[,gotemplate]
+----
+{{- if .Capabilities.APIVersions.Has "observability.suse.com/v1/suseobservabilityagents" }}
+----
++
+The agent installs this CRD when at least one product-facing OTel integration path is active, such as Prometheus scraping or the telemetry gateway. Treat it as a capability signal only. It does not identify the agent namespace, Service name, protocol, port, or NetworkPolicy reachability.
 
 *Endpoint*:: The stable Service name is `{release}-otel-telemetry-gateway` in the agent namespace. Both the Service name and namespace must be overrideable in product Helm values to support custom agent release names and namespaces.
+
+*Opt-in/override*:: Product charts should keep telemetry export configurable even when the marker CRD exists. Allow users to disable export, override the endpoint, and choose OTLP gRPC or HTTP/protobuf where the product supports both.
 
 *Attribute ownership*:: The collector owns `k8s.cluster.name` and `k8s.namespace.name` (see xref:./telemetry-gateway.adoc#_attribute_ownership_security_enforcement[Attribute ownership]). Products *must not* set or rely on user-supplied values for these. Products must set `service.name`, `service.version`, and `deployment.environment`. Products should inject `k8s.pod.uid` via the downward API — this is the most reliable pod-association method; the collector falls back to pod IP and connection source address.
 
