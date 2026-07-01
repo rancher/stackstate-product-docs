@@ -158,19 +158,6 @@ spec:
                   - suse-observability-agent
 ----
 
-=== Topology-aware routing
-
-To reduce cross-zone telemetry traffic in multi-zone clusters, annotate the gateway Service with the topology-mode annotation:
-
-[,yaml]
-----
-otel:
-  telemetryGateway:
-    service:
-      annotations:
-        service.kubernetes.io/topology-mode: Auto
-----
-
 == Scaling
 
 The default `replicaCount: 1` is suitable for most clusters. For high availability:
@@ -202,6 +189,16 @@ otel:
 == Overload protection
 
 The collector includes `memory_limiter` as the first processor in every pipeline. It protects the process from OOM by rejecting data once memory usage exceeds 80% (with a 25% spike allowance). Under sustained overload, data is dropped to preserve collector stability — this is intentional behaviour. Per-producer rate limiting, sampling, and autoscaling are separate stories.
+
+Span-metric generation also has a cardinality guard. `otel.telemetryGateway.spanMetrics.aggregationCardinalityLimit` limits the number of unique span-metric aggregation series held by the gateway. The default protects memory from high-cardinality spans, while larger clusters can tune it when needed:
+
+[,yaml]
+----
+otel:
+  telemetryGateway:
+    spanMetrics:
+      aggregationCardinalityLimit: 5000
+----
 
 == Product integration contract
 
