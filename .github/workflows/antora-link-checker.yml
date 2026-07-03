@@ -1,0 +1,27 @@
+name: "Docs: Antora Link Checker"
+
+on:
+  pull_request:
+    paths:
+      - '**/*.adoc'
+      - 'ss-local-playbook.yml'
+      - 'Makefile'
+
+jobs:
+  validate-internal-links:
+    name: Run Antora Build & Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20' # Matches standard modern Antora environments
+
+      - name: Install Dependencies
+        run: make environment
+
+      - name: Verify Documentation Links
+        run: make pr-link-check
