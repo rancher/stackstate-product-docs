@@ -1,5 +1,12 @@
 .PHONY: all test
 
+.PHONY: pr-link-check
+pr-link-check:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --log-failure-level=warn --stacktrace --log-format=pretty --log-level=info \
+		ss-local-playbook.yml
+
 .PHONY: local
 local:
 	mkdir -p tmp
