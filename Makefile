@@ -1,7 +1,7 @@
 .PHONY: all test
 
 .PHONY: pr-link-check
-ci-pr-link-check:
+pr-link-check:
 	mkdir -p tmp
 	npx antora --version
 	npx antora --failure-level=warn --stacktrace --log-format=pretty --log-level=info \
