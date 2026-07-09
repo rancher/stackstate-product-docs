@@ -7,17 +7,40 @@ ifdef::ss-ff-stackpacks2_enabled[]
 
 == Interpolation
 
-When defining Component Presentations, a couple of different types of expressions are used.  When selecting a value to xref:/setup/custom-integrations/presentation/projections.adoc[project] in a highlight field, a CEL expression can be used.
+When defining Component Presentations, a couple of different types of expressions are used.  When selecting a value to xref:/setup/custom-integrations/presentation/projections.adoc[project] in a highlight field, or when controlling whether a highlight link is visible, a CEL expression can be used. Some string fields, such as highlight link `title`, `target`, and `tooltip`, use string templates with embedded CEL placeholders.
 
 [#cel_context]
 === CEL expression
 
-CEL expressions are evaluated in an environment representing the component.  This is the case on most projections in highlight fields or overview columns, or in metrics.  The following variables are available.  Example:
+CEL expressions are evaluated in an environment representing the component.  This is the case on most projections in highlight fields or overview columns, metrics, and the `presentation.highlight.links.filter` field. The same CEL expressions can also be embedded in string templates using `$\{CEL_EXPRESSION}` placeholders. The following variables are available.  Example:
 
 [,bash]
 ----
 'service.namespace' in resource.attributes ?  resource.attributes['service.namespace'] : 'default'
 ----
+
+[#string_templates]
+=== String templates
+
+String templates are literal strings that can include `$\{CEL_EXPRESSION}` placeholders. Placeholder expressions are evaluated against the current component and inserted into the result.
+
+For example:
+
+[,yaml]
+----
+title: "Service dashboard"
+target: "https://example.com/dashboards/${name}"
+tooltip: "Open dashboard for ${name}"
+----
+
+If no `$\{...}` placeholder is present, the value is treated as literal text. To evaluate a CEL expression, wrap it in `$\{...}`.
+
+[,yaml]
+----
+target: "${properties['dashboardUrl']}"
+----
+
+The `presentation.highlight.links.filter` field is not a string template. It is a pure CEL boolean expression.
 
 [cols="1,1,3"]
 |===
