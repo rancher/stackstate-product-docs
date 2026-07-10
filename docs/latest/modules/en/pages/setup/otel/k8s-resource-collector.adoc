@@ -1,0 +1,140 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= K8s resource collector
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-07-09
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+The *k8s resource collector* is an OpenTelemetry Collector component in the SUSE Observability Agent. It watches Kubernetes Custom Resource Definitions (CRDs), selected Custom Resource (CR) instances, and optional additional Kubernetes resources, then forwards topology logs to SUSE Observability.
+
+CRDs are always collected. CR instances are filtered by API group so you can control ingest volume and avoid forwarding large or sensitive resource payloads.
+
+== Enable
+
+The collector is enabled by default when StackPacks 2.0 support is enabled:
+
+[,yaml]
+----
+global:
+  features:
+    experimentalStackpacks: true
+----
+
+If you enable OTel without StackPacks 2.0, keep the collector enabled explicitly:
+
+[,yaml]
+----
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+----
+
+== Include and exclude Custom Resource API groups
+
+Configure CR collection with `otel.k8sResourceCollector.crDiscovery.apiGroups`:
+
+[,yaml]
+----
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "policies.kubewarden.io": true
+          "kubevirt.io": true
+        exclude:
+          "internal.example.com": true
+----
+
+By default, the chart does not collect every CR API group. Instead, the enabled integration presets add common SUSE-related API groups, such as Kubewarden, SUSE Runtime Enforcer, and SUSE Virtualization. Add more API groups explicitly when you want their CR instances collected.
+
+To disable an integration-provided API group in an override file, set it to `false`:
+
+[,yaml]
+----
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      apiGroups:
+        include:
+          "kubevirt.io": false
+----
+
+Set `discoveryMode: all` to collect CR instances for every CRD API group. In this mode, `apiGroups` filters are ignored.
+
+[NOTE]
+====
+The Kubernetes Custom Resources StackPack shows all collected CRDs. It marks whether CR instances for that CRD API group are collected. If CR instances are not collected, add the API group to `crDiscovery.apiGroups.include` and upgrade the agent.
+====
+
+== Restricted RBAC
+
+By default the collector uses wildcard read permissions for custom resources. For restricted RBAC, set `rbac.useWildcard: false`. The chart uses the truthy `crDiscovery.apiGroups.include` entries to render API-group RBAC rules:
+
+[,yaml]
+----
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "policies.kubewarden.io": true
+          "kubevirt.io": true
+    rbac:
+      useWildcard: false
+----
+
+Kubernetes RBAC only supports exact API groups or `"*"`. Wildcard filter patterns such as `"*.example.com"` require `rbac.useWildcard: true`.
+
+== Per-resource payload limit
+
+The collector drops oversized CR log records before forwarding them. The default limit is 16 KiB:
+
+[,yaml]
+----
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      maxCrDataSize: 16384
+----
+
+Increasing this value can increase ingest volume and may forward larger or sensitive CR payloads. Dropped records are counted by `receiver_k8sresource_oversized_cr_payloads_total`; dropped payload sizes are recorded in `receiver_k8sresource_oversized_cr_payload_size_bytes`.
+
+== Additional Kubernetes resources
+
+Use `objects` to watch non-CRD resources alongside CRDs and CRs:
+
+[,yaml]
+----
+otel:
+  k8sResourceCollector:
+    objects:
+      pods:
+        group: ""
+        namespaces: ["kube-system"]
+      deployments:
+        group: apps
+        labelSelector: "app=foo"
+----
+
+Entries that overlap a CRD covered by `crDiscovery.apiGroups` are rejected at collector startup. With `rbac.useWildcard: false`, the chart derives resource-scoped RBAC for each `objects` entry automatically.
+
+== Operational monitoring
+
+The collector exposes OpenTelemetry Collector self-metrics on `:8888` and forwards those self-metrics to SUSE Observability. The Kubernetes Custom Resources StackPack includes monitors for:
+
+* No CRD/CR records emitted.
+* Oversized CR payloads dropped.
+* Informer reconcile failures.
+
+== See also
+
+* xref:/setup/otel/agent.adoc[OpenTelemetry pipeline overview]
+* xref:/setup/otel/telemetry-gateway.adoc[Telemetry gateway]
+* xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor]
+endif::ss-ff-stackpacks2_enabled[]
