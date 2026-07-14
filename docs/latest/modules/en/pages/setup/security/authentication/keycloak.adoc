@@ -44,6 +44,9 @@ stackstate:
       clientId: stackstate
       secret: "8051a2e4-e367-4631-a0f5-98fc9cdc564d"
       jwsAlgorithm: RS256
+      # oidcLogout and skipLoginPage are optional and both default to false
+      #_ oidcLogout: false
+      #_ skipLoginPage: false
       # scope is optional. By default `openid`, `profile` and `email` are requested
       #_ scope: ["openid", "profile", "email"]
       # jwtClaims:
@@ -75,6 +78,8 @@ Follow the steps below to configure SUSE Observability to authenticate using Key
  ** *secret* - The secret attached to the KeyCloak client, which is used to authenticate this client to KeyCloak
  ** *redirectUri* - Optional: The URI where the login callback endpoint of SUSE Observability is reachable. Populated by default using the `stackstate.baseUrl`, but can be overridden (must be a fully qualified URL that points to the `/loginCallback` path)
  ** *jwsAlgorithm* - Set this to `RS256`, this is currently the only supported value.
+ ** *oidcLogout* - Optional (default `false`): when set to `true`, logging out of {stackstate-product-name} also logs the user out of KeyCloak. When `false`, logging out only ends the {stackstate-product-name} session.
+ ** *skipLoginPage* - Optional (default `false`): when set to `true`, the {stackstate-product-name} login page is skipped and users are redirected straight to KeyCloak.
  ** *jwtClaims* - Optional: The roles or username can be retrieved from a different attribute than the Keycloak default behavior
   *** *usernameField* - Optional: The field in the OIDC user profile that should be used as the username. By default, this will be the `preferred_username`.
   *** *groupsField* - Optional: SUSE Observability will always, and by default only, use the `roles` Keycloak provides. But it can also add roles from the field specified here. This is mainly useful when Keycloak is mapping roles/groups from a third-party system.
@@ -95,8 +100,11 @@ Follow the steps below to configure SUSE Observability to authenticate using Key
 
 [NOTE]
 ====
-*Note:*
+Setting `oidcLogout: false` and `skipLoginPage: true` will cause the logout process to immediately redirect to KeyCloak and re-authenticate, which will make it appear that the user was not logged out.
+====
 
+[NOTE]
+====
 * The first run of the helm upgrade command will result in pods restarting, which may cause a short interruption of availability.
 * Include `authentication.yaml` on every `helm upgrade` run.
 * The authentication configuration is stored as a Kubernetes secret.
