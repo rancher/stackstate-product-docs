@@ -181,6 +181,69 @@ The `check-and-finalize` command:
 If a restore running without `--background` is interrupted (for example, by Ctrl+C), you must run `check-and-finalize` to scale up deployments and clean up resources.
 ====
 
+== Configuration and topology data v2 (StackGraph)
+
+Since SUSE Observability {next-release-version} we are rolling out v2 of StackGraph backup/restore. For now both v1 and v2 backups will be made, until v2 is deemed completely stable, at which point we'll sunset v1 backups.
+
+V2 backups offer significant improvements in backup and restore speed, as well as incremental backups. Also, the stackgraph v2 restore procedure allows for restoring historical data while the system is running, which means much quicker time to get the system back up.
+
+=== List StackGraph v2 backups
+
+To list the StackGraph V2 backups, execute the following command:
+
+[,bash]
+----
+sts-backup stackgraph-v2 list --namespace <NAMESPACE>
+----
+
+Replace `<NAMESPACE>` with the namespace where {stackstate-product-name} is installed.
+
+The output should look like this:
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Stackgraph backups in bucket 'sts-stackgraph-backup'...
+NAME                               LAST MODIFIED
+sts-backup-20251128-0300.graph.v2  2025-11-28 03:08:42 UTC
+----
+
+The timestamp when the backup is taken is part of the backup name.
+
+
+=== Restore a StackGraph v2 backup
+
+The restore has a 'live' and 'backfill' portion of the backup. The 'live' part takes down the system and will restore the latest data. After the 'live' part is done, the system will scale up and is accessible by end-users. The following message appears to signify when the system is accessible again:
+
+[,bash]
+----
+The system is back up and accessible. Continuing with backfilling historical data, this will happen while the system is running.
+During this process not all historical data might be available.
+----
+
+To restore a StackGraph v2 backup, use one of the following commands:
+
+==== Restore a specific backup
+
+[,bash]
+----
+sts-backup stackgraph-v2 restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== Restore the latest backup
+
+[,bash]
+----
+sts-backup stackgraph-v2 restore --namespace <NAMESPACE> --latest
+----
+
+==== Common flags
+
+* `--yes` or `-y` - Skip confirmation prompt (useful for automation)
+
+====
+
 == Settings
 
 Settings backups include installed StackPacks with their configuration and other customizations created by the user, such as monitors, custom views, and service tokens. Settings backups are lightweight (typically only several megabytes) and quick to restore with minimal downtime.
