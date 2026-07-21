@@ -52,7 +52,6 @@ output:
   identifier: <cel-string>
   name: <cel-string>
   typeName: <cel-string>
-  typeIdentifier: <cel-string>      # Optional
   required:                         # Optional (required means that if any expression fails, the mapping fails)
     version: <cel-string>           # Optional
     additionalIdentifiers:          # Optional
@@ -78,6 +77,8 @@ output:
     configuration: <cel-expression> # Optional
     status:        <cel-expression> # Optional
 expireAfter: duration-ms
+rank:
+  specificity: float                  # Merge priority; see specificity ranges below
 ----
 
 === OtelRelationMapping
@@ -120,7 +121,7 @@ vars:                               # Optional
 output:
   sourceId: <cel-string>
   targetId: <cel-string>
-  dependencyType: <cel-string>      # Optional: 'HIERARCHICAL', 'CONNECTION' or 'UNCLASSIFIED' (default)
+  dependencyType: <cel-string>      # 'HIERARCHICAL', 'CONNECTION' or 'UNCLASSIFIED' (default)
 expireAfter: duration-ms
 ----
 
@@ -151,6 +152,56 @@ The relation identity is a composite of the form `output.sourceId-output.targetI
 Each mapping defines an `expireAfter` duration. This value controls how long a component or relation remains in the topology without being refreshed by new matching telemetry. If no refresh happens the component or relation is removed from the topology.
 
 Internally, the OTel collector continuously refreshes components as telemetry matches - this refresh window is based on the `expireAfter` field per mapping.
+
+=== Component merging
+
+When multiple sources contribute to the same component (matched by identifier), {stackstate-product-name} merges them into a single component. The merger applies per-field rules to pick the winning `name` and `typeName`:
+
+* If one side is an external-topology sync (ExtTopo) and the other is an OTel mapping, the ExtTopo side wins for `name` and `typeName` regardless of specificity.
+* Otherwise the side with the higher `specificity` wins.
+
+`specificity` is declared under the required `rank` block in each `OtelComponentMapping` (as `rank.specificity`). Use a higher value to specialise a more specific mapping over a more general one for the same component identifier.
+
+==== Specificity ranges
+
+The following ranges are recommended for `rank.specificity` to ensure consistent precedence across StackPacks:
+
+[cols="1,3"]
+|===
+| Range | Use
+
+| 0
+| Universal base (common / catch-all)
+
+| 1–99
+| Environment & infrastructure (cloud provider, account, cluster)
+
+| 100–199
+| Platform & orchestration (Kubernetes, OTel base mappings)
+
+| 200–299
+| Application / service
+
+| 300–399
+| Runtime / SDK / language
+
+| 400+
+| User / customer overrides
+|===
+
+Higher specificity wins when multiple mappings contribute to the same component identifier.
+
+For each contributing source, the merged component additionally carries two preserved labels so the original per-source values remain queryable:
+
+* `source-type:<value>` — the `typeName` produced by that source.
+* `source-name:<value>` — the `name` produced by that source.
+
+These labels are injected at synthesis time, so they appear on every component (single-source as well as merged). Query them with STQL (for example, `label = 'source-type:pod'`) or, in component-presentation CEL contexts, with the multi-value `tags` map described in <<Multi-value tag access in CEL>>.
+
+[NOTE]
+====
+Different values for the same key (for example, one source contributing `source-type:pod` and another contributing `source-type:virt-launcher`) are retained as separate labels. Identical labels are deduplicated.
+====
 
 == Input traversal model
 
@@ -569,6 +620,75 @@ output:
 ----
 
 This pattern separates component configuration (spec) from operational state (status).
+
+[#multi-value-tag-access-in-cel]
+=== Multi-value tag access in CEL
+
+Component-presentation CEL contexts expose component tags as a multi-value map:
+
+[source]
+----
+tags: map<string, list<string>>
+----
+
+A tag key can have zero, one, or many values, for example:
+
+[source]
+----
+tags['source-type'] == ['pod', 'virt-launcher']
+----
+
+Use standard CEL map/list membership for existence checks and value matching:
+
+[,yaml]
+----
+# Standard CEL: check whether a tag key exists
+${'source-type' in tags}
+
+# Standard CEL: check whether a key exists and one of its values is present
+${'source-type' in tags && 'pod' in tags['source-type']}
+----
+
+For tag keys that are valid CEL identifiers, field selection is also supported as standard CEL shorthand for map access. It returns the list of values for the key:
+
+[,yaml]
+----
+# Standard CEL: equivalent to tags['namespace']; returns list<string>
+${tags.namespace}
+
+# Standard CEL: equivalent to 'namespace' in tags
+${has(tags.namespace)}
+----
+
+Use bracket access for keys that are not valid CEL identifiers, such as keys containing `-` or `.`:
+
+[,yaml]
+----
+${tags['source-type']}
+${tags['service.name']}
+----
+
+Use a guard before indexing when the key may be absent. For keys that are valid CEL identifiers, `has(tags.namespace)` is a standard CEL field-presence check. For all keys, including keys that contain `-` or `.`, use the standard `in` operator for map-key and list-value membership.
+
+The following StackState-specific helper functions are also available in component-presentation CEL contexts:
+
+* `tags.contains('key:value')` — returns `true` when `tags` contains key `key` and one of its values is `value`. This is a convenience helper equivalent to the standard CEL expression `'key' in tags && 'value' in tags['key']`. It also works on `source.tags`, for example `source.tags.contains('source-type:pod')`.
+* `tags.singleValue('key')` — returns the value for `key` when the key has exactly one value. Returns an empty string if the key is missing or has multiple values. This is useful in places where a plain string is required, such as PromQL or STQL template interpolation.
+* `selectPrefix(tags, 'prefix_')` — returns a `map<string, string>` for tag keys that start with `prefix_`, with the prefix stripped from the returned keys. Entries with missing or multiple values are omitted because the result map contains single string values.
+
+Examples:
+
+[,yaml]
+----
+# StackState helper: same result as 'source-type' in tags && 'pod' in tags['source-type']
+${tags.contains('source-type:pod')}
+
+# StackState helper: single-value extraction
+${tags.singleValue('namespace')}
+
+# StackState helper: extract single-value tags with a common prefix
+${selectPrefix(tags, 'label_')}
+----
 
 == Common patterns and best practices
 

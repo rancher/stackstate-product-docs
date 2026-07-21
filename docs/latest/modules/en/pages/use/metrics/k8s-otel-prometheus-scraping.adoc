@@ -155,6 +155,23 @@ otel:
 
 Once the agent, collectors and your `ServiceMonitor` / `PodMonitor` are in place, metrics start flowing into SUSE Observability within a scrape interval. Find them in the xref:/use/metrics/k8sTs-explore-metrics.adoc[telemetry inspector] and bind them to topology components with xref:/setup/custom-integrations/metric-bindings/index.adoc[metric bindings].
 
+== Product integration contract
+
+This section is for SUSE product teams that want their Helm charts to expose Prometheus / OpenMetrics endpoints to the SUSE Observability Agent.
+
+*Capability detection*:: Before rendering SUSE Observability-specific `ServiceMonitor` or `PodMonitor` resources by default, check for the marker CRD in Helm:
++
+[,gotemplate]
+----
+{{- if .Capabilities.APIVersions.Has "observability.suse.com/v1/suseobservabilityagents" }}
+----
++
+The agent installs this CRD when at least one product-facing OTel integration path is active, such as Prometheus scraping or the telemetry gateway. Treat it as a capability signal only. It does not prove that a specific monitor selector, namespace selector, or NetworkPolicy allows the scrape.
+
+*Monitor labels*:: By default, add `observability.suse.com/agent: scrape` to `ServiceMonitor` and `PodMonitor` resources that should be picked up by the agent Target Allocator. Product charts should make this label configurable because agent administrators can change `otel.prometheusScraping.targetAllocator.prometheusCR.serviceMonitorSelector` and `podMonitorSelector`.
+
+*Opt-in/override*:: Product charts should keep monitor rendering configurable even when the marker CRD exists. Allow users to disable the SUSE Observability monitor resources, override labels, and configure scrape endpoint details such as port, path, interval, TLS, and authentication.
+
 == See also
 
 * https://prometheus-operator.dev/docs/operator/design/[Prometheus Operator design — ServiceMonitor and PodMonitor concepts]
