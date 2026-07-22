@@ -181,6 +181,77 @@ The `check-and-finalize` command:
 If a restore running without `--background` is interrupted (for example, by Ctrl+C), you must run `check-and-finalize` to scale up deployments and clean up resources.
 ====
 
+== Configuration and topology data v2 (StackGraph)
+
+SUSE Observability {next-release-version} introduces v2 of StackGraph backup/restore. Both v1 and v2 backups are created until v2 is considered stable, after which v1 backups will be discontinued.
+
+V2 backups improve backup and restore speed and add incremental backups. Also, the StackGraph v2 restore procedure allows for restoring historical (backfill) data while the system is running, which means much quicker time to get the system back up.
+
+=== List StackGraph v2 backups
+
+To list the StackGraph v2 backups, execute the following command:
+
+[,bash]
+----
+sts-backup stackgraph-v2 list --namespace <NAMESPACE>
+----
+
+Replace `<NAMESPACE>` with the namespace where {stackstate-product-name} is installed.
+
+The output should look like this:
+
+[,bash]
+----
+Setting up port-forward to suse-observability-minio:9000 in namespace <NAMESPACE>...
+✓ Port-forward established successfully
+Listing Stackgraph backups in bucket 'sts-stackgraph-backup'...
+NAME                               LAST MODIFIED
+sts-backup-20251128-0300.graph.v2  2025-11-28 03:08:42 UTC
+----
+
+The timestamp when the backup is taken is part of the backup name.
+
+=== Restore a StackGraph v2 backup
+
+The restore has a `live` and `backfill` portion of the backup. The 'live' part takes the system offline and will restore the latest data. After the `live` part is done, the system will scale up and is accessible by end-users. The `backfill` portion will be restored while the system is running. The following message appears to signify when the system is accessible again:
+
+[,bash]
+----
+The system is back up and accessible. Continuing with backfilling historical data, this will happen while the system is running.
+During this process not all historical data might be available.
+----
+
+To restore a StackGraph v2 backup, use one of the following commands:
+
+==== Restore a specific backup
+
+[,bash]
+----
+sts-backup stackgraph-v2 restore --namespace <NAMESPACE> --archive <BACKUP_NAME>
+----
+
+==== Restore the latest backup
+
+[,bash]
+----
+sts-backup stackgraph-v2 restore --namespace <NAMESPACE> --latest
+----
+
+==== Additional flags
+
+* `--yes` or `-y` - Skip confirmation prompt (useful for automation)
+
+[NOTE]
+====
+If a restore running is interrupted (for example, by Ctrl+C), you must run `check-and-finalize` to scale up deployments and clean up resources. If the backfill phase of restoring was not started yet, also `sts-backup stackgraph-v2 backfill` must be run to complete restoring `backfill` data.
+====
+
+==== Additional commands
+
+* `sts-backup stackgraph-v2 backfill`. The restore command will automatically restore both the `live` and `backfill` portion of a backup. If, however, the restore command gets interrupted (through Ctrl+C) or fails due to instability of the cluster, this command can be used to restart the backfill job, restoring the `backfill` portion of the data.
+* `sts-backup stackgraph-v2 abort`. If restoring the `backfill` portion of a backup cannot be recovered or is lost somehow, `abort` can be used to wrap up the restore command with the data that got already ingested successfully. This command is a last resort and should not be needed in normal operation.
+* `sts-backup stackgraph-v2 check-and-finalize`. When any command (`restore`/`backfill`/`abort`) gets interrupted with Ctrl+C, the `check-and-finalize` command can be used to keep track of its progress, including a `--wait` option which allows waiting for the job to finish.
+
 == Settings
 
 Settings backups include installed StackPacks with their configuration and other customizations created by the user, such as monitors, custom views, and service tokens. Settings backups are lightweight (typically only several megabytes) and quick to restore with minimal downtime.
