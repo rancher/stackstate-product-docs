@@ -358,14 +358,13 @@ The backup retention delta can be configured using the Helm value `backup.stackG
 
 === Disable scheduled backups
 
-To disable scheduled StackGraph backups, set the backup schedule to a date far in the past using the Helm value `backup.stackGraph.scheduled.schedule`:
+To disable scheduled StackGraph backups, set the Helm value `backup.stackGraph.enabled` to `false`:
 
 [,yaml]
 ----
 backup:
   stackGraph:
-    scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+    enabled: false
 ----
 
 == Settings
@@ -376,10 +375,11 @@ Settings backups are lightweight (typically only several megabytes) and quick to
 
 [NOTE]
 ====
-*Settings backups are always enabled*, regardless of the `global.backup.enabled` value:
+*Settings backups are enabled by default* and are controlled independently of the `global.backup.enabled` value by `backup.configuration.enabled` (default `true`):
 
 * When `global.backup.enabled` is `true`: Settings backups are stored, via the S3 Proxy, to your configured storage backend (AWS S3, Azure Blob Storage, or Kubernetes Persistent Volume)
 * When `global.backup.enabled` is `false`: Settings backups are stored, via the S3 Proxy, to a dedicated Kubernetes Persistent Volume
+* When `backup.configuration.enabled` is `false`: Settings backups are disabled. If every other backup is also disabled, the S3 Proxy is no longer deployed.
 ====
 
 === Backup schedule
@@ -417,14 +417,13 @@ backup:
 
 === Disable scheduled backups
 
-To disable scheduled settings backups, set the backup schedule to a date far in the past using the Helm value `backup.configuration.scheduled.schedule`:
+To disable scheduled settings backups, set the Helm value `backup.configuration.enabled` to `false`:
 
 [,yaml]
 ----
 backup:
   configuration:
-    scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+    enabled: false
 ----
 
 == Metrics (Victoria Metrics)
@@ -479,20 +478,16 @@ victoria-metrics-1:
 
 === Disable scheduled backups
 
-To disable scheduled Victoria Metrics backups, set the backup schedules for both instances to a date far in the past:
+To disable scheduled Victoria Metrics backups, set `backup.enabled` to `false` for each instance. Backups are configured per instance, so you can disable one instance while keeping the other:
 
 [,yaml]
 ----
 victoria-metrics-0:
   backup:
-    scheduled:
-      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
-      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
+    enabled: false
 victoria-metrics-1:
   backup:
-    scheduled:
-      hourly: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
-      daily: '0 0 1 1 1970'   # January 1, 1970 (epoch start)
+    enabled: false
 ----
 
 == OpenTelemetry (ClickHouse)
@@ -514,15 +509,13 @@ The backup retention can be configured using the Helm value `clickhouse.backup.c
 
 === Disable scheduled backups
 
-To disable scheduled ClickHouse backups, set both full and incremental backup schedules to a date far in the past:
+To disable scheduled ClickHouse backups, set the Helm value `clickhouse.backup.enabled` to `false`:
 
 [,yaml]
 ----
 clickhouse:
   backup:
-    scheduled:
-      full_schedule: '0 0 1 1 1970'         # January 1, 1970 (epoch start)
-      incremental_schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+    enabled: false
 ----
 
 == Telemetry data (Elasticsearch)
@@ -545,12 +538,11 @@ The retention time and number of snapshots kept can be configured using the foll
 
 === Disable scheduled snapshots
 
-To disable scheduled Elasticsearch snapshots, set the snapshot schedule to a date far in the past using the Helm value `backup.elasticsearch.scheduled.schedule`:
+To disable scheduled Elasticsearch snapshots, set the Helm value `backup.elasticsearch.enabled` to `false`:
 
 [,yaml]
 ----
 backup:
   elasticsearch:
-    scheduled:
-      schedule: '0 0 1 1 1970'  # January 1, 1970 (epoch start)
+    enabled: false
 ----
