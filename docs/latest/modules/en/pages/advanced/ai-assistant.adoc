@@ -1,23 +1,50 @@
-= AI Assistant
+= AI Assistant & MCP Server
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-03-23
+:revdate: 2026-07-22
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
-AI Assistant is disabled by default in self-hosted {stackstate-product-name}. When you enable it, the Helm chart turns on the AI Assistant feature in the UI and deploys two backend components:
+{stackstate-product-name} provides two related AI capabilities that you enable through Helm values. Both are disabled by default in self-hosted installations:
+
+* **MCP server** — a Model Context Protocol endpoint that external code assistants (such as Claude Code) connect to. The external tool brings its own model, so you do not need to configure an LLM provider in {stackstate-product-name}. Controlled by `ai.mcp.enabled`.
+* **AI Assistant** — the in-product assistant UI and its backend, which run autonomous investigations using an LLM provider you configure (AWS Bedrock or Anthropic). Controlled by `ai.assistant.enabled`. Enabling the AI Assistant also enables the MCP server, because the assistant is an MCP client.
+
+Choose what to enable:
+
+* To connect external code assistants only, enable just the MCP server. See <<enable-mcp-server,Enable the MCP server>>.
+* To use the in-product AI Assistant, enable the AI Assistant. See <<enable-ai-assistant,Enable the AI Assistant>>. This also brings up the MCP server, so you do not need to enable both.
+
+[#enable-mcp-server]
+== Enable the MCP server
+
+The MCP server lets external MCP-compatible AI tools (such as Claude Code) use {stackstate-product-name} read-only tools for topology, health, logs, traces, and metrics. It can run on its own, without the AI Assistant UI, the AI Assistant backend, or an LLM provider — the external tool brings its own model.
+
+Set the MCP feature flag in your Helm values:
+
+[,yaml]
+----
+ai:
+  mcp:
+    enabled: true
+----
+
+After enabling the flag, the chart deploys the `suse-observability-mcp` Deployment and the related Service and ServiceAccount, and exposes the MCP server at the `/mcp` path of your {stackstate-product-name} base URL. It does not deploy the AI Assistant and does not enable the AI Assistant feature in the UI.
+
+For details on connecting an external tool to the MCP server, see xref:/use/ai-assistant/mcp-server.adoc[Connect external AI tools to the MCP server].
+
+[#enable-ai-assistant]
+== Enable the AI Assistant
+
+When you enable the AI Assistant, the Helm chart turns on the AI Assistant feature in the UI and deploys:
 
 * the AI Assistant UI, which is already deployed but hidden behind the feature flag
 * the AI Assistant backend service
 * the MCP (Model Context Protocol) server used by the AI Assistant backend
 
-The feature is controlled by the Helm value `ai.assistant.enabled`.
-
 [WARNING]
 ====
 Using AI Assistant generates costs because it invokes external AI models. Larger investigations can take several minutes and may generate significant costs.
 ====
-
-== Enable AI Assistant
 
 Set the feature flag in your Helm values:
 
@@ -28,10 +55,11 @@ ai:
     enabled: true
 ----
 
-After enabling the flag, the chart exposes the AI Assistant UI and deploys the `suse-observability-ai-assistant` StatefulSet, the `suse-observability-mcp` Deployment, and the related Services and ServiceAccounts.
+After enabling the flag, the chart exposes the AI Assistant UI and deploys the `suse-observability-ai-assistant` StatefulSet, the `suse-observability-mcp` Deployment, and the related Services and ServiceAccounts. You must also configure an LLM provider — see <<configure-ai-model-provider,Configure AI model provider>>.
 
 Most predefined roles already have access to AI Assistant. To grant users with custom roles access, follow the steps in <<access-ai-assistant,Access AI Assistant>>.
 
+[#configure-ai-model-provider]
 == Configure AI model provider
 
 Set `ai.assistant.provider` in your Helm values to choose which model provider AI Assistant uses. The default value is `bedrock`.
@@ -276,7 +304,7 @@ In practice, the most important settings are:
 
 === MCP configuration
 
-The MCP server is enabled automatically together with AI Assistant. The main setting to tune are:
+The MCP server is enabled automatically together with AI Assistant, and can also be enabled on its own (see <<enable-mcp-server,Enable the MCP server>>). The main settings to tune are:
 
 * `stackstate.components.mcp.replicaCount` - increase it when you need more MCP capacity
 * `stackstate.components.mcp.resources` - to control CPU and memory allocation

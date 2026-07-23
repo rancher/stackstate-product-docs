@@ -5,6 +5,11 @@ ifdef::ss-ff-stackpacks2_enabled[]
 :page-revdate: {revdate}
 :description: Component Presentation Schema
 
+[TIP]
+====
+*See it in the scaffold:* https://github.com/StackVista/stackpack-templates/blob/main/templates/generic/settings/presentations/cart.sty[`settings/presentations/cart.sty`] in the https://github.com/StackVista/stackpack-templates[scaffold] defines a `highlight` section with fields, provisioning, related resources and events; https://github.com/StackVista/stackpack-templates/blob/main/templates/generic/settings/presentations/checkout.sty[`checkout.sty`] adds a `links` entry (string-template `target`/`tooltip` with a CEL `filter`); and https://github.com/StackVista/stackpack-templates/blob/main/templates/generic/settings/presentations/database.sty[`database.sty`] shows a related-resources panel in the opposite direction.
+====
+
 == Highlight
 
 Defines fields and sections shown on highlight pages.  For a component, all applicable presentations can contribute fields to display.
@@ -89,6 +94,40 @@ A more specific presentation can override or suppress related resource definitio
 === Constraints
 
 * `presentationIdentifier` must reference a presentation within the same stackpack.
+
+== Links
+
+Links are navigation entries shown on the component highlight page. They can point to an internal {stackstate-product-name} URL or an external system such as a dashboard, runbook or management console.
+
+[,yaml]
+----
+presentation:
+  highlight:
+    links:
+      - linkId: "service-dashboard"
+        title: "Service dashboard"
+        target: "${properties['dashboardUrl']}"
+        tooltip: "Open dashboard for ${name}"
+        filter: "'dashboardUrl' in properties"
+        openInNewTab: true
+        order: 100
+----
+
+The `title`, `target`, and `tooltip` fields are string templates. Literal text is used as-is, and dynamic values can be inserted with `$\{CEL_EXPRESSION}` placeholders evaluated against the current component. Each placeholder must evaluate to a string-compatible value.
+
+The `filter` field is a pure CEL boolean expression. It is evaluated first. If it evaluates to `false`, the link is hidden. If the filter includes the link but `title`, `target`, or `tooltip` cannot be evaluated, the UI shows an error entry for that link.
+
+Only `linkId` is required on an individual link definition. The other fields are optional so that more-specific presentations can override or inherit individual fields from less-specific definitions. After merging, an included link needs a `target` to resolve successfully. If `title` is omitted after merging, the `linkId` is used as the displayed title. A link definition that only specifies `linkId` and no other field is invalid.
+
+=== Merging
+
+Links follow the same merge semantics as related resources:
+
+* All matching presentations contribute links.
+* Same `linkId` with higher specificity wins (override).
+* Optional fields can be inherited from less-specific definitions when omitted by the winning definition.
+* Different `linkId` values from different presentations are both included (append).
+* The optional `order` field controls display order. Higher values are shown first.
 
 == Events
 
