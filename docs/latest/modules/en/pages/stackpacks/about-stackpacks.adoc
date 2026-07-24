@@ -76,6 +76,75 @@ Continue using changes made to customized StackPack configuration items after up
 ====
 
 
+== Downgrade a StackPack
+
+If a newer StackPack version does not behave as expected, you can go back to an older version. Downgrading is done with the xref:/setup/cli/cli-sts.adoc[SUSE Observability CLI (`sts`)].
+
+The way you downgrade depends on the StackPack packaging format:
+
+* *v2 StackPacks* can be downgraded in place with the dedicated `sts stackpack downgrade` command.
+* *v1 StackPacks* cannot be downgraded in place and must be uninstalled and reinstalled at the older version.
+
+=== List the available versions
+
+To see which versions of a StackPack are available and which one is currently in use, run:
+
+[source,bash]
+----
+sts stackpack list-versions --name <stackpack-name>
+----
+
+The output lists every available version with the following columns:
+
+* `version` - the version string, for example `1.2.3`.
+* `dev` - whether it is a development version.
+* `in use` - whether the version is currently installed.
+
+=== Downgrade a v2 StackPack
+
+For StackPacks that use the v2 packaging format, downgrade all installed instances to an older version with the `sts stackpack downgrade` command:
+
+[source,bash]
+----
+sts stackpack downgrade --name <stackpack-name> --stackpack-version <older-version>
+----
+
+The target version must be *lower* than the currently installed version. Wait for the downgrade to complete with the `--wait` flag:
+
+[source,bash]
+----
+sts stackpack downgrade --name <stackpack-name> --stackpack-version <older-version> --wait
+----
+
+[NOTE]
+====
+The downgrade is rejected if:
+
+* The requested version does not exist. Use `sts stackpack list-versions --name <stackpack-name>` to see the available versions.
+* The requested version is not lower than the currently installed version.
+* The requested version is a v1 StackPack. In that case, downgrade using the uninstall and reinstall procedure below.
+====
+
+=== Downgrade a v1 StackPack
+
+StackPacks that use the v1 packaging format cannot be downgraded in place. To go back to an older version of a v1 StackPack:
+
+. xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[Uninstall] the StackPack.
+. Uninstall the all instances of the stackpack:
++
+[source,bash]
+----
+sts stackpack uninstall --name <stackpack-name> --id <stackpack_instance_id>
+----
+
+. Install the specific older version:
++
+[source,bash]
+----
+sts stackpack install --name <stackpack-name> --stackpack-version <older-version>
+----
+
+
 == Locked configuration items
 
 StackPacks contain configuration information for SUSE Observability that's installed when the StackPack (instance) is installed. Amongst other things, this could be component templates, functions, component actions and views. When a StackPack is upgraded, *the configuration items installed by the previous version of the StackPack will be overwritten by those from the newer StackPack.* This means that any manual change made to these configuration items will be overwritten when the StackPack is upgraded.
