@@ -1,126 +1,344 @@
-TODO Add reference doc for all stackpacks cli commands and stackpack file content, and structure
+ifdef::ss-ff-stackpacks2_enabled[]
+= StackPack Reference
+:page-languages: [en]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: StackPack 2.0 project structure and CLI reference
 
-=== Package Your finished StackPack version
+StackPacks package custom integration configuration for {stackstate-product-name}. A StackPack can define how telemetry is mapped to topology, how components are presented in the UI, which monitors are installed, and which resources are shown on the StackPack page.
 
-The `package` subcommand creates a zip file from stackpack directories. This command packages all required stackpack files and directories into a properly named zip archive for distribution and deployment.
+For a tutorial that creates a StackPack from a template, see xref:/setup/custom-integrations/create.adoc[Create a Custom Integration]. For community examples, see https://github.com/StackVista/contrib-stackpacks[contrib-stackpacks].
 
-- Package your StackPack into a distributable zip:
-+
-[source,bash]
+[#_stackpack_project_structure]
+== StackPack project structure
+
+A StackPack 2.0 project contains a manifest, settings files, and resource directories:
+
+[source,text]
 ----
-sts stackpack package -d ./my-stackpack
-✅ ✓ Stackpack packaged successfully!
-
-Stackpack: stackpack (v0.0.1)
-Zip file: /Users/viliakov/Workspace/src/github/stackstate-cli/my-stackpack/my-stackpack-0.0.1-cli-test.zip
-----
-
-- To specify the output file:
-+
-[source,bash]
-----
-sts stackpack package -d ./my-stackpack -f my-custom-archive.zip
-----
-
-=== Validate Your StackPack
-
-Before uploading and installing your StackPack, you can validate it to ensure it's properly configured (for a tighter feedback loop). There are two approaches depending on your workflow:
-
-==== Local Validation with Live Backend
-
-The `validate` subcommand validates a StackPack against a running {stackstate-product-name} instance. This is useful for validating your StackPack during development.
-
-- Validate a StackPack directory (automatically packaged and uploaded):
-+
-[source,bash]
-----
-sts stackpack validate -d ./my-stackpack
-✅ Stackpack validation successful!
-----
-
-- Validate a pre-packaged `.sts` file:
-+
-[source,bash]
-----
-sts stackpack validate -f ./my-stackpack-0.0.1.sts
-✅ Stackpack validation successful!
+my-stackpack/
+├── README.md
+├── stackpack.yaml
+├── settings/
+│   ├── main-menu.sty
+│   ├── component-mappings/
+│   │   └── services.sty
+│   ├── relation-mappings/
+│   │   └── service-relations.sty
+│   ├── presentations/
+│   │   └── service.sty
+│   └── monitors.sty
+├── icons/
+│   └── service.svg
+├── includes/
+│   └── remediation-hints/
+│       └── latency.md.hbs
+└── resources/
+    ├── overview.md
+    ├── installed.md
+    ├── notinstalled.md
+    ├── provisioning.md
+    ├── waitingfordata.md
+    ├── deprovisioning.md
+    ├── error.md
+    └── logo.png
 ----
 
-[NOTE]
-====
-The `sts stackpack validate` command requires a running {stackstate-product-name} instance configured in your CLI context. If you don't have a live instance available, use CI validation instead.
-====
+`stackpack.yaml`:: The StackPack manifest. It defines metadata such as `schemaVersion`, `name`, `displayName`, `version`, categories, logo, lifecycle text resources, and companion StackPacks.
 
-==== Validation in CI/CD Pipelines
+`settings/`:: Contains StackPack 2.0 setting files. {stackstate-product-name} traverses `settings/**/*.sty`, concatenates the files as YAML documents, and imports the supported nodes during provisioning. The directory layout under `settings/` is for author convenience; you can organize files by setting type, component type, domain, or any other structure.
 
-For CI/CD pipelines where you may not have a running {stackstate-product-name} instance, use the `stack-pack-validator` tool from the StackState Server Docker image. This performs validation without requiring a live backend connection.
+`icons/`:: Contains icon files referenced from settings with `!icon`, for example `icon: !icon "service.svg"`.
 
-===== GitLab CI Example
+`includes/`:: Contains reusable content referenced from settings with `!include`, for example a long remediation hint body.
 
-Use the StackState Server Docker image directly in your GitLab CI pipeline:
+`resources/`:: Contains files referenced from `stackpack.yaml` with `!resource`, such as the StackPack logo and lifecycle state Markdown files.
+
+== Settings files
+
+Settings files are YAML documents stored as `.sty` files. A file can contain one node or multiple nodes. Multiple files are merged during import, so these layouts are equivalent from the importer's perspective:
+
+* one large `.sty` file with all nodes
+* one file per setting type
+* one directory per component type or integration area
+
+Each settings document uses a top-level `nodes` array:
 
 [source,yaml]
 ----
-.validate-stackpack: &validate-stackpack
-  stage: validate
-  image: registry.rancher.com/stackstate/stackstate-server:<latest-tag>
-  script:
-    - |
-      echo "Validating stackpack source: stackpacks/$STACKPACK"
-      /opt/docker/bin/stack-pack-validator -directory "$CI_PROJECT_DIR/stackpacks/$STACKPACK" || {
-        echo "ERROR: Stackpack validation failed for stackpacks/$STACKPACK"
-        exit 1
-      }
-      echo "Stackpack validation passed for stackpacks/$STACKPACK"
-  dependencies: []
-
-validate-my-stackpack:
-  <<: *validate-stackpack
-  variables:
-    STACKPACK: my-stackpack
+nodes:
+  - _type: ComponentPresentation
+    identifier: urn:stackpack:my-stackpack:presentation:service
+    name: Service
+    # ...
 ----
 
-===== Docker Command Line
+Supported StackPack 2.0 setting node types are:
 
-If running validation locally or in other CI/CD systems, use the `docker run` command:
+* `ComponentPresentation`
+* `Dashboard`
+* `ExternalMonitor`
+* `MainMenuGroup`
+* `Monitor`
+* `MonitorFunction`
+* `OtelComponentMapping`
+* `OtelRelationMapping`
+* `QueryView`
 
-- Validate a packaged `.sts` file:
-+
+== Custom tags
+
+StackPack 2.0 supports custom YAML tags for files packaged with the StackPack:
+
+`!icon`:: Resolves a file from `icons/` to a URL that can be used by UI configuration.
+
+`!include`:: Inserts the contents of a file from `includes/` into the setting. Use this for large string values, such as remediation hints.
+
+`!resource`:: Resolves a file from `resources/` to a URL. Use this in `stackpack.yaml` for logo and lifecycle documentation resources.
+
+Example:
+
+[source,yaml]
+----
+nodes:
+  - _type: Monitor
+    identifier: urn:stackpack:my-stackpack:monitor:latency
+    name: High latency
+    remediationHint: !include "remediation-hints/latency.md.hbs"
+----
+
+== Handlebars support
+
+StackPack 2.0 settings files do not support Handlebars templating. Keep `.sty` files as plain YAML; expressions such as `{{ variable }}` are rejected during StackPack validation.
+
+Included remediation hint content is different: monitor remediation hints are rendered at runtime, so an included remediation hint file can contain Handlebars expressions that use the remediation hint data produced by the monitor.
+
+== Manifest example
+
+[source,yaml]
+----
+schemaVersion: "2.0"
+name: "my-stackpack"
+displayName: "My StackPack"
+version: "0.0.1"
+logoUrl: !resource "logo.png"
+categories: [ "Custom" ]
+overviewUrl: !resource "overview.md"
+configurationUrls:
+  INSTALLED: !resource "installed.md"
+  NOT_INSTALLED: !resource "notinstalled.md"
+  PROVISIONING: !resource "provisioning.md"
+  WAITING_FOR_DATA: !resource "waitingfordata.md"
+  DEPROVISIONING: !resource "deprovisioning.md"
+  ERROR: !resource "error.md"
+provision:
+  companionStackPacks: []
+----
+
+[#_stackpack_cli_reference]
+== StackPack CLI reference
+
+Use `sts stackpack --help` and `sts stackpack <command> --help` for the complete options supported by your CLI version.
+
+=== Scaffold
+
+Create a StackPack project from a template:
+
 [source,bash]
 ----
-docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
-    -v /path/to/my-stackpack-0.0.1.sts:/stackpack.sts \
-    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
-    -file /stackpack.sts
+sts stackpack scaffold --name my-stackpack --display-name "My StackPack"
 ----
 
-- Validate a stackpack directory:
-+
+Useful flags:
+
+* `--template-name`: template directory name, defaults to `generic`
+* `--template-github-repo`: GitHub repository in `owner/repo` format
+* `--template-github-ref`: branch, tag, or commit SHA
+* `--template-github-path`: path containing template directories
+* `--template-local-dir`: local directory containing template directories
+* `--destination-dir`: output directory
+* `--force`: overwrite existing files
+
+=== Validate
+
+Validate a StackPack against a running {stackstate-product-name} instance:
+
 [source,bash]
 ----
-docker run --rm --entrypoint="/opt/docker/bin/stack-pack-validator" \
-    -v /path/to/my-stackpack:/stackpack \
-    registry.rancher.com/stackstate/stackstate-server:<latest-tag> \
-    -directory /stackpack
+sts stackpack validate -d ./my-stackpack
+sts stackpack validate -f ./my-stackpack-0.0.1.sts
 ----
 
-[TIP]
+Validating a directory packages it into a temporary `.sts` file before validation. Validating requires the CLI to be configured for the target {stackstate-product-name} instance.
+
+[#_validation_in_ci_cd]
+== Validation in CI/CD
+
+For CI/CD pipelines where a running {stackstate-product-name} instance is not available, use the `stack-pack-validator` tool from a StackState Server container image. This validates the StackPack package structure and settings without uploading the StackPack to a live instance.
+
+[NOTE]
 ====
-Use the `stack-pack-validator` script in the `stackstate-server` image in your CI/CD pipeline to validate StackPacks before publishing them. This ensures your StackPack meets all requirements without needing a running {stackstate-product-name} instance.
+Pin the validator image to the StackState Server version you want to validate against. Update the image when you need to validate StackPacks for a newer server release.
 ====
 
-=== Upload your StackPack
+=== Docker command
 
-The `upload` subcommand pushes the zip archive to a running {stackstate-product-name} instance.
+Validate a StackPack directory:
 
-- Upload the archive to {stackstate-product-name}:
-+
 [source,bash]
 ----
-sts stackpack upload -f ./my-stackpack-0.0.1.zip
-✅ ✓ Stackpack uploaded successfully!
+docker run --rm \
+  -v "${PWD}:/workspace" \
+  -w /workspace \
+  quay.io/stackstate/stackstate-server:<tag> \
+  /opt/docker/bin/stack-pack-validator -directory "/workspace/my-stackpack"
 ----
 
-=== Install the StackPack
+Validate a packaged `.sts` file:
 
-xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[Install or Upgrade your StackPack] via the {stackstate-product-name} stackpacks UI.
+[source,bash]
+----
+docker run --rm \
+  -v "${PWD}:/workspace" \
+  -w /workspace \
+  quay.io/stackstate/stackstate-server:<tag> \
+  /opt/docker/bin/stack-pack-validator -file "/workspace/my-stackpack-0.0.1.sts"
+----
+
+=== GitHub Actions example
+
+This example validates multiple StackPacks from a repository with a `stackpacks/<stackpack-name>` layout. It is adapted from the https://github.com/StackVista/contrib-stackpacks[contrib-stackpacks] CI workflow.
+
+[source,yaml]
+----
+name: StackPack CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate (${{ matrix.stackpack }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        stackpack:
+          - my-stackpack
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate ${{ matrix.stackpack }}
+        env:
+          STACKPACK: ${{ matrix.stackpack }}
+          VALIDATOR_IMAGE: quay.io/stackstate/stackstate-server:<tag>
+        run: |
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            -w /workspace \
+            "${VALIDATOR_IMAGE}" \
+            /opt/docker/bin/stack-pack-validator -directory "/workspace/stackpacks/${STACKPACK}"
+----
+
+=== Test deploy
+
+Run the development loop against a {stackstate-product-name} instance:
+
+[source,bash]
+----
+sts stackpack test-deploy -d ./my-stackpack --yes
+----
+
+The command reads `stackpack.yaml`, creates a temporary copy, adds a `-cli-test.N` version suffix, packages the StackPack, uploads it, and installs or upgrades the StackPack instance. The original directory is not changed.
+
+Useful flags:
+
+* `-d`, `--stackpack-directory`: StackPack directory, defaults to the current directory
+* `-p`, `--parameter`: install parameters in `key=value` form
+* `--yes`: skip the upload confirmation prompt
+* `--unlocked-strategy`: how to handle unlocked StackPack configuration. Use `sts stackpack test-deploy --help` for the values supported by your CLI version.
+
+=== Package
+
+Package a StackPack into an `.sts` file:
+
+[source,bash]
+----
+sts stackpack package -d ./my-stackpack
+sts stackpack package -d ./my-stackpack -f ./dist/my-stackpack-0.0.1.sts
+----
+
+The default archive name is `<stackpack-name>-<version>.sts`, based on `stackpack.yaml`.
+
+=== Upload
+
+Upload a packaged StackPack to {stackstate-product-name}:
+
+[source,bash]
+----
+sts stackpack upload --file ./my-stackpack-0.0.1.sts
+----
+
+Upload makes the StackPack version available. It does not install a StackPack instance.
+
+=== Install, upgrade, and uninstall
+
+Install an uploaded StackPack version:
+
+[source,bash]
+----
+sts stackpack install --name my-stackpack
+----
+
+Use `-p` or `--parameter` to pass install parameters in `key=value` form.
+
+Upgrade an installed StackPack instance:
+
+[source,bash]
+----
+sts stackpack upgrade --name my-stackpack
+----
+
+Uninstalling requires the instance ID. Use `sts stackpack list-instances --name <stackpack-name>` to find it:
+
+[source,bash]
+----
+sts stackpack uninstall --name my-stackpack --id 123456789
+----
+
+The exact install parameters depend on the StackPack. Use `sts stackpack list-parameters --name <stackpack-name>` before installing if the StackPack requires parameters.
+
+=== Inspect StackPacks
+
+[source,bash]
+----
+sts stackpack list
+sts stackpack describe --name my-stackpack
+sts stackpack list-instances --name my-stackpack
+sts stackpack list-versions --name my-stackpack
+sts stackpack list-parameters --name my-stackpack
+----
+
+=== Delete uploaded versions
+
+Delete one uploaded StackPack version:
+
+[source,bash]
+----
+sts stackpack delete-version --name my-stackpack --stackpack-version 0.0.1
+----
+
+Delete multiple uploaded versions:
+
+[source,bash]
+----
+sts stackpack delete-versions --name my-stackpack --from 0.0.1 --to 0.0.2
+sts stackpack delete-versions --name my-stackpack --all --dev-only
+----
+
+endif::ss-ff-stackpacks2_enabled[]
