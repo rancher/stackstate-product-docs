@@ -1,0 +1,164 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= SUSE Virtualization
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-06-16
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+Listing and inspecting your Harvester Virtual Machines can be achieved with the
+SUSE Virtualization stackpack.  Running the SUSE Observability Agent on the
+internal Kubernetes cluster, metrics and VM details are propagated to
+{stackstate-product-name}.
+
+== Install Platform
+
+Follow the xref:installing-suse-obs.adoc[Installing SUSE Observability] guide
+to install SUSE Observability.  Since stackpacks2 are still under a feature
+flag you do need to enable that by enabling
+`global.features.experimentalStackpacks` in the deployment command:
+
+[bash,]
+----
+helm upgrade --install \
+    --namespace suse-observability \
+    --create-namespace \
+    --values values.yaml \
+    --set global.features.experimentalStackpacks=true \
+    suse-observability \
+    suse-observability/suse-observability
+----
+
+=== Install the SUSE Virtualization StackPack
+
+Go to main menu \-> StackPacks \-> SUSE Virtualization and install it.  This will add a new main menu group:
+
+image::virtualization-mainmenu.png[Main menu]
+
+To populate the overviews, observability data needs to flow from the Harvester cluster into SUSE Observability.
+
+== Install Agent
+
+=== Getting the Kubeconfig
+
+In the Harvester UI, go to the Support page and download the KubeConfig.
+
+image::harvester-kubeconfig.png[Download the kubeconfig.yaml]
+
+=== Deploy the Agent
+
+In SUSE Observability, go to main menu \-> StackPacks \-> Kubernetes and add an instance.
+Record the cluster name, ingest URL and service token in a `values.yaml` file:
+
+[,yaml]
+----
+stackstate:
+  apiKey: __SERVICE_TOKEN__
+  cluster:
+    name: __CLUSTER_NAME__
+  url: __STACKSTATE_INGEST_URL__
+
+global:
+  features:
+    experimentalStackpacks: true
+
+otel:
+  enabled: true
+  k8sResourceCollector:
+    integrations:
+      suseVirtualization: true
+      rancher: true
+----
+
+Follow the "Generic Kubernetes" installation instructions, with helm command:
+
+[,bash]
+----
+helm upgrade --install \
+  --kubeconfig /path/to/kubeconfig.yaml \
+  --namespace suse-observability-agent \
+  --values values.yaml \
+  suse-observability-agent suse-observability/suse-observability-agent
+----
+
+=== Create ServiceMonitors
+
+To ship metrics from Harvester to SUSE Observability, you must create a couple
+of ServiceMonitors.  Note that the label `observability.suse.com/agent: scrape`
+ensures that the service monitor is scraped by the OTEL integration of SUSE 
+Observability.
+
+[,yaml]
+----
+# Harvester-owned ServiceMonitor/PodMonitor resources for SUSE Observability Agent
+# target allocator discovery. 
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: harvester-api-metrics
+  namespace: harvester-system
+  labels:
+    observability.suse.com/agent: scrape
+    app.kubernetes.io/part-of: harvester
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: harvester-api
+  endpoints:
+    - port: https-metrics
+      scheme: https
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      tlsConfig:
+        insecureSkipVerify: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubevirt-metrics
+  namespace: harvester-system
+  labels:
+    observability.suse.com/agent: scrape
+    app.kubernetes.io/part-of: harvester
+spec:
+  namespaceSelector:
+    matchNames:
+      - harvester-system
+      - cattle-monitoring-system
+      - kubevirt
+  selector:
+    matchExpressions:
+      - key: prometheus.kubevirt.io
+        operator: Exists
+  endpoints:
+    - port: metrics
+      scheme: https
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      tlsConfig:
+        insecureSkipVerify: true
+----
+
+
+== Verify SUSE Virtualization
+
+The SUSE Observability Agent running in the Harvester cluster sends
+`kubevirt.io` custom resources, pod details and metrics to SUSE Observability.
+You can validate the connection by checking the 
+
+*SUSE Virtualization Operations Dashboard*
+
+image::virtualization-dashboard.png[Dashboard]
+
+*Virtual Machine*
+
+image::virtualization-vm.png[Virtual Machine]
+
+*Metrics perspective on a Kubevirt Controller*
+
+image::virtualization-controller-metrics.png[Controller metrics]
+
+endif::ss-ff-stackpacks2_enabled[]
