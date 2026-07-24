@@ -82,6 +82,67 @@ helm upgrade --install \
   suse-observability-agent suse-observability/suse-observability-agent
 ----
 
+=== Create ServiceMonitors
+
+To ship metrics from Harvester to SUSE Observability, you must create a couple
+of ServiceMonitors.  Note that the label `observability.suse.com/agent: scrape`
+ensures that the service monitor is scraped by the OTEL integration of SUSE 
+Observability.
+
+[,yaml]
+----
+# Harvester-owned ServiceMonitor/PodMonitor resources for SUSE Observability Agent
+# target allocator discovery. 
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: harvester-api-metrics
+  namespace: harvester-system
+  labels:
+    observability.suse.com/agent: scrape
+    app.kubernetes.io/part-of: harvester
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: harvester-api
+  endpoints:
+    - port: https-metrics
+      scheme: https
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      tlsConfig:
+        insecureSkipVerify: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubevirt-metrics
+  namespace: harvester-system
+  labels:
+    observability.suse.com/agent: scrape
+    app.kubernetes.io/part-of: harvester
+spec:
+  namespaceSelector:
+    matchNames:
+      - harvester-system
+      - cattle-monitoring-system
+      - kubevirt
+  selector:
+    matchExpressions:
+      - key: prometheus.kubevirt.io
+        operator: Exists
+  endpoints:
+    - port: metrics
+      scheme: https
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      tlsConfig:
+        insecureSkipVerify: true
+----
+
+
 == Verify SUSE Virtualization
 
 The SUSE Observability Agent running in the Harvester cluster sends
