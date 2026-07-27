@@ -4,9 +4,7 @@
 ci-pr-link-check:
 	mkdir -p tmp
 	npx antora --version
-	npx antora --failure-level=warn --stacktrace --log-format=pretty --log-level=info \
-		ss-local-playbook.yml \
-		2>&1 | tee tmp/ci-build.log
+	npx antora --failure-level=warn --stacktrace --log-format=pretty --log-level=info ss-local-playbook.yml
 
 .PHONY: local
 local:
