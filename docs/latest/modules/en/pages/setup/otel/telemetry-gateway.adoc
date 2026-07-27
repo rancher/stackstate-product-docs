@@ -3,11 +3,11 @@ ifdef::ss-ff-stackpacks2_enabled[]
 :page-languages: [en, de, es, fr, ja, pt, zh]
 :revdate: 2026-06-30
 :page-revdate: {revdate}
-:description: SUSE Observability
+:description: {stackstate-product-name}
 
 == Overview
 
-The *telemetry gateway* is an OpenTelemetry Collector component in the SUSE Observability Agent that accepts metrics and traces pushed over OTLP from application-embedded OpenTelemetry SDKs. It enriches the data with Kubernetes metadata and forwards it to the SUSE Observability platform.
+The *telemetry gateway* is an OpenTelemetry Collector component in the {stackstate-product-name} Agent that accepts metrics and traces pushed over OTLP from application-embedded OpenTelemetry SDKs. It enriches the data with Kubernetes metadata and forwards it to the {stackstate-product-name} platform.
 
 Use the telemetry gateway when your workloads are instrumented with an OTel SDK (Java, Go, Python, Node.js, etc.) and export telemetry using OTLP. It is the recommended integration path for natively instrumented services.
 
@@ -38,7 +38,7 @@ Set the following environment variables on each application pod. Most OTel SDKs 
 
 [NOTE]
 ====
-Log ingestion via OTLP is not yet supported. Set `OTEL_LOGS_EXPORTER=none` to suppress log export errors in your SDK.
+Log ingestion via OTLP is not yet supported. Set `OTEL_LOGS_EXPORTER=none` to avoid exporting logs. If a workload sends OTLP logs to the gateway anyway, they are written to the gateway pod logs for debug visibility and are not ingested as {stackstate-product-name} logs.
 ====
 
 === gRPC (port 4317)
@@ -99,7 +99,7 @@ The gateway automatically generates span metrics (request rate, error rate, dura
 * Histogram name `otel_span.duration`
 * Counter without `_total` suffix
 
-These metrics are forwarded to SUSE Observability alongside your application metrics and can be used to build golden-signal dashboards without any additional instrumentation.
+These metrics are forwarded to {stackstate-product-name} alongside your application metrics and can be used to build golden-signal dashboards without any additional instrumentation.
 
 == Operational monitoring
 
@@ -179,16 +179,16 @@ otel:
   telemetryGateway:
     resources:
       requests:
-        cpu: 200m
-        memory: 256Mi
+        cpu: 250m
+        memory: 1Gi
       limits:
         cpu: 1
-        memory: 1Gi
+        memory: 2Gi
 ----
 
 == Overload protection
 
-The collector includes `memory_limiter` as the first processor in every pipeline. It protects the process from OOM by rejecting data once memory usage exceeds 80% (with a 25% spike allowance). Under sustained overload, data is dropped to preserve collector stability — this is intentional behaviour. Per-producer rate limiting, sampling, and autoscaling are separate stories.
+The collector includes `memory_limiter` as the first processor in every pipeline. It protects the process from OOM by rejecting data once memory usage exceeds 80% (with a 10% spike allowance). Under sustained overload, data is dropped to preserve collector stability — this is intentional behaviour. Per-producer rate limiting, sampling, and autoscaling are separate stories.
 
 Span-metric generation also has a cardinality guard. `otel.telemetryGateway.spanMetrics.aggregationCardinalityLimit` limits the number of unique span-metric aggregation series held by the gateway. The default protects memory from high-cardinality spans, while larger clusters can tune it when needed:
 
@@ -202,7 +202,7 @@ otel:
 
 == Product integration contract
 
-This section is for SUSE product teams that want their Helm charts to export push-based OTLP telemetry through the telemetry gateway when the SUSE Observability Agent supports it.
+This section is for SUSE product teams that want their Helm charts to export push-based OTLP telemetry through the telemetry gateway when the {stackstate-product-name} Agent supports it.
 
 *Capability detection*:: Before enabling auto-export by default, check for the marker CRD in Helm:
 +
@@ -219,7 +219,7 @@ The agent installs this CRD when at least one product-facing OTel integration pa
 
 *Attribute ownership*:: The collector owns `k8s.cluster.name` and `k8s.namespace.name` (see xref:./telemetry-gateway.adoc#_attribute_ownership_security_enforcement[Attribute ownership]). Products *must not* set or rely on user-supplied values for these. Products must set `service.name`, `service.version`, and `deployment.environment`. Products should inject `k8s.pod.uid` via the downward API — this is the most reliable pod-association method; the collector falls back to pod IP and connection source address.
 
-*Log ingestion*:: Log signals are not yet supported. Products must not export logs to the gateway at this time.
+*Log ingestion*:: Log signals are not yet supported for {stackstate-product-name} log ingestion. Products must not export logs to the gateway at this time; any logs sent to the gateway are written to the gateway pod logs for debug visibility only.
 
 == See also
 
