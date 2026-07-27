@@ -1,11 +1,12 @@
 .PHONY: all test
 
-.PHONY: pr-link-check
-pr-link-check:
+.PHONY: ci-pr-link-check
+ci-pr-link-check:
 	mkdir -p tmp
 	npx antora --version
-	npx antora --log-failure-level=warn --stacktrace --log-format=pretty --log-level=info \
-		ss-local-playbook.yml
+	npx antora --failure-level=warn --stacktrace --log-format=pretty --log-level=info \
+		ss-local-playbook.yml \
+		2>&1 | tee tmp/ci-build.log
 
 .PHONY: local
 local:
