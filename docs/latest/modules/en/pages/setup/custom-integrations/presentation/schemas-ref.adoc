@@ -154,17 +154,17 @@ presentation:
   tracesPerspective:                              # Optional - makes the Traces perspective available
     showTraces: boolean                           # Should the Traces perspective be shown
     spanFilter:                                   # Selects the spans shown in the perspective
-      serviceName: [cel:string]                   # Optional - filter spans by service name
-      spanName: [cel:string]                      # Optional - filter spans by name
+      serviceName: [string-template]              # Optional - filter spans by service name
+      spanName: [string-template]                 # Optional - filter spans by name
       attributes:                                 # Optional - filter spans by one or more attributes
-        <attribute-key>: [cel:string]
+        <attribute-key>: [string-template]
       spanKind: [Client | Consumer | Internal | Producer | Server | Unspecified]
       spanParentType: [External | Internal | Root]
       statusCode: [Error | Ok | Unset]
       durationFromNanos: integer                  # Optional - spans with duration >= value
       durationToNanos: integer                    # Optional - spans with duration < value
-      scopeName: [cel:string]                     # Optional - filter by instrumentation scope name
-      scopeVersion: [cel:string]                  # Optional - filter by instrumentation scope version
+      scopeName: [string-template]                # Optional - filter by instrumentation scope name
+      scopeVersion: [string-template]             # Optional - filter by instrumentation scope version
 
   filters:                    # Optional overview filters
     - filterId: string
@@ -241,10 +241,18 @@ E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the 
 
 The `tracesPerspective` section makes the Traces perspective available on the highlight page of matching components.  When the section is absent, the Traces perspective is not shown for that component.
 
-`spanFilter` selects which spans appear in the perspective.  String-valued fields are CEL expressions evaluated against the component, using the same context as metric queries — for example `tags.singleValue("service.name")` or `name`.  Two things to keep in mind when writing them:
+`spanFilter` selects which spans appear in the perspective.  String-valued fields are string templates: text is taken literally, and any `$\{...}` placeholder is evaluated as a CEL expression against the component, using the same context as metric queries.
 
-* `tags` maps each key to a *list* of values, so use `singleValue` rather than indexing directly when a string is required.
-* Literal values must be written as quoted CEL strings, for example `'orderService'`.  A bare word is parsed as an identifier and will not resolve.
+[,yaml]
+----
+serviceName: ["orderService"]                          # literal value
+spanName: ["${name}"]                                  # the component name
+attributes:
+  service.namespace: ["${tags.singleValue('service.namespace')}"]
+  http.route: ["/api/${tags.singleValue('version')}"]   # literal text and a placeholder combined
+----
+
+Note that `tags` maps each key to a *list* of values, so use `singleValue` inside a placeholder when a single string is required.  Any CEL string expression is allowed inside `$\{...}`, so values can be composed — for example `$\{tags.singleValue('service.namespace') + '/' + name}`.
 
 `spanKind`, `spanParentType`, `statusCode` and the two duration bounds are literal values and are not evaluated as expressions.
 
