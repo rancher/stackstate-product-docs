@@ -151,6 +151,21 @@ presentation:
                 order: double
                 ...
 
+  tracesPerspective:                              # Optional - makes the Traces perspective available
+    showTraces: boolean                           # Should the Traces perspective be shown
+    spanFilter:                                   # Selects the spans shown in the perspective
+      serviceName: [cel:string]                   # Optional - filter spans by service name
+      spanName: [cel:string]                      # Optional - filter spans by name
+      attributes:                                 # Optional - filter spans by one or more attributes
+        <attribute-key>: [cel:string]
+      spanKind: [Client | Consumer | Internal | Producer | Server | Unspecified]
+      spanParentType: [External | Internal | Root]
+      statusCode: [Error | Ok | Unset]
+      durationFromNanos: integer                  # Optional - spans with duration >= value
+      durationToNanos: integer                    # Optional - spans with duration < value
+      scopeName: [cel:string]                     # Optional - filter by instrumentation scope name
+      scopeVersion: [cel:string]                  # Optional - filter by instrumentation scope version
+
   filters:                    # Optional overview filters
     - filterId: string
       displayName:            # Optional - name in the menu
@@ -221,6 +236,23 @@ Presentation sections are composed when multiple definitions apply to the same c
 
 Defines iconography and naming used across the UI.  Icons can be included by using the `!icon` yaml tag, followed by the path of an icon relative to the `icons/` folder.
 E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the file `icons/services/main-menu.svg`.
+
+=== Traces perspective
+
+The `tracesPerspective` section makes the Traces perspective available on the highlight page of matching components.  When the section is absent, the Traces perspective is not shown for that component.
+
+`spanFilter` selects which spans appear in the perspective.  String-valued fields are CEL expressions evaluated against the component, using the same context as metric queries — for example `tags.singleValue("service.name")` or `name`.  Two things to keep in mind when writing them:
+
+* `tags` maps each key to a *list* of values, so use `singleValue` rather than indexing directly when a string is required.
+* Literal values must be written as quoted CEL strings, for example `'orderService'`.  A bare word is parsed as an identifier and will not resolve.
+
+`spanKind`, `spanParentType`, `statusCode` and the two duration bounds are literal values and are not evaluated as expressions.
+
+Resolution is best effort: a field whose expression fails to parse or evaluate is dropped from the filter and logged, while the remaining fields still apply.
+
+When several `ComponentPresentation` definitions match a component, the whole `tracesPerspective` section is taken from the most specific one — it is not merged field by field.  Set `showTraces: false` on a more specific presentation to suppress a Traces perspective that a less specific one enabled.
+
+A `TraceBinding` setting matching the same component takes precedence over the `tracesPerspective` section.
 
 === Other sections
 
