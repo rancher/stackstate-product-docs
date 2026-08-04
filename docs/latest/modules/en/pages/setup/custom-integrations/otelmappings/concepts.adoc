@@ -1,7 +1,7 @@
 ifdef::ss-ff-stackpacks2_enabled[]
 = Open Telemetry Mappings Concepts
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-12-23
+:revdate: 2026-08-04
 :page-revdate: {revdate}
 :description: Open Telemetry Mappings Concepts
 
@@ -41,5 +41,18 @@ Topology mappings rely on the https://cel.dev/[Common Expression Language (CEL)]
 You do not need prior CEL expertise to get started - most expressions are simple boolean checks, attribute lookups, or string constructions. More advanced expressions can be introduced incrementally as needed.
 
 For more information on how to leverage CEL in the topology mappings, see xref:/setup/custom-integrations/otelmappings/schemas-ref.adoc[schemas] page.
+
+== Span to component links in the Traces perspective
+
+When you open a span's details in the xref:/use/views/k8s-traces-perspective.adoc[Traces perspective], {stackstate-product-name} shows links to the topology component(s) that the span belongs to. For StackPacks that ship Open Telemetry mappings, these links are derived automatically from the component mappings - you do not need to define anything extra.
+
+To build the link, {stackstate-product-name} takes each component mapping's component identifier and resolves it against the span's *resource* attributes, then looks up the component with the resulting identifier. This means:
+
+* *Resource attributes only.* Only resource-level attributes are available when linking a span. A mapping whose component identifier - or a variable it uses - depends on span, metric, log, datapoint or scope data cannot be resolved from a span's resource attributes and is skipped for this purpose. If you want a mapping to contribute a link, make sure its component identifier depends only on `resource` attributes (optionally via variables).
+* *Variables are resolved first.* If the component identifier uses variables, each variable is resolved from the resource attributes before the identifier is constructed.
+* *All signals contribute.* Mappings are not filtered by signal type - trace, metric and log mappings can all contribute a span to component link.
+* *Identifiers are deduplicated.* When several mappings resolve to the same identifier, the span links to a single component.
+
+A mapping that cannot be resolved is simply skipped for the span it could not link; it does not affect topology synchronization. See xref:/setup/custom-integrations/otelmappings/troubleshooting.adoc[troubleshooting] if a span shows no linked component.
 
 endif::ss-ff-stackpacks2_enabled[]
