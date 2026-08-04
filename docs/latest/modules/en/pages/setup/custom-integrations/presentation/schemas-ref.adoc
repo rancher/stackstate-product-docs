@@ -151,6 +151,22 @@ presentation:
                 order: double
                 ...
 
+  tracesPerspective:                              # Optional - makes the Traces perspective available
+    showTraces: boolean                           # Should the Traces perspective be shown
+    spanFilter:                                   # Selects the spans shown in the perspective
+      serviceName: [string-template]              # Optional - filter spans by service name
+      spanName: [string-template]                 # Optional - filter spans by name
+      attributes:                                 # Optional - filter spans by one or more attributes
+        <attribute-key>: [string-template]
+        __multi__: ["${<cel-map-expression>}"]    # Optional - expands a map into several attributes
+      spanKind: [Client | Consumer | Internal | Producer | Server | Unspecified]  # Optional - filter spans by kind
+      spanParentType: [External | Internal | Root]  # Optional - filter spans by parent type
+      statusCode: [Error | Ok | Unset]            # Optional - filter spans by status code
+      durationFromNanos: integer                  # Optional - spans with duration >= value
+      durationToNanos: integer                    # Optional - spans with duration < value
+      scopeName: [string-template]                # Optional - filter by instrumentation scope name
+      scopeVersion: [string-template]             # Optional - filter by instrumentation scope version
+
   filters:                    # Optional overview filters
     - filterId: string
       displayName:            # Optional - name in the menu
@@ -221,6 +237,44 @@ Presentation sections are composed when multiple definitions apply to the same c
 
 Defines iconography and naming used across the UI.  Icons can be included by using the `!icon` yaml tag, followed by the path of an icon relative to the `icons/` folder.
 E.g. `!icon services/main-menu.svg` can be used when the stackpack includes the file `icons/services/main-menu.svg`.
+
+=== Traces perspective
+
+The `tracesPerspective` section makes the Traces perspective available on the highlight page of matching components.
+
+`spanFilter` selects which spans appear in the perspective.  String-valued fields are string templates: text is taken literally, and any `$\{...}` placeholder is evaluated as a CEL expression against the component, using the same context as metric queries.
+
+[,yaml]
+----
+serviceName: ["orderService"]                          # literal value
+spanName: ["${name}"]                                  # the component name
+attributes:
+  service.namespace: ["${tags.singleValue('service.namespace')}"]
+  http.route: ["/api/${tags.singleValue('version')}"]   # literal text and a placeholder combined
+----
+
+[NOTE] 
+====
+`tags` maps each key to a *list* of values. Hence, use `singleValue` inside a placeholder when a single string is required. Any CEL string expression is allowed inside `$\{...}` for the values to be composed. For example, `$\{tags.singleValue('service.namespace') + '/' + name}`.
+====
+
+The special attribute key `__multi__` expands one CEL *map* expression into several span attributes at once, which is useful when the attribute keys are not known ahead of time. Its value must be a single `$\{...}` placeholder that evaluates to a `map<string, string>`; each entry of the map becomes one span attribute. Use `selectPrefix` to turn a set of related tags into attributes:
+
+[,yaml]
+----
+attributes:
+  __multi__: ["${selectPrefix(tags, 'otel.')}"]   # tags otel.service, otel.version -> attributes service, version
+----
+
+Because attribute keys must be unique, add a numeric suffix (`__multi__1`, `__multi__2`, and so on) when you need more than one such expansion in the same `spanFilter`.  This is the same `__multi__` expansion used in metric queries, where the expansion is written as a plain `__multi__` label matcher with no suffix because PromQL matchers are a list rather than a map.
+
+`spanKind`, `spanParentType`, `statusCode` and the two duration bounds are literal values and are not evaluated as expressions.
+
+Resolution is best effort: a field whose expression fails to parse or evaluate is dropped from the filter and logged, while the remaining fields still apply.
+
+When several `ComponentPresentation` definitions match a component, the whole `tracesPerspective` section is taken from the most specific one — it is not merged field by field.  Set `showTraces: false` on a more specific presentation to suppress a Traces perspective that a less specific one enabled.
+
+A `TraceBinding` setting matching the same component takes precedence over the `tracesPerspective` section.
 
 === Other sections
 
