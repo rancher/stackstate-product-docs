@@ -253,9 +253,12 @@ attributes:
   http.route: ["/api/${tags.singleValue('version')}"]   # literal text and a placeholder combined
 ----
 
-Note that `tags` maps each key to a *list* of values, so use `singleValue` inside a placeholder when a single string is required.  Any CEL string expression is allowed inside `$\{...}`, so values can be composed — for example `$\{tags.singleValue('service.namespace') + '/' + name}`.
+[NOTE] 
+====
+`tags` maps each key to a *list* of values. Hence, use `singleValue` inside a placeholder when a single string is required. Any CEL string expression is allowed inside `$\{...}` for the values to be composed. For example, `$\{tags.singleValue('service.namespace') + '/' + name}`.
+====
 
-The special attribute key `__multi__` expands one CEL *map* expression into several span attributes at once, which is useful when the attribute keys are not known ahead of time.  Its value must be a single `$\{...}` placeholder that evaluates to a `map<string, string>`; each entry of the map becomes one span attribute.  Use `selectPrefix` to turn a set of related tags into attributes:
+The special attribute key `__multi__` expands one CEL *map* expression into several span attributes at once, which is useful when the attribute keys are not known ahead of time. Its value must be a single `$\{...}` placeholder that evaluates to a `map<string, string>`; each entry of the map becomes one span attribute. Use `selectPrefix` to turn a set of related tags into attributes:
 
 [,yaml]
 ----
@@ -263,7 +266,7 @@ attributes:
   __multi__: ["${selectPrefix(tags, 'otel.')}"]   # tags otel.service, otel.version -> attributes service, version
 ----
 
-Because attribute keys must be unique, add a numeric suffix (`__multi__1`, `__multi__2`, and so on) when you need more than one such expansion in the same `spanFilter`.  This is the same `__multi__` expansion used in metric queries, where — because PromQL matchers are a list rather than a map — it is written as a plain `__multi__` label matcher with no suffix.
+Because attribute keys must be unique, add a numeric suffix (`__multi__1`, `__multi__2`, and so on) when you need more than one such expansion in the same `spanFilter`.  This is the same `__multi__` expansion used in metric queries, where the expansion is written as a plain `__multi__` label matcher with no suffix because PromQL matchers are a list rather than a map.
 
 `spanKind`, `spanParentType`, `statusCode` and the two duration bounds are literal values and are not evaluated as expressions.
 
