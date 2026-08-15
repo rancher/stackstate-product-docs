@@ -1,0 +1,82 @@
+= v2.10.0 - 12/May/2026
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-05-12
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: {stackstate-product-name} Helm Chart v2.10.0
+
+== Component Versions
+
+[cols="1,2"]
+|===
+| Component | Version
+
+| *SUSE Observability* | `2.10.0`
+| *SUSE Observability Agent* | `1.3.22`
+|===
+
+== Upgrade Warnings & Breaking Changes
+
+* *Helm Chart Structure Refactoring:* The Helm chart `values.yaml` has undergone a major refactoring to improve readability and maintainability.
+** *Action Required:* Before upgrading, you must review the xref:setup/upgrade-stackstate/v2.10.0-helm.adoc[Helm chart migration guide for v2.10.0] and update your `values.yaml` accordingly.
+* *Minio Replaced by S3Proxy:* Minio has been replaced with S3Proxy as the storage proxy for backups.
+** *Action Required:* Follow the xref:setup/data-management/backup_restore/migration_to_s3proxy.adoc[migration to S3Proxy guide] to update your configuration. This is a breaking change for IRSA users (the service account name has changed). For other setups, the existing configuration is deprecated but still supported. You must also download the latest version of the `sts-backup` CLI tool when restoring backups.
+* *Victoria Metrics Storage Format Change:* Victoria Metrics `v1.133.0` introduces a *non-reversible* storage format change (per-partition index).
+** On the first startup after the upgrade, Victoria Metrics will re-index all time series. You should expect slower ingestion and query performance during this one-time migration.
+
+
+
+== Security Hardening & Platform Evolution
+
+This release represents a major step forward in our commitment to a "continuous security" model. We have focused on fundamentally hardening the infrastructure of SUSE Observability to ensure a lean, secure, and transparent footprint.
+
+* *Key Security Enhancements:*
+** *Strategic Migration to SUSE Linux BCI:* We have transitioned most components of our container stack to SUSE Linux Enterprise BCI (Base Container Images). This shift to an enterprise-grade, hardened base provides a more robust security posture and significantly reduces the overall attack surface.
+** *VEX Transparency for Actionable Scans:* To assist your security teams in managing vulnerability data, we are now providing VEX (Vulnerability Exploitability eXchange) data. This allows your scanners to identify which vulnerabilities are actually exploitable, ensuring your reports stay focused on real, actionable risks rather than "noise."
+** *Optimized Dependency Lifecycle:* We have refined our build pipeline to ensure that the libraries and dependencies within our images are updated with the latest security patches at the time of release.
+** *Continuous Security Pipeline:* These improvements are now a permanent part of our CI/CD process, ensuring that both our "Daily" and "Stable" releases maintain an ultra-low CVE profile as a continuous standard.
+
+
+== New Features & Enhancements
+
+* *Overview Page Performance:* Improved the loading performance of the Platform overview page.
+* *HA Profile Scaling Updates:*
+** *500-ha Profile:* Updated the memory settings for the HBase region server and Elasticsearch.
+** *4000-ha Profile:* Now deploys 5 datanodes with increased replication to improve availability and resilience.
+* *StackPack Version Management:* Users can now manually remove old, uploaded StackPack versions. Additionally, the system will automatically clean up old StackPack versions that are no longer in use.
+* *VictoriaMetrics Smart Backups:* Replaced the single-generation incremental backup system with a more robust two-tier smart backup strategy based on the VictoriaMetrics smart backups pattern.
+* *Image Updates:* Upgraded the base images for Envoy and Kafka to their latest supported versions.
+* *Log Noise Reduction:* Suppressed spurious `X-Forwarded-For` messages originating from the API.
+
+== Bug Fixes
+
+=== Platform & Backend
+* *Topology Ingestion:* Fixed a `MESSAGE_TOO_LARGE` error emitted from the receiver that caused topology ingestion failures.
+* *Component Properties:* Resolved an issue where component properties displayed as 'null' when no `sourceProperties` were present.
+* *Component Property Selection:* Fixed broken component property selection for components merged from the same topology synchronization.
+* *RBAC Agent Token:* Resolved an issue where the RBAC agent deployed with the platform failed to refresh its Kubernetes service account token.
+* *Component Identifiers:* Restored support for component identifiers that do not strictly follow the `urn:*` pattern.
+* *RBAC Clustered Scope Metrics:* Fixed an issue where cluster-level metrics were hidden from RBAC users with a clustered scope.
+* *Duplicate Monitors:* Fixed an issue with duplicate Node Ready, CPU, and Disk monitors. *(Note: This fix will temporarily show a duplication immediately upon upgrade, after which it will resolve.)*
+* *User Login via External IDP:* Fixed a `Too many elements (XXX > 256) specified in within clause` error that occurred when logging in users belonging to more than 256 groups. Ensure the login page correctly displays after logout when using an external identity provider on non-SaaS instances.
+* *System Load Metrics:* Corrected the metric used to calculate the 15-minute System Load on nodes.
+* *RBAC Agent Resources:* Increased memory resources and set default CPU resources for the RBAC agent.
+
+=== UI & Navigation
+* *Y-Axis Ranges:* Ensured that Y-axis minimum and maximum range settings are now consistently applied in charts.
+* *Browser Navigation:* Navigation history is now correctly maintained per individual browser tab.
+* *Monitor Sort Order:* Established a stable, predictable sort order for monitors on the component highlight page.
+
+=== Backup & Restore
+* *StackPack Backups:* Backups now correctly include all active StackPacks, including manually uploaded ones. Previously, only the configuration was backed up, requiring a manual upload of the StackPacks after a restore.
+* *Settings Backup Code Point Limit:* Fixed an issue where settings backups failed to restore due to a SnakeYAML 'code point limit' error.
+* *sts-backup KUBECONFIG:* The `sts-backup` CLI tool now correctly respects the `KUBECONFIG` environment variable.
+* *sts-backup Elasticsearch:* Fixed an issue within the Elasticsearch sub-command where partial snapshots failed to restore.
+
+== Agent Bug Fixes
+
+* *Kubernetes Resource Status:* Fixed an issue where the agent failed to send node status information. This resolves missing Kubernetes resource status in the UI and fixes failing readiness monitors on Kubernetes nodes.
+* *Critical Vulnerability Patches:* Fixed two critical CVEs in the `stackstate-process-agent` (CVE-2025-68121 and CVE-2026-33186).
+* *Startup Script Compatibility:* Updated the agent startup script to use `bash` instead of `sed`, resolving errors on systems missing the `sed` command.
+* *Rancher Installation Resources:* Fixed an issue with `spec.template.spec.containers[0].resources.override` when installing the agent via Rancher.
