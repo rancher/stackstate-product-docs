@@ -22,6 +22,14 @@ local-stackpacks2:
 		ss-local-playbook.yml \
 		2>&1 | tee tmp/local-build.log
 
+.PHONY: local-suppressions
+local-suppressions:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --attribute ss-ff-suppressions_enabled --stacktrace --log-format=pretty --log-level=info \
+		ss-local-playbook.yml \
+		2>&1 | tee tmp/local-build.log
+
 .PHONY: remote
 remote:
 	mkdir -p tmp
