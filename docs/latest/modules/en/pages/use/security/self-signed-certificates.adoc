@@ -256,7 +256,84 @@ keytool -import -keystore custom_cacerts -alias <a-name-for-the-certificate>  -f
 
 === Use a custom trust store
 
-The trust store and the password can be specified as values. The trust store can only be specified from the helm command line as it's a file. The password value is specified in the same way in the example, but it can also be provided via a `values.yaml` file.
+[NOTE]
+====
+Configuring the trust store from an existing secret is available starting from version `2.10.4`. For earlier versions, use the Helm values described in xref:/use/security/self-signed-certificates.adoc#_specify_the_trust_store_as_a_helm_value[Specify the trust store as a Helm value].
+====
+
+Create a Kubernetes secret holding the trust store and its password, then refer to that secret from your values. This keeps the trust store out of the Helm release secret, which is subject to a 1MB size limit. See xref:/use/security/self-signed-certificates.adoc#_trust_stores_and_the_helm_release_secret_size_limit[Trust stores and the Helm release secret size limit] for why that matters.
+
+[,bash]
+----
+kubectl create secret generic java-truststore \
+  --namespace suse-observability \
+  --from-file=java-cacerts=custom_cacerts \
+  --from-literal=java-cacerts-password=changeit
+----
+
+Add the secret to your `values.yaml`:
+
+[,yaml]
+----
+stackstate:
+  java:
+    trustStoreFromExternalSecret:
+      name: java-truststore
+      # The key holding the trust store file. Defaults to java-cacerts.
+      key: java-cacerts
+      # Optional. When omitted, stackstate.java.trustStorePassword is used instead.
+      passwordKey: java-cacerts-password
+----
+
+Then upgrade as usual, with no extra command line arguments needed:
+
+[,bash]
+----
+helm upgrade \
+  --install \
+  --namespace suse-observability \
+  --values values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
+
+[NOTE]
+====
+Changing the secret afterwards does not restart the SUSE Observability pods. After rotating a trust store, restart the workloads so they pick up the new file:
+
+[,bash]
+----
+kubectl rollout restart deployment,statefulset --namespace suse-observability
+----
+====
+
+[#_trust_stores_and_the_helm_release_secret_size_limit]
+=== Trust stores and the Helm release secret size limit
+
+Helm stores every value you supply in a release secret, and that secret is subject to the 1MB limit of the underlying object in the cluster. A trust store supplied as a Helm value counts against that limit twice, once as the value itself and once as the secret SUSE Observability renders from it. Trust stores are binary, so they do not compress. A trust store of a few hundred KB is therefore enough on its own to make `helm upgrade` fail with an error about the release secret being too large.
+
+To check the size of your current release secret and see which values dominate it:
+
+[,bash]
+----
+kubectl get secret --namespace suse-observability \
+  -l "owner=helm,name=suse-observability" \
+  -o jsonpath='{.items[-1:].data.release}' | \
+  base64 -d | base64 -d | gunzip | \
+  jq '.config.stackstate.java | to_entries | map({key: .key, size: (.value | tostring | length)}) | sort_by(.size) | reverse'
+----
+
+If `trustStoreBase64Encoded` or `trustStore` shows up as hundreds of thousands of bytes, move the trust store into a secret as described above.
+
+[IMPORTANT]
+====
+When migrating, remove `stackstate.java.trustStore` and `stackstate.java.trustStoreBase64Encoded` from your values. `trustStoreFromExternalSecret` takes precedence, so the trust store will be mounted from the secret either way, but any inline value you leave behind still counts against the release secret size limit.
+====
+
+[#_specify_the_trust_store_as_a_helm_value]
+=== Specify the trust store as a Helm value
+
+The trust store and the password can also be specified directly as values. This remains supported, but is subject to the size limit described above, so prefer an existing secret. The trust store can only be specified from the helm command line as it's a file. The password value is specified in the same way in the example, but it can also be provided via a `values.yaml` file.
 
 [,bash]
 ----
@@ -276,7 +353,7 @@ suse-observability/suse-observability
 
 * The first run of the helm upgrade command will result in pods restarting, which may cause a short interruption of availability.
 * Include these arguments on every `helm upgrade` run.
-* The password and trust store are stored as a Kubernetes secret.
+* The password and trust store are stored as a Kubernetes secret, and are also kept in the Helm release secret, which is subject to the size limit described above.
 ====
 
 
