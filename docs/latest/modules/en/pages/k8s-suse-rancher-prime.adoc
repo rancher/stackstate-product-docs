@@ -1,6 +1,6 @@
 = {stackstate-product-name}
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-03-26
+:revdate: 2026-08-20
 :page-revdate: {revdate}
 :description: {stackstate-product-name}
 
@@ -119,33 +119,63 @@ For information on installing the {stackstate-product-name} agent, see xref:k8s-
 
 == Required privileges
 
-The deployment of the {stackstate-product-name} agent requires the following system privileges:
+Two of the {stackstate-product-name} Agent workloads need privileges that the restricted Pod Security Standard does not allow. The other Agent workloads — the cluster agent, the checks agent, the Kubernetes RBAC agent, the HTTP header injector and the OpenTelemetry components — need none of them.
+
+=== Node agent
+
+The node agent is a DaemonSet running the node agent and process agent containers. It requires the following system privileges:
 
 . `hostPID: true`: This privilege is required to associate process identifiers (PIDs) with their corresponding control groups (cgroups). This association is essential for accurately mapping processes to their respective containers.
 . `hostNetwork: true` (Optional): By default, the node agent runs with `hostNetwork: true` to facilitate scraping of open metrics data from all configured pods on the node without requiring additional network policies. If disabled, appropriate network policies must be defined to ensure the agent can access the necessary endpoints.
-. `securityContext.privileged: true`: This elevated privilege is required for several critical functions. Primarily, it permits the agent to inject eBPF (extended Berkeley Packet Filter) programs into each network namespace for monitoring purposes. It is also necessary for reading the connection tracking (conntrack) tables across all network namespaces. While this list is not exhaustive, future development aims to replace this broad privilege with more granular Linux capabilities where feasible.
+. `securityContext.privileged: true` on the process agent container: This elevated privilege is required for several critical functions. Primarily, it permits the agent to inject eBPF (extended Berkeley Packet Filter) programs into each network namespace for monitoring purposes. It is also necessary for reading the connection tracking (conntrack) tables across all network namespaces. While this list is not exhaustive, future development aims to replace this broad privilege with more granular Linux capabilities where feasible.
 
-Furthermore, the agent requires container runtime sockets to be mounted within its pod. This configuration is essential as it facilitates direct communication with the container runtime daemons, which is a prerequisite for scraping metrics and metadata from all containers on the host system.
+Furthermore, the node agent requires container runtime sockets to be mounted within its pod. This configuration is essential as it facilitates direct communication with the container runtime daemons, which is a prerequisite for scraping metrics and metadata from all containers on the host system.
 
-== Rancher-Restricted PSA Template
+=== Logs agent
 
-The `Rancher-restricted` configuration (link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates[Pod Security Admission (PSA) Configuration Templates]) is a highly restrictive setup that aligns with current best practices for securing pods.
+The logs agent, enabled with `logsAgent.enabled`, is a DaemonSet that collects container logs from the node filesystem. It mounts the host paths `/var/log` and `/var/lib/docker/containers`, and its container sets `securityContext.seLinuxOptions.type` to `spc_t` so that it can read those paths on SELinux-enforcing nodes. It does not need `hostPID`, `hostNetwork` or `privileged`.
 
-When running Rancher on a Kubernetes cluster that enforces a restrictive security policy by default, there are two ways to install the SUSE Observability Helm chart:
+[#_rancher_restricted_psa_template]
+== Restrictive Pod Security policies
 
-* *Exempt the entire chart namespace*, along with other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces].
-* *Disable the privileged Elasticsearch init container* by setting `elasticsearch.sysctlInitContainer.enabled` to `false`. This requires you to manually increase the link:https://www.elastic.co/docs/deploy-manage/deploy/self-managed/vm-max-map-count[virtual memory settings] (`vm.max_map_count`) on the nodes. See also xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_elasticsearch[Elasticsearch Required Permissions]. 
+This section applies to any cluster that enforces the link:https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted[restricted Pod Security Standard] by default, including:
 
-Since the SUSE Observability Agent must run in privileged mode, the recommended approach is to install it into a namespace that you plan to exempt from the restrictive policy.
+* The `Rancher-restricted` link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates[Pod Security Admission (PSA) Configuration Template].
+* RKE2 clusters hardened with the link:https://docs.rke2.io/security/hardening_guide[CIS profile], which enables `restricted` as the cluster-wide default.
 
-[NOTE]
-====
-All SUSE Observability Helm chart containers are configured with the following `securityContext` settings starting from version `v2.3.8` and onwards:
+Every container in the {stackstate-product-name} and {stackstate-product-name} Agent Helm charts sets the following `securityContext` values, so that no namespace exemption is needed for them:
 
 . `securityContext.capabilities.drop` is `["ALL"]`
 . `securityContext.seccompProfile.type` is `"RuntimeDefault"`
 . `securityContext.runAsNonRoot` is `true`
 . `securityContext.allowPrivilegeEscalation` is `false`
+
+=== Exceptions
+
+Three containers cannot satisfy the restricted profile.
+
+[cols="1,2,2"]
+|===
+|Container |Chart |What to do
+
+|Elasticsearch `configure-sysctl` init container
+|{stackstate-product-name}
+|Disable it with `elasticsearch.sysctlInitContainer.enabled: false` and raise `vm.max_map_count` on the nodes yourself. See xref:/setup/install-stackstate/kubernetes_openshift/required_permissions.adoc#_elasticsearch[Elasticsearch Required Permissions].
+
+|Node agent DaemonSet (`node-agent` and `process-agent` containers)
+|{stackstate-product-name} Agent
+|Install the Agent into a namespace that is exempt from the policy. See <<_node_agent,Node agent>>.
+
+|Logs agent DaemonSet (`logs-agent` container)
+|{stackstate-product-name} Agent
+|Install the Agent into a namespace that is exempt from the policy, or leave `logsAgent.enabled` at `false`. See <<_logs_agent,Logs agent>>.
+|===
+
+Because of the node agent, the recommended approach is to install the {stackstate-product-name} Agent into a namespace that you exempt from the restrictive policy, alongside the other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces]. The {stackstate-product-name} chart itself needs no exemption once the Elasticsearch init container is disabled.
+
+[NOTE]
+====
+The Agent chart's `all.fullPrivilegesMode.enabled` option is a debugging aid: it replaces the restricted `securityContext` on the agent containers with a privileged one. Leave it at `false` on any cluster that enforces a restrictive policy.
 ====
 
 == Single Sign On
