@@ -173,6 +173,13 @@ Three containers cannot satisfy the restricted profile.
 
 Because of the node agent, the recommended approach is to install the {stackstate-product-name} Agent into a namespace that you exempt from the restrictive policy, alongside the other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces]. The {stackstate-product-name} chart itself needs no exemption once the Elasticsearch init container is disabled.
 
+A few optional init containers fix up data volume ownership by running `chown` as root, so they cannot satisfy the restricted profile either. They are all disabled by default, and you only need to consider them if you switch one on to repair volume permissions:
+
+* `clickhouse.volumePermissions.enabled`
+* `kafka.volumePermissions.enabled`
+* `zookeeper.volumePermissions.enabled`
+* `hbase.hdfs.volumePermissions.enabled` together with `hbase.hdfs.volumePermissions.securityContext.enabled`
+
 [NOTE]
 ====
 The Agent chart's `all.fullPrivilegesMode.enabled` option is a debugging aid: it replaces the restricted `securityContext` on the agent containers with a privileged one. Leave it at `false` on any cluster that enforces a restrictive policy.
