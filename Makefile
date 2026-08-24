@@ -22,11 +22,11 @@ local-stackpacks2:
 		ss-local-playbook.yml \
 		2>&1 | tee tmp/local-build.log
 
-.PHONY: local-suppressions
-local-suppressions:
+.PHONY: local-silencing-rules
+local-silencing-rules:
 	mkdir -p tmp
 	npx antora --version
-	npx antora --attribute ss-ff-suppressions_enabled --stacktrace --log-format=pretty --log-level=info \
+	npx antora --attribute ss-ff-silencing-rules_enabled --stacktrace --log-format=pretty --log-level=info \
 		ss-local-playbook.yml \
 		2>&1 | tee tmp/local-build.log
 
