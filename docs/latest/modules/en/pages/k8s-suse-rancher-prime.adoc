@@ -143,16 +143,18 @@ This section applies to any cluster that enforces the link:https://kubernetes.io
 * The `Rancher-restricted` link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates[Pod Security Admission (PSA) Configuration Template].
 * RKE2 clusters hardened with the link:https://docs.rke2.io/security/hardening_guide[CIS profile], which enables `restricted` as the cluster-wide default.
 
-Every container in the {stackstate-product-name} and {stackstate-product-name} Agent Helm charts sets the following `securityContext` values, so that no namespace exemption is needed for them:
+Apart from the <<_exceptions,exceptions>> below, every container in the {stackstate-product-name} and {stackstate-product-name} Agent Helm charts runs with the following `securityContext` settings in effect, so those containers need no namespace exemption:
 
 . `securityContext.capabilities.drop` is `["ALL"]`
 . `securityContext.seccompProfile.type` is `"RuntimeDefault"`
 . `securityContext.runAsNonRoot` is `true`
 . `securityContext.allowPrivilegeEscalation` is `false`
 
+Most containers set all four themselves. A few set only `capabilities.drop` and `allowPrivilegeEscalation`, which can only be set per container, and inherit `runAsNonRoot` and `seccompProfile` from their pod. The result is the same either way.
+
 === Exceptions
 
-Three containers cannot satisfy the restricted profile.
+Four containers, across three workloads, cannot satisfy the restricted profile.
 
 [cols="1,2,2"]
 |===
@@ -171,9 +173,9 @@ Three containers cannot satisfy the restricted profile.
 |Install the Agent into a namespace that is exempt from the policy, or leave `logsAgent.enabled` at `false`. See <<_logs_agent,Logs agent>>.
 |===
 
-Because of the node agent, the recommended approach is to install the {stackstate-product-name} Agent into a namespace that you exempt from the restrictive policy, alongside the other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces]. The {stackstate-product-name} chart itself needs no exemption once the Elasticsearch init container is disabled.
+Because of the node agent, the recommended approach is to install the {stackstate-product-name} Agent into a namespace that you exempt from the restrictive policy, alongside the other link:https://ranchermanager.docs.rancher.com/how-to-guides/new-user-guides/authentication-permissions-and-global-configuration/psa-config-templates#exempting-required-rancher-namespaces[required Rancher namespaces]. The {stackstate-product-name} chart itself needs no exemption once the Elasticsearch init container is disabled, as long as the optional volume permission init containers below stay disabled, which is the default.
 
-A few optional init containers fix up data volume ownership by running `chown` as root, so they cannot satisfy the restricted profile either. They are all disabled by default, and you only need to consider them if you switch one on to repair volume permissions:
+Those optional init containers fix up data volume ownership by running `chown` as root, so they cannot satisfy the restricted profile either. You only need to consider them if you switch one on to repair volume permissions, and doing so puts the {stackstate-product-name} namespace back in need of an exemption:
 
 * `clickhouse.volumePermissions.enabled`
 * `kafka.volumePermissions.enabled`
