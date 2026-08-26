@@ -1,0 +1,118 @@
+= Verify container image signatures
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-08-26
+:page-revdate: {revdate}
+:description: How to verify the cryptographic signature of {stackstate-product-name} container images
+
+== Overview
+
+{stackstate-product-name} container images are cryptographically signed during the build pipeline using https://www.sigstore.dev/[Sigstore] keyless signing (`cosign`). Verifying a signature confirms that an image was genuinely built by our CI from a specific source repository, workflow, and branch or tag — before you pull it into a cluster.
+
+Signing is keyless: there is no public key file to download or manage. Instead, each signature is backed by a short-lived certificate tied to the GitHub Actions job that produced it, and a public, tamper-evident record of the signing event.
+
+Image signing was added to our build pipeline recently. Images published before this was rolled out do not carry a signature — verifying one of those tags fails with `no signatures found`, which does not indicate a problem with the image itself. If you rely on signature verification, pull a current tag.
+
+== Prerequisites
+
+Install `cosign` (the Sigstore client):
+
+[,bash]
+----
+# macOS
+brew install cosign
+
+# Linux, or any platform: download a release binary
+# https://github.com/sigstore/cosign/releases
+----
+
+== Verify a signature
+
+Run `cosign verify` against the image reference, pinning the OIDC issuer to GitHub Actions and matching the certificate identity to the `StackVista` GitHub organization:
+
+[,bash]
+----
+cosign verify \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github.com/StackVista/.*' \
+  registry.rancher.com/suse-observability/<image>:<tag>
+----
+
+Replace `<image>:<tag>` with the image and tag you want to verify, for example `clickhouse:26.5.1-so8`.
+
+A successful verification prints a `Verification for ...` banner followed by the signed claims, and the command exits with status `0`. If the image is unsigned, or was signed by anything other than our CI, the command fails with a non-zero exit code and an error.
+
+=== Scoping to a specific repository
+
+The default command accepts a signature from *any* workflow in the `StackVista` GitHub organization. For a tighter check, scope the pattern to the specific source repository behind an image, for example `stackstate`:
+
+[,bash]
+----
+cosign verify \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github.com/StackVista/stackstate/.*' \
+  registry.rancher.com/suse-observability/<image>:<tag>
+----
+
+This is the recommended pattern for automated checks, such as an admission-control gate: it is specific enough to reject an image signed by an unrelated repository, while staying stable across internal changes to our CI pipeline.
+
+[IMPORTANT]
+====
+Do not pin the full certificate identity — including the workflow file path and branch/tag ref (for example `.../.github/workflows/_reusable-docker-build.yml@refs/heads/master`) — in unattended automation. That level of detail reflects our current CI implementation, which we may change (renaming a workflow file, restructuring the pipeline, changing branch strategy) without notice, and doing so would silently break any check pinned to the old value. Scope to the organization or repository instead, as above.
+====
+
+If you do need to inspect the exact identity that signed a specific image — for example while troubleshooting — it is embedded in the signing certificate, not in `cosign verify`'s own output, so extract it directly:
+
+[,bash]
+----
+cosign download signature registry.rancher.com/suse-observability/<image>:<tag> \
+  | jq -r '.verificationMaterial.certificate.rawBytes' \
+  | base64 -d \
+  | openssl x509 -inform der -noout -text \
+  | grep -A1 'Subject Alternative Name' \
+  | tail -1 \
+  | sed 's/.*URI://'
+----
+
+`cosign download signature` only reads what is there — it does not check trust, so treat its output as informational, and always confirm the image with an actual `cosign verify` call.
+
+== Mirroring images to a private or air-gapped registry
+
+If you pull images through a private mirror, a registry proxy, or copy them into an air-gapped environment (see `imageRegistry` in xref:installing-suse-obs.adoc[Installing {stackstate-product-name}]), the tool used to copy the image matters. A signature is a separate artifact stored alongside the image, not embedded in it, so a plain image copy — for example `skopeo copy`, or a `docker pull` followed by `docker push` — does not bring the signature with it. Verifying the mirrored copy then fails with `no signatures found`, even though the original image is genuinely signed.
+
+To preserve the signature, copy both of its two forms explicitly, in addition to the image itself.
+
+First, resolve the image's digest and copy the legacy signature tag — an ordinary tagged manifest, so any registry-copy tool handles it the same way it handles the image:
+
+[,bash]
+----
+digest=$(skopeo inspect docker://registry.rancher.com/suse-observability/<image>:<tag> | jq -r '.Digest')
+sig_tag="${digest/sha256:/sha256-}.sig"
+
+skopeo copy \
+  docker://registry.rancher.com/suse-observability/<image>:${sig_tag} \
+  docker://<your-registry>/<image>:${sig_tag}
+----
+
+This tag may not exist for every image — if `skopeo inspect` on it fails, there is no legacy-format signature to copy for that image and this step can be skipped.
+
+Second, copy the newer signature form, which is linked to the image by digest through the registry's referrers API rather than by any predictable tag, using `oras`:
+
+[,bash]
+----
+oras copy -r \
+  registry.rancher.com/suse-observability/<image>@${digest} \
+  <your-registry>/<image>
+----
+
+Repeat both steps for each image and tag you mirror. Afterwards, `cosign verify` against `<your-registry>/<image>:<tag>` behaves the same as verifying directly against `registry.rancher.com`.
+
+== Troubleshooting
+
+`no signatures found`::
+This is most commonly one of: an older tag published before we started signing images (see <<_overview,Overview>>); an image pulled through your own private mirror or air-gapped registry that was copied without its signature (see <<_mirroring_images_to_a_private_or_air_gapped_registry,Mirroring images to a private or air-gapped registry>>); or a mistyped registry, repository, or tag.
+
+`no matching signatures: none of the expected identities matched`::
+The image was signed, but not by a workflow matching your `--certificate-identity-regexp`. Double-check the organization or repository in your pattern, or use the discovery command in <<_scoping_to_a_specific_repository,Scoping to a specific repository>> to inspect what actually signed the image.
+
+Private registry access::
+If your environment pulls images through a private mirror or air-gapped registry, `cosign verify` needs read access to that registry. Log in first with `cosign login <registry>` or `docker login <registry>`.
