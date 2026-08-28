@@ -1,5 +1,11 @@
 .PHONY: all test
 
+.PHONY: ci-pr-link-check
+ci-pr-link-check:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --log-failure-level=warn --stacktrace --log-format=pretty --log-level=info ss-local-playbook.yml
+
 .PHONY: local
 local:
 	mkdir -p tmp
@@ -13,6 +19,14 @@ local-stackpacks2:
 	mkdir -p tmp
 	npx antora --version
 	npx antora --attribute ss-ff-stackpacks2_enabled --stacktrace --log-format=pretty --log-level=info \
+		ss-local-playbook.yml \
+		2>&1 | tee tmp/local-build.log
+
+.PHONY: local-suppressions
+local-suppressions:
+	mkdir -p tmp
+	npx antora --version
+	npx antora --attribute ss-ff-suppressions_enabled --stacktrace --log-format=pretty --log-level=info \
 		ss-local-playbook.yml \
 		2>&1 | tee tmp/local-build.log
 

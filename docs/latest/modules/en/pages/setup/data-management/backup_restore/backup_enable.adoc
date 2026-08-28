@@ -212,6 +212,16 @@ The IAM user identified by `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` must be configu
 
 === Azure Blob Storage
 
+[IMPORTANT]
+====
+**The storage account must support Blob storage, and the containers must already exist.**
+
+* Use a general-purpose v2 (`StorageV2`) or premium block blob (`BlockBlobStorage`) storage account. A premium file shares (`FileStorage`) account has no Blob endpoint and cannot be used. Pointing {stackstate-product-name} at one fails with `java.net.UnknownHostException: <accountName>.blob.core.windows.net` in the S3 Proxy logs.
+* **Create the BLOB containers before enabling backups.** {stackstate-product-name} does not create them for you. If a container is missing, the backup job fails with `api error NoSuchBucket: The specified bucket does not exist`.
+
+Container names must follow the link:https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata[Azure naming rules (learn.microsoft.com)]: 3-63 characters, lowercase letters, numbers and single hyphens.
+====
+
 ==== Using separate containers
 
 To enable backups to separate Azure Blob Storage containers (one per datastore), add the following YAML fragment to the Helm `values.yaml` file used to install {stackstate-product-name}:
@@ -250,6 +260,18 @@ Replace the following values:
 * `AZURE_STORAGE_ACCOUNT_KEY` - the https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage?tabs=azure-portal[Azure storage account key (learn.microsoft.com)] where the backups should be stored.
 
 The StackGraph, Elasticsearch, Victoria Metrics, and ClickHouse backups are stored in BLOB containers called `sts-stackgraph-backup`, `sts-configuration-backup`, `sts-elasticsearch-backup`, `sts-victoria-metrics-backup`, `sts-clickhouse-backup` respectively. These names can be changed by setting the Helm values `backup.stackGraph.bucketName`, `backup.elasticsearch.bucketName`, `victoria-metrics-0.backup.bucketName`, `victoria-metrics-1.backup.bucketName` and `clickhouse.backup.bucketName` respectively.
+
+**All five containers must be created in the storage account before backups run**, whether you keep the default names or override them. For example, using the Azure CLI:
+
+[,bash]
+----
+for c in sts-stackgraph-backup sts-configuration-backup sts-elasticsearch-backup \
+         sts-victoria-metrics-backup sts-clickhouse-backup; do
+  az storage container create --name "$c" \
+    --account-name "$AZURE_STORAGE_ACCOUNT_NAME" \
+    --account-key "$AZURE_STORAGE_ACCOUNT_KEY"
+done
+----
 
 ==== Using a single container with prefixes
 
@@ -300,6 +322,15 @@ clickhouse:
 Replace the following values:
 * `YOUR_ACCESS_KEY` and `YOUR_SECRET_KEY` are the credentials that will be used to secure the S3 Proxy instance. The automatic backup jobs and the restore jobs use these to authenticate. They're also required if you want to manually access the S3 Proxy instance.
 * `CONTAINER` with your Azure Blob Storage container name. The backups for different datastores will be organized using the configured `s3Prefix` values. The same `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY` values from the previous section apply here.
+
+**The container must be created before backups run** - {stackstate-product-name} does not create it. Only one container is needed in this layout, because the datastores are separated by prefix:
+
+[,bash]
+----
+az storage container create --name "$CONTAINER" \
+  --account-name "$AZURE_STORAGE_ACCOUNT_NAME" \
+  --account-key "$AZURE_STORAGE_ACCOUNT_KEY"
+----
 
 === Kubernetes Persistent Volume
 

@@ -1,0 +1,171 @@
+ifdef::ss-ff-stackpacks2_enabled[]
+= Tutorial: Create a Custom Integration (StackPack)
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-01-08
+:page-revdate: {revdate}
+:description: Develop a custom integration with a StackPack
+
+== Goal
+
+As a DevOps developer, you want to customize {stackstate-product-name} to monitor applications you have deployed.
+
+[NOTE]
+====
+This page is about developing a custom integration. For information on installing an already built integration, see xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[Install or uninstall a StackPack].
+====
+
+== Prerequisites
+
+* Access to a running {stackstate-product-name} instance. For installation options, see xref:/installing-suse-obs.adoc[Installing {stackstate-product-name}].
+* OpenTelemetry Demo telemetry in {stackstate-product-name}. You can follow the tutorial with your own telemetry, but the examples below assume the demo setup from xref:/setup/custom-integrations/demo-environment.adoc[Demo environment].
+* The xref:/setup/cli/cli-sts.adoc[{stackstate-product-name} CLI] configured for that instance
+
+== Scaffold a StackPack
+
+The `scaffold` subcommand creates a StackPack project from a template. The default template comes from https://github.com/StackVista/stackpack-templates[stackpack-templates].
+
+[source,bash]
+----
+sts stackpack scaffold --name my-stackpack --display-name "My StackPack"
+...
+...
+
+✅ ✓ Scaffold complete!
+
+Next steps:
+1. Review the generated files in: ./my-stackpack
+2. Check the ./my-stackpack/README.md for instructions on what to do next.
+----
+
+The generated project includes a `stackpack.yaml` manifest, StackPack settings, and resources used in the StackPack UI. For details about the project layout, see xref:/setup/custom-integrations/stackpacks.adoc#_stackpack_project_structure[StackPack project structure].
+
+== Test deploy the StackPack
+
+Use `test-deploy` for the development loop. It packages, uploads, and installs or upgrades the StackPack with a test suffix.
+
+[source,bash]
+----
+STS_EXPERIMENTAL_STACKPACKS=1 sts stackpack test-deploy -d . --yes
+----
+
+Run the command again after changing the StackPack. Review the generated topology, metrics, monitors, and presentation changes in the {stackstate-product-name} UI. The scaffolded StackPack creates a main menu group `my-stackpack`.
+
+image:custom-integrations/create/stackpack_create_main_menu.png[My StackPack main menu]
+
+[NOTE]
+====
+The scaffolded StackPack adds a main menu group with submenu items, but the component overviews backing the sub menu items only show meaningful data after matching telemetry is ingested. For a demo setup that sends OpenTelemetry Demo data to {stackstate-product-name}, see xref:/setup/custom-integrations/demo-environment.adoc[Demo environment].
+====
+
+== Customize the StackPack
+
+Start with the generated `README.md` and the files under `settings/`. The generic template demonstrates the main extension points:
+
+* OpenTelemetry component mappings: xref:/setup/custom-integrations/otelmappings/README.adoc[OpenTelemetry mappings]
+* OpenTelemetry relation mappings: xref:/setup/custom-integrations/otelmappings/concepts.adoc[OpenTelemetry mapping concepts]
+* Component overview and highlight pages: xref:/setup/custom-integrations/presentation/concepts.adoc[Presentation concepts]
+* Presentation schema details: xref:/setup/custom-integrations/presentation/schemas-ref.adoc[Presentation schema]
+* Monitors and remediation hints: xref:/setup/custom-integrations/monitors/schemas-ref.adoc[Monitor schema]
+* Monitor debugging: xref:/setup/custom-integrations/monitors/cli.adoc[Using the CLI for monitors]
+* Metric bindings and metric presentation: xref:/setup/custom-integrations/metric-bindings/index.adoc[Metric bindings]
+* StackPack file structure and CLI commands: xref:/setup/custom-integrations/stackpacks.adoc[StackPack reference]
+
+For public example StackPacks, see https://github.com/StackVista/contrib-stackpacks[contrib-stackpacks].
+
+== Example customizations
+
+The scaffolded StackPack already contains component mappings, relation mappings, presentations, and a cart latency monitor for the OpenTelemetry Demo. The following changes build on those files.
+
+=== Add a second monitor
+
+The template includes `settings/monitors.sty`, which monitors the cart service's add-to-cart latency. Add a second monitor in a new file to show when the cart service is receiving add-to-cart traffic.
+
+This monitor is intentionally simple and demo-oriented: it goes to `DEVIATING` when the cart service's add-to-cart request rate is greater than zero. That makes it easy to verify that the monitor was installed, that the query returns data, and that the result binds to cart service instances. For a production monitor, use a threshold that represents a real problem, such as a high error ratio or high p95 latency.
+
+Create `settings/monitors/cart-traffic-monitor.sty`:
+
+[source,yaml]
+----
+nodes:
+  - _type: Monitor
+    function: urn:stackpack:common:monitor-function:threshold
+    arguments:
+      comparator: GT
+      failureState: DEVIATING
+      metric:
+        aliasTemplate: Add-to-cart request rate
+        query: >-
+          sum by (service_namespace, service_name, service_instance_id)
+          (rate(app_cart_add_item_latency_seconds_count{service_name=~"cart|cartservice"}[5m]))
+        unit: reqps
+      threshold: 0.0
+      titleTemplate: Cart traffic
+      urnTemplate: "urn:opentelemetry:namespace/${service_namespace}:service/${service_name}:serviceInstance/${service_instance_id}"
+    description: |-
+      Demo monitor for cart traffic. When the cart service receives add-to-cart
+      requests, the matching cart service instance goes to a Deviating state.
+    identifier: urn:stackpack:my-stackpack:shared:monitor:cart-traffic
+    intervalSeconds: 30
+    name: Cart traffic (Demo)
+    remediationHint: |-
+      This demo monitor intentionally triggers when cart receives add-to-cart traffic.
+      For production use, replace it with a monitor for errors, latency, or another real symptom.
+    status: ENABLED
+    tags:
+      - cart
+      - traffic
+----
+
+Deploy and verify the change:
+
+[source,bash]
+----
+STS_EXPERIMENTAL_STACKPACKS=1 sts stackpack test-deploy -d . --yes
+----
+
+In the {stackstate-product-name} UI, open a cart service instance and check the monitor result on the component.
+
+You should see a `Cart traffic` monitor in a `DEVIATING` state.
+
+image:custom-integrations/create/stackpack_create_custom_monitor.png[Cart traffic monitor]
+
+=== Add telemetry data to the checkout highlight
+
+The file `settings/presentations/checkout.sty` already adds a checkout-specific `Runtime version` field from the `process.runtime.version` telemetry attribute. Add another field that shows the OpenTelemetry SDK language.
+
+Open `settings/presentations/checkout.sty` and add this item under `presentation.highlight.fields`:
+
+[source,yaml]
+----
+          - fieldId: "telemetry-sdk-language"
+            title: "Telemetry SDK"
+            order: 55.0
+            projection:
+              _type: TextProjection
+              value: "tags.singleValue('telemetry.sdk.language')"
+----
+
+Deploy the change:
+
+[source,bash]
+----
+STS_EXPERIMENTAL_STACKPACKS=1 sts stackpack test-deploy -d . --yes
+----
+
+Open a checkout service instance in the {stackstate-product-name} UI. The highlight page should now include the `Telemetry SDK` field.
+
+image:custom-integrations/create/stackpack_create_highlight-about_field.png[Checkout highlight with Telemetry SDK field]
+
+== Package and upload the StackPack
+
+When the StackPack is ready to share with another {stackstate-product-name} instance, package and upload it:
+
+[source,bash]
+----
+sts stackpack package -d .
+sts stackpack upload --file ./my-stackpack-0.0.1.sts
+----
+
+Uploading makes the StackPack version available in {stackstate-product-name}. It does not install the StackPack instance. Install it from the StackPacks UI, or use the CLI commands described in xref:/setup/custom-integrations/stackpacks.adoc#_stackpack_cli_reference[StackPack CLI reference].
+
+endif::ss-ff-stackpacks2_enabled[]
