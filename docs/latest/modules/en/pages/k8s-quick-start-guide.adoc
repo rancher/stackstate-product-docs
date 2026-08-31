@@ -176,6 +176,31 @@ To get data from a Kubernetes cluster into {stackstate-product-name}, follow the
 . Deploy the {stackstate-product-name} Agent, Cluster Agent, Checks Agent and kube-state-metrics on your Cluster using the helm command provided in the {stackstate-product-name} UI after you have installed the StackPack. The default namespace for the agent is `suse-observability-agent`. The UI instructions remove a previous agent release from `suse-observability` before installing into the new namespace, `suse-observability-agent`, to avoid running duplicate agents.
  ** Once the Agents have been deployed, they will begin collecting data and push this to {stackstate-product-name}
 
+[#openshift-optional-components]
+=== Security context for optional components on OpenShift
+
+The components installed above need no security context changes. Two optional components do, because they run images that declare no `USER`: the chart gives them an explicit `runAsUser` so that they can run as a non-root user on plain Kubernetes. OpenShift instead assigns a UID from the project's own range through the `restricted-v2` SCC, and rejects a pod that asks for a UID outside it. Neither component is covered by the node agent's SCC.
+
+If you enable either of them on OpenShift, clear the UID so that OpenShift can assign one:
+
+[,yaml]
+----
+# Only needed if you enable the process agent's remote pod correlation cache
+remoteKubeCache:
+  containerSecurityContext:
+    runAsUser: null
+
+# Only needed if you enable httpHeaderInjectorWebhook
+httpHeaderInjectorWebhook:
+  containerSecurityContext:
+    runAsUser: null
+----
+
+[NOTE]
+====
+The UID has to be set to `null`. Replacing the whole `containerSecurityContext` with `{}` does not work, because Helm merges it with the chart's default and the UID survives.
+====
+
 [#amazon-eks]
 == Amazon EKS
 
