@@ -14,9 +14,9 @@ The OTel support in the agent is split into independently toggleable components:
 * *Prometheus / OpenMetrics scraping* (`otel.prometheusScraping`) — discovers `ServiceMonitor` and `PodMonitor` Custom Resources, scrapes the targets they describe, and ships the resulting *metrics* over OTLP. This track is metrics-only; use it for workloads that expose a Prometheus / OpenMetrics endpoint but are not instrumented with an OTel SDK. See xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor] for the full how-to.
 * *K8s resource collector* (`otel.k8sResourceCollector`) — watches Custom Resource Definitions (CRDs), selected Custom Resource instances, and optional additional Kubernetes resources, then forwards topology logs to SUSE Observability. See xref:/setup/otel/k8s-resource-collector.adoc[K8s resource collector] for the full configuration guide.
 
-== Default state
+== Enable OTel pipeline
 
-The OTel pipeline is *disabled by default* in the current release. To turn it on, set the master switch in your agent Helm values:
+The OTel pipeline is *disabled by default*. To turn it on, set the master switch in your agent Helm values:
 
 [,yaml]
 ----
@@ -24,36 +24,24 @@ otel:
   enabled: true
   prometheusScraping:
     monitorCrds:
-      # Leave at the default, false, if the SerivceMonitor and PodMonitor CRDs 
+      # Leave at the default, false, if the ServiceMonitor and PodMonitor CRDs 
       # are already managed by another chart (for example kube-prometheus-stack) or 
       # if you want to install them manually.
       enabled: true
 ----
 
-[NOTE]
-====
-With the official release of stackpacks 2, the default will flip to `otel.enabled: true`. Once that happens, no action is needed to start using the pipeline.
-====
+This will also enable the *Prometheus / OpenMetrics scraping* and *K8s resource collector* components.
 
-== Opting out (after the default flips)
+== Enabling/disabling components
 
-Once `otel.enabled` defaults to `true`, you can opt out at two levels:
+You can enable or disable individual sub-pipelines. Each components has its own `enabled` toggle:
 
-* Disable the entire OTel pipeline (no collector, no telemetry gateway, no scraper):
-+
-[,yaml]
-----
-otel:
-  enabled: false
-----
-* Keep OTel enabled but disable individual sub-pipelines. Each track has its own `enabled` toggle:
-+
 [,yaml]
 ----
 otel:
   enabled: true
   telemetryGateway:
-    enabled: false    # stop accepting OTLP push from SDKs
+    enabled: true     # accept OTLP push from SDKs
   prometheusScraping:
     enabled: false    # stop scraping ServiceMonitor / PodMonitor targets
   k8sResourceCollector:
