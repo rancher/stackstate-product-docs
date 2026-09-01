@@ -6,17 +6,17 @@
 
 == Overview
 
-The SUSE Observability Agent bundles an OpenTelemetry Collector and a Target Allocator that scrape any Kubernetes workload exposing a Prometheus / OpenMetrics endpoint. The Target Allocator watches the `ServiceMonitor` and `PodMonitor` Custom Resources defined by the https://prometheus-operator.dev[Prometheus Operator], distributes the scrape targets across collector pods, and ships the collected metrics over OTLP to SUSE Observability.
+The {stackstate-product-name} Agent bundles an OpenTelemetry Collector and a Target Allocator that scrape any Kubernetes workload exposing a Prometheus / OpenMetrics endpoint. The Target Allocator watches the `ServiceMonitor` and `PodMonitor` Custom Resources defined by the https://prometheus-operator.dev[Prometheus Operator], distributes the scrape targets across collector pods, and ships the collected metrics over OTLP to {stackstate-product-name}.
 
 In practice this means you can:
 
 * Reuse existing `ServiceMonitor` and `PodMonitor` manifests written for the Prometheus Operator — no per-pod Agent annotations needed.
-* Run alongside an existing Prometheus Operator install, or use the SUSE Observability Agent as a drop-in replacement.
+* Run alongside an existing Prometheus Operator install, or use the {stackstate-product-name} Agent as a drop-in replacement.
 * Opt workloads in or out with Kubernetes labels.
 
 == Step 1 — Enable OTel and Prometheus scraping on the Agent
 
-First, install the SUSE Observability Agent on your cluster by following the xref:/k8s-quick-start-guide.adoc[quick start guide].
+First, install the {stackstate-product-name} Agent on your cluster by following the xref:/k8s-quick-start-guide.adoc[quick start guide].
 
 When you install (or upgrade) the agent Helm chart, set these values to turn on the OpenTelemetry Collector pipeline and the Prometheus scraping sub-pipeline:
 
@@ -152,13 +152,13 @@ otel:
 
 == Step 4 — Browse the collected metrics
 
-Once the agent, collectors and your `ServiceMonitor` / `PodMonitor` are in place, metrics start flowing into SUSE Observability within a scrape interval. Find them in the xref:/use/metrics/k8sTs-explore-metrics.adoc[telemetry inspector] and bind them to topology components with xref:/setup/custom-integrations/metric-bindings/index.adoc[metric bindings].
+Once the agent, collectors and your `ServiceMonitor` / `PodMonitor` are in place, metrics start flowing into {stackstate-product-name} within a scrape interval. Find them in the xref:/use/metrics/k8sTs-explore-metrics.adoc[telemetry inspector] and bind them to topology components with xref:/setup/custom-integrations/presentation/metrics/README.adoc[presentation metrics].
 
 == Product integration contract
 
-This section is for SUSE product teams that want their Helm charts to expose Prometheus / OpenMetrics endpoints to the SUSE Observability Agent.
+This section is for SUSE product teams that want their Helm charts to expose Prometheus / OpenMetrics endpoints to the {stackstate-product-name} Agent.
 
-*Capability detection*:: Before rendering SUSE Observability-specific `ServiceMonitor` or `PodMonitor` resources by default, check for the marker CRD in Helm:
+*Capability detection*:: Before rendering {stackstate-product-name}-specific `ServiceMonitor` or `PodMonitor` resources by default, check for the marker CRD in Helm:
 +
 [,gotemplate]
 ----
@@ -169,7 +169,7 @@ The agent installs this CRD when at least one product-facing OTel integration pa
 
 *Monitor labels*:: By default, add `observability.suse.com/agent: scrape` to `ServiceMonitor` and `PodMonitor` resources that should be picked up by the agent Target Allocator. Product charts should make this label configurable because agent administrators can change `otel.prometheusScraping.targetAllocator.prometheusCR.serviceMonitorSelector` and `podMonitorSelector`.
 
-*Opt-in/override*:: Product charts should keep monitor rendering configurable even when the marker CRD exists. Allow users to disable the SUSE Observability monitor resources, override labels, and configure scrape endpoint details such as port, path, interval, TLS, and authentication.
+*Opt-in/override*:: Product charts should keep monitor rendering configurable even when the marker CRD exists. Allow users to disable the {stackstate-product-name} monitor resources, override labels, and configure scrape endpoint details such as port, path, interval, TLS, and authentication.
 
 == See also
 
