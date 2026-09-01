@@ -72,6 +72,7 @@ Follow the steps below to configure SUSE Observability to authenticate using LDA
  ** *sslType* - Optional. The type of LDAP secure connection `ssl` or `startTls`. Omit if plain LDAP connection is used.
  ** *trustCertificates* - Optional, certificate file for SSL. Formats PEM, DER and PKCS7 are supported.
  ** *trustStore* - Optional, Java trust store file for SSL. If both `trustCertificates` and `trustStore` are specified, `trustCertificatesPath` takes precedence.
+ ** *trustCertificatesFromExternalSecret* and *trustStoreFromExternalSecret* - Optional, read the certificates from an existing secret instead of from a file, which keeps them out of the size-limited Helm release secret. See *Using an existing secret* below.
  ** *bind* - Optional, used to authenticate SUSE Observability to LDAP server if the LDAP server doesn't support anonymous LDAP searches.
  ** *userQuery parameters and groupQuery parameters* - The set of parameters inside correspond to the base dn of your LDAP where users and groups can be found. The first one is used for authenticating users in SUSE Observability, while the second is used for retrieving the group of that user to determine if the user is an Administrator, Power User or a Guest.
  ** *usernameKey* - The name of the attribute that stores the username, value is matched against the username provided on the login screen.
@@ -121,6 +122,42 @@ helm upgrade \
 suse-observability \
 suse-observability/suse-observability
 ----
+
+*Using an existing secret*
+
+[NOTE]
+====
+Configuring the certificates from an existing secret is available starting from version `2.10.4`. For earlier versions, use the `--set-file` arguments above.
+====
+
+Certificates and trust stores passed with `--set-file` are stored in the Helm release secret, which is subject to a 1MB size limit. A large trust store can therefore make `helm upgrade` fail. To avoid that, create a secret up front and refer to it from `authentication.yaml`:
+
+[,bash]
+----
+kubectl create secret generic ldap-truststore \
+  --namespace suse-observability \
+  --from-file=cacerts=./ldap-cacerts \
+  --from-file=certificates.pem=./ldap-certificate.pem
+----
+
+[,yaml]
+----
+stackstate:
+  authentication:
+    ldap:
+      ssl:
+        type: ssl
+        trustStoreFromExternalSecret:
+          name: ldap-truststore
+          key: cacerts
+        trustCertificatesFromExternalSecret:
+          name: ldap-truststore
+          key: certificates.pem
+----
+
+The two are configured independently, so you can set only the one you need, and they may live in different secrets. When set, they take precedence over `trustStore` and `trustCertificates`. Remove the `--set-file` arguments once you have migrated, since any remaining inline value still counts against the release secret size limit.
+
+For more on the size limit and how to check your current release secret, see xref:/use/security/self-signed-certificates.adoc#_trust_stores_and_the_helm_release_secret_size_limit[Trust stores and the Helm release secret size limit].
 
 [NOTE]
 ====

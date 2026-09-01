@@ -1,0 +1,46 @@
+name: "Docs: Antora Link Validation"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - '**/*.adoc'
+      - 'ss-local-playbook.yml'
+      - 'Makefile'
+
+jobs:
+  validate-internal-links:
+    name: Run Antora Build & Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: make environment
+
+      - name: Exclude Translated Modules
+        run: |
+          echo "Removing non-English modules to prevent translation link failures..."
+          rm -rf docs/latest/modules/{de,es,fr,ja,pt,zh}
+
+          echo "Removing non-English nav entries from antora.yml..."
+          sed -i -e '/modules\/de/d' -e '/modules\/es/d' -e '/modules\/fr/d' -e '/modules\/ja/d' -e '/modules\/pt/d' -e '/modules\/zh/d' docs/latest/antora.yml
+
+      - name: Check for Orphan Pages
+        run: python3 scripts/antora-nav-orphans-checker.py -antoraPath docs/latest -module en -filename modules/en/nav.adoc
+        
+      - name: Enforce AsciiDoc Link Style
+        run: python3 scripts/link-syntax-checker.py docs/
+        
+      - name: Verify Documentation Links
+        run: make ci-pr-link-check

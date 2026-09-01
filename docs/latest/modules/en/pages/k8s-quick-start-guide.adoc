@@ -27,18 +27,9 @@ Set up a Kubernetes integration to collect topology, events, logs, change and me
 |===
 | Supported Kubernetes Version
 
-| Kubernetes 1.32
-| Kubernetes 1.31
-| Kubernetes 1.30
-| Kubernetes 1.29
-| Kubernetes 1.28
-| Kubernetes 1.27
-| Kubernetes 1.26
-| Kubernetes 1.25
-| Kubernetes 1.24
-| Kubernetes 1.23
-| Kubernetes 1.22
-| Kubernetes 1.21
+| Kubernetes 1.36
+| Kubernetes 1.35
+| Kubernetes 1.34
 |===
 
 === Supported runtime
@@ -185,6 +176,31 @@ To get data from a Kubernetes cluster into {stackstate-product-name}, follow the
 . Deploy the {stackstate-product-name} Agent, Cluster Agent, Checks Agent and kube-state-metrics on your Cluster using the helm command provided in the {stackstate-product-name} UI after you have installed the StackPack. The default namespace for the agent is `suse-observability-agent`. The UI instructions remove a previous agent release from `suse-observability` before installing into the new namespace, `suse-observability-agent`, to avoid running duplicate agents.
  ** Once the Agents have been deployed, they will begin collecting data and push this to {stackstate-product-name}
 
+[#openshift-optional-components]
+=== Security context for optional components on OpenShift
+
+The components installed above need no security context changes. Two optional components do, because they run images that declare no `USER`: the chart gives them an explicit `runAsUser` so that they can run as a non-root user on plain Kubernetes. OpenShift instead assigns a UID from the project's own range through the `restricted-v2` SCC, and rejects a pod that asks for a UID outside it. Neither component is covered by the node agent's SCC.
+
+If you enable either of them on OpenShift, clear the UID so that OpenShift can assign one:
+
+[,yaml]
+----
+# Only needed if you enable the process agent's remote pod correlation cache
+remoteKubeCache:
+  containerSecurityContext:
+    runAsUser: null
+
+# Only needed if you enable httpHeaderInjectorWebhook
+httpHeaderInjectorWebhook:
+  containerSecurityContext:
+    runAsUser: null
+----
+
+[NOTE]
+====
+The UID has to be set to `null`. Replacing the whole `containerSecurityContext` with `{}` does not work, because Helm merges it with the chart's default and the UID survives.
+====
+
 [#amazon-eks]
 == Amazon EKS
 
@@ -195,80 +211,20 @@ Set up an Amazon EKS integration to collect topology, events, logs, change and m
 |===
 | Kubernetes version | Amazon EKS release | Amazon EKS End of Support | Amazon EKS End of Extended Support
 
-| 1.32
-| January 23, 2025
-| March 23, 2026
-| March 23, 2027
+| 1.36
+| June 2, 2026
+| August 2, 2027
+| August 2, 2028
 
-| 1.31
-| September 26, 2024
-| November 26, 2025
-| November 26, 2026
+| 1.35
+| January 28, 2026
+| March 27, 2027
+| March 27, 2028
 
-| 1.30
-| May 23, 2024
-| July 23, 2025
-| July 23, 2026
-
-| 1.29
-| January 23, 2024
-| March 23, 2025
-| March 23, 2026
-
-| 1.28
-| September 26, 2023
-| November 01, 2024
-| November 26, 2025
-
-| 1.27
-| May 24, 2023
-| July 2024
-| July 24, 2025
-
-| 1.26
-| April 11, 2023
-| June 2024
-| June 11, 2025
-
-| 1.25
-| February 21, 2023
-| May 2024
-| May 1, 2025
-
-| 1.24
-| November 15, 2022
-| January 2024
-| January 31, 2025
-
-| 1.23
-| August 11, 2022
-| October 11, 2023
-| October 11, 2024
-
-| 1.22
-| April 4, 2022
-| June 4, 2023
-| September 1, 2024
-
-| 1.21
-| July 19, 2021
-| February 15, 2023
-| July 15, 2024
-
-| 1.20
-| May 18, 2021
-| November 1, 2022
-| N/A
-
-| 1.19
-| February 16, 2021
-| August 1, 2022
-| N/A
-
-| 1.18
-| October 13, 2020
-| August 15, 2022
-| N/A
+| 1.34
+| October 6, 2025
+| December 2, 2026
+| December 2, 2027
 |===
 
 === Supported runtime
@@ -327,39 +283,19 @@ Set up a Google GKE integration to collect topology, events, logs, change and me
 |===
 | Kubernetes Version | Google GKE release | Google GKE End of Support | Google GKE End of Extended Support
 
-| 1.32
-| February, 2025
-| Q2, 2026
-| Q1, 2027
+| 1.36
+| June 9, 2026
+| August 9, 2027
+| N/A
 
-| 1.31
-| October 22, 2024
-| December 22, 2025
-| October 22, 2026
+| 1.35
+| February 11, 2026
+| April 11, 2027
+| N/A
 
-| 1.30
-| July 30, 2024
+| 1.34
 | September 30, 2025
-| July 30, 2026
-
-| 1.29
-| January 25, 2024
-| March 21, 2025
-| January 25, 2026
-
-| 1.28
-| December 4, 2023
-| February 4, 2025
-| December 4, 2025
-
-| 1.27
-| June 14, 2023
-| August 31, 2024
-| June 14, 2025
-
-| 1.26
-| April 14, 2023
-| June 30, 2024
+| October 1, 2026
 | N/A
 |===
 
@@ -419,35 +355,20 @@ Set up an Azure AKS integration to collect topology, events, logs, change and me
 |===
 | Kubernetes Version | AKS GA | Azure AKS End of Life | Platform support
 
-| 1.32
-| June 2024
-| March 2026
-| Until 1.36 GA
+| 1.36
+| June 30, 2026
+| June 30, 2027
+| June 30, 2028
 
-| 1.31
-| November 2024
-| November 2025
-| Until 1.35 GA
+| 1.35
+| March 5, 2026
+| March 31, 2027
+| March 31, 2028
 
-| 1.30
-| June 2024
-| July 2025
-| Until 1.34 GA
-
-| 1.29
-| March 2024
-| Januanry 2025
-| Until 1.33 GA
-
-| 1.28
-| November 2023
-| November 2024
-| Until 1.32 GA
-
-| 1.27
-| July 2023
-| July  2024
-| July 2025
+| 1.34
+| January 4, 2026
+| November 30, 2026
+| November 30, 2027
 |===
 
 === Supported runtime
@@ -506,23 +427,9 @@ Set up a KOPS integration to collect topology, events, logs, change and metrics 
 |===
 | Supported Kubernetes Version
 
-| Kubernetes 1.32
-| Kubernetes 1.31
-| Kubernetes 1.30
-| Kubernetes 1.29
-| Kubernetes 1.28
-| Kubernetes 1.27
-| Kubernetes 1.26
-| Kubernetes 1.25
-| Kubernetes 1.24
-| Kubernetes 1.23
-| Kubernetes 1.22
-| Kubernetes 1.21
-| Kubernetes 1.20
-| Kubernetes 1.19
-| Kubernetes 1.18
-| Kubernetes 1.17
-| Kubernetes 1.16
+| Kubernetes 1.36
+| Kubernetes 1.35
+| Kubernetes 1.34
 |===
 
 === Supported runtime
@@ -581,23 +488,9 @@ Set up a Self-hosted integration to collect topology, events, logs, change and m
 |===
 | Supported Kubernetes Version
 
-| Kubernetes 1.32
-| Kubernetes 1.31
-| Kubernetes 1.30
-| Kubernetes 1.29
-| Kubernetes 1.28
-| Kubernetes 1.27
-| Kubernetes 1.26
-| Kubernetes 1.25
-| Kubernetes 1.24
-| Kubernetes 1.23
-| Kubernetes 1.22
-| Kubernetes 1.21
-| Kubernetes 1.20
-| Kubernetes 1.19
-| Kubernetes 1.18
-| Kubernetes 1.17
-| Kubernetes 1.16
+| Kubernetes 1.36
+| Kubernetes 1.35
+| Kubernetes 1.34
 |===
 
 === Supported runtime
