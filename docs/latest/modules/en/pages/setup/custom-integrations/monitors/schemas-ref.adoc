@@ -8,6 +8,7 @@
 
 This page describes the schemas for a `Monitor`, along with detailed explanations of constructs, expression syntax and semantics.
 
+[#schema-for-monitor]
 == Schema for Monitor
 
 A monitor specifies how often a monitor function should run and with which arguments.
@@ -33,10 +34,10 @@ identifier?: string
 * `description`: A description of the monitor.
 * `function`: A reference to the monitor function that will execute the monitor.
 * `intervalSeconds`: The interval at which the monitor executes. For regular real-time metric 30 seconds is advised. For longer-running analytical metric queries a bigger interval is recommended.
-* `remediationHint`: A description of what the user can do when the monitor fails. The format is markdown, with optionally use of handlebars variables to customize the hint based on time series or other data (xref:use/alerting/k8s-add-monitors-cli.adoc#_write_the_remediation_hint[more explanation below]).
+* `remediationHint`: A description of what the user can do when the monitor fails. The format is markdown, with optionally use of handlebars variables to customize the hint based on time series or other data (see xref:setup/custom-integrations/monitors/remediation-guide.adoc[remediation guide]).
 * `status`: Either `"DISABLED"` or `"ENABLED"`. Determines whether the monitor will run or not.
 * `tags`: Add tags to the monitor to help organize them in the monitors overview of your {stackstate-product-name} instance, http://your-instance/#/monitors
-* `identifier`: An identifier of the form `+urn:stackpack:<stackpack-name>:monitor:....+` which uniquely identifies the monitor when updating its configuration.
+* `identifier`: An identifier of the form `+urn:stackpack:<stackpack-name>:monitor:<monitor-short-name>+` which uniquely identifies the monitor when updating its configuration.
 
 == Monitor Functions
 
@@ -65,7 +66,7 @@ arguments:
 * `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
 * `threshold`: A numeric threshold to compare against.
 * `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in {stackstate-product-name} and "DEVIATING" as orange, to denote different severity.
-* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be xref:use/alerting/k8s-add-monitors-cli.adoc#_bind_the_results_of_the_monitor_to_the_correct_components[bound to].
+* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be <<bind-monitor-results-to-components,bound to>>.
 * `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
 
 === Derived State
@@ -172,4 +173,32 @@ For each component that matches the topology query, these variables are availabl
 |properties             | map<string,dyn>     | Properties of the component
 |===
 
+[#bind-monitor-results-to-components]
+== Bind monitor results to components
+
+The results of a monitor need to be bound to components in {stackstate-product-name}, to be visible and usable. The result of a monitor is bound to a component using the component `identifiers`. Each component in {stackstate-product-name} has one or more identifiers that uniquely identify the component. To bind a result of a monitor to a component, it's required to provide the `urnTemplate`. The `urnTemplate` substitutes the labels in the time series of the monitor result into the template, producing an identifier matching a component. This is best illustrated with the example:
+
+The metric that is used in this example is the `kubernetes_state_deployment_replicas_available` metric. Run the metric in the metric explorer to observe what labels are available on the time series:
+
+image::k8s/available-replicas-metric-inspector.png[The available replicas in the metric explorer]
+
+In the above table, it is shown the metric has labels like `cluster_name`, `namespace` and `deployment`.
+
+Because the metric is observed on deployments, it is most logical to bind the monitor results to deployment components. To do this, it is required to understand how the identifiers for deployments are constructed:
+
+. In the UI, navigate to the `deployments` view and select a single deployment.
+. Open the `Topology` view, and click the deployment component.
+. When expanding the `Properties` in the right panel of the screen, the identifiers show after hovering as shown below:
+
+image::k8s/component-identifier.png[Finding a component identifier]
+
+The identifier is shown as `urn:kubernetes:/preprod-dev.preprod.stackstate.io:calico-system:deployment/calico-typha`. This shows that the identifier is constructed based on the cluster name, namespace and deployment name. Knowing this, it is now possible to construct the `urnTemplate`:
+
+----
+  ...
+  urnTemplate: "urn:kubernetes:/${cluster_name}:${namespace}:deployment/${deployment}"
+  ...
+----
+
+xref:/setup/custom-integrations/monitors/troubleshooting.adoc#verifying-the-results-of-a-monitor[To verify] whether the `urnTemplate` is correct, is explained further below.
 
