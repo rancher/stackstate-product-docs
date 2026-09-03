@@ -50,3 +50,36 @@ The output contains an `event` section at the end which usually contains the pro
 . When you are a prime customer, reach out to SUSE Observability support at https://scc.suse.com/ to get help setting up SUSE Observability in your local cluster. Use xref:/setup/install-stackstate/support-package-logs.adoc[Support Package (Logs)] to collect information about your instance for the support team.
 . If the issue is performance-related, run xref:/setup/install-stackstate/support-package-performance.adoc[Support Package (Performance)] to actively investigate performance.
 . In case the above steps did not resolve the issue, there is an xref:/setup/install-stackstate/advanced-troubleshooting.adoc[Advanced Troubleshooting Guide] available.
+
+== OpenShift-specific issues
+
+=== RBAC agent fails to start with SCC violations
+
+*Symptoms:* The `kubernetes-rbac-agent` pod fails to start on OpenShift with SecurityContextConstraints (SCC) violations. Pod events show errors about `runAsUser`, `fsGroup`, or `seccompProfile` being rejected.
+
+*Affected versions:* Chart versions 1.5.46 and later.
+
+*Cause:* The RBAC agent chart uses hardcoded UID/GID/fsGroup values that conflict with OpenShift's `restricted-v2` SCC requirements.
+
+*Solution:* Enable OpenShift compatibility mode in your `openshift-values.yaml` file:
+
+[,yaml]
+----
+kubernetes-rbac-agent:
+  openshift:
+    enabled: true
+----
+
+Then upgrade your installation:
+
+[,text]
+----
+helm upgrade \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values openshift-values.yaml \
+  suse-observability \
+  suse-observability/suse-observability
+----
+
+This allows OpenShift's `restricted-v2` SCC to assign UID/fsGroup automatically from the namespace range.
