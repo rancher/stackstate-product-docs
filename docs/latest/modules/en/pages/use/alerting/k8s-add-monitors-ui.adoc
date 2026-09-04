@@ -1,0 +1,95 @@
+ifndef::ss-ff-stackpacks2_enabled[]
+= Add monitors to components using the UI
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-09-04
+:page-revdate: {revdate}
+:description: SUSE Observability
+
+== Overview
+
+SUSE Observability provides xref:/use/alerting/k8s-monitors.adoc[monitors out of the box], which provide monitoring on common issues that can occur in a Kubernetes cluster. You can configure custom monitors from the {stackstate-product-name} dashboard for the metrics collected by {stackstate-product-name} or application metrics ingested xref:/use/metrics/k8s-prometheus-remote-write.adoc[from Prometheus].
+
+== Steps to add a monitor
+
+Follow the below steps to add a new monitor to a component in {stackstate-product-name}:
+
+. In the {stackstate-product-name} dashboard, naivgate to 'Monitors' and click 'ADD NEW MONITOR'.
++
+image:monitors/add-new-monitor.png[]
+
+. From the list of monitor types, choose the type that fits your use-case.
++
+image::monitors/choose-monitor-type.png[]
+
+. Fill in the various parameters for each monitor type, such as metrics, monitoring conditions, component mappings, and the like, as per your monitoring requirements.
+
+. Click 'SAVE CHANGES' to add the monitor to the component.
+
+== Example: Adding a Metric Threshold Monitor
+
+In this example, we will add a metric threshold monitor to a component in {stackstate-product-name} to trigger a health state when a given threshold is exceeded for a specified metric query.
+
+. From the list of monitor types, choose 'Metric Threshold Monitor'.
+
+. Fill in the following parameters for the metric threshold monitor
++
+.General monitor information
+[%collapsible]
+====
+* *Name*: Give your monitor a clear, descriptive name.
+* *Type*: Specify the type of monitor you are creating.
+* *Description*: Briefly explain the purpose of this monitor so your team understands why it exists and what it tracks.
+* *Status*: Indicate whether the monitor is enabled or disabled.
++
+[NOTE]
+=====
+A disabled monitor is not visible on the components it is mapped on, it will not impact their health state and will not trigger any alerts.
+=====
+* *Tags*: Optionally, add tags to categorize and filter monitors. For example, `pods`.
+====
++
+.Metric
+[%collapsible]
+====
+* *PromQL*: Specify the PromQL query to define the metric you want to monitor. For example,
++
+[source, promql]
+----
+(sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*postgres.*"}))
+/
+(sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*postgres.*"}))
+* 100
+----
+* *Time series alias*: Provide an alias to distinguish betwen different time series withotu depending on labels. For example, `{{namespace}} / {{persistentvolumeclaim}}`.
+* *Unit of measurement*: Specify the unit of measurement to automatically convert the Y-axis values to the right units in all the charts. For example, `Percent`, `Decibel`, and so on.
+====
++
+.Monitor conditions
+[%collapsible]
+====
+* *Rule(s)*: Define the conditions under which the monitor will trigger alerts. For example, you might set a rule to trigger an alert when CPU usage exceeds 80% for more than 5 minutes.
+* *Interval*: Specify how frequently the monitor should evaluate the conditions.
+====
++
+.Components mapping
+[%collapsible]
+====
+* *Scope*: Define the scope of components that this monitor will be applied to - `Single component` or `Multiple components`. This helps in mapping the monitor to the relevant components within your Kubernetes environment.
+* *Component identifier*: Specify the unique identifier of the component to which this monitor will be mapped. This ensures that the monitor is correctly associated with the intended component within your Kubernetes environment.
+====
++
+.Remediation
+[%collapsible]
+====
+For information on writing a remediation guide, see xref:/use/alerting/k8s-write-remediation-guide.adoc[Write a remediation guide].
+====
++
+image::monitors/add-metric-threshold.png[]
+
+. Click 'SAVE CHANGES' to add the metric threshold monitor to the component.
+
+== Verification
+
+* Verify that the monitor has been added successfully by checking the list of monitors. From the list, you can further edit the monitor, change the state, or delete as needed.
+
+endif::ss-ff-stackpacks2_enabled[]
