@@ -187,9 +187,9 @@ This step assumes that xref:/setup/install-stackstate/kubernetes_openshift/kuber
 
 == Configure Ingress Rule for Open Telemetry
 
-The {stackstate-product-name} Helm chart exposes an `opentelemetry-collector` service in its values where a dedicated `ingress` can be created. This is disabled by default. The ingress needed for `opentelemetry-collector` purposes needs to support GRPC protocol. Note that setting up the controller itself and the certificates is beyond the scope of this document.
+The {stackstate-product-name} Helm chart exposes an `otel-receiver` service in its values where a dedicated `ingress` can be created. This is disabled by default. The ingress needed for `otel-receiver` purposes needs to support GRPC protocol. Note that setting up the controller itself and the certificates is beyond the scope of this document.
 
-To configure the `opentelemetry-collector` ingress for {stackstate-product-name}, create a file `ingress_otel_values.yaml` with contents like below. Replace `MY_DOMAIN` with your own domain (that's linked with your ingress controller) and set the correct name for the `otlp-tls-secret`. Consult the documentation of your ingress controller for the correct annotations to set. All fields below are optional, for example, if no TLS will be used, omit that section but be aware that {stackstate-product-name} also doesn't encrypt the traffic.
+To configure the `otel-receiver` ingress for {stackstate-product-name}, create a file `ingress_otel_values.yaml` with contents like below. Replace `MY_DOMAIN` with your own domain (that's linked with your ingress controller) and set the correct name for the `otlp-tls-secret`. Consult the documentation of your ingress controller for the correct annotations to set. All fields below are optional, for example, if no TLS will be used, omit that section but be aware that {stackstate-product-name} also doesn't encrypt the traffic.
 
 [tabs]
 ====
@@ -206,12 +206,12 @@ Make sure to use Traefik < 3.6.3 or >= 3.6.7 (with Helm chart version >= 39.0.0)
 =====
 Exposing the OpenTelemetry Collector GRPC endpoint via Traefik is supported starting with {stackstate-product-name} Helm chart version v2.8.0.
 
-Note that the GRPC host entry requires an explicit `serviceName: suse-observability-otel-collector-grpc` to route traffic to the correct backend service.
+Note that the GRPC host entry requires an explicit `serviceName: suse-observability-otel-receiver-grpc` to route traffic to the correct backend service.
 =====
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -222,7 +222,7 @@ opentelemetry-collector:
         paths:
           - path: /
             pathType: Prefix
-            serviceName: suse-observability-otel-collector-grpc
+            serviceName: suse-observability-otel-receiver-grpc
             port: 4317
     tls:
       - hosts:
@@ -256,7 +256,7 @@ The Ingress Nginx project is https://kubernetes.io/blog/2025/11/11/ingress-nginx
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -335,7 +335,7 @@ gRPC only::
 --
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   gateway:
     enabled: true
     kind: GRPCRoute
@@ -354,7 +354,7 @@ HTTP and gRPC::
 --
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   gateway:
     enabled: true
     kind: HTTPRoute

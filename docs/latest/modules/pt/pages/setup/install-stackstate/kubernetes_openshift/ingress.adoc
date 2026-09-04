@@ -101,9 +101,9 @@ Esta etapa assume que xref:/setup/install-stackstate/kubernetes_openshift/kubern
 
 == Configurar a Regra de Ingress para Open Telemetry
 
-O {stackstate-product-name} gráfico Helm expõe um serviço `opentelemetry-collector` em seus valores onde um `ingress` dedicado pode ser criado. Isso está desabilitado por padrão. O ingress necessário para fins de `opentelemetry-collector` precisa suportar o protocolo GRPC. Observe que a configuração do controlador em si e dos certificados está além do escopo deste documento.
+O {stackstate-product-name} gráfico Helm expõe um serviço `otel-receiver` em seus valores onde um `ingress` dedicado pode ser criado. Isso está desabilitado por padrão. O ingress necessário para fins de `otel-receiver` precisa suportar o protocolo GRPC. Observe que a configuração do controlador em si e dos certificados está além do escopo deste documento.
 
-Para configurar o `opentelemetry-collector` ingress para {stackstate-product-name}, crie um arquivo `ingress_otel_values.yaml` com o conteúdo conforme abaixo. Substitua `MY_DOMAIN` pelo seu próprio domínio (que está vinculado ao seu controlador de entrada) e defina o nome correto para o `otlp-tls-secret`. Consulte a documentação do seu controlador de entrada para as anotações corretas a serem definidas. Todos os campos abaixo são opcionais, por exemplo, se nenhum TLS for usado, omita essa seção, mas esteja ciente de que {stackstate-product-name} também não criptografa o tráfego.
+Para configurar o `otel-receiver` ingress para {stackstate-product-name}, crie um arquivo `ingress_otel_values.yaml` com o conteúdo conforme abaixo. Substitua `MY_DOMAIN` pelo seu próprio domínio (que está vinculado ao seu controlador de entrada) e defina o nome correto para o `otlp-tls-secret`. Consulte a documentação do seu controlador de entrada para as anotações corretas a serem definidas. Todos os campos abaixo são opcionais, por exemplo, se nenhum TLS for usado, omita essa seção, mas esteja ciente de que {stackstate-product-name} também não criptografa o tráfego.
 
 [tabs]
 ====
@@ -120,12 +120,12 @@ Certifique-se de usar o Traefik < 3.6.3 or >= 3.6.7 (com versão do gráfico Hel
 =====
 Expor o endpoint GRPC do OpenTelemetry Collector via Traefik é suportado a partir da versão v2.8.0 do {stackstate-product-name} gráfico Helm.
 
-Observe que a entrada do host GRPC requer um `serviceName: suse-observability-otel-collector-grpc` explícito para rotear o tráfego para o serviço de backend correto.
+Observe que a entrada do host GRPC requer um `serviceName: suse-observability-otel-receiver-grpc` explícito para rotear o tráfego para o serviço de backend correto.
 =====
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -136,7 +136,7 @@ opentelemetry-collector:
         paths:
           - path: /
             pathType: Prefix
-            serviceName: suse-observability-otel-collector-grpc
+            serviceName: suse-observability-otel-receiver-grpc
             port: 4317
     tls:
       - hosts:
@@ -170,7 +170,7 @@ O projeto Ingress Nginx está https://kubernetes.io/blog/2025/11/11/ingress-ngin
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: nginx

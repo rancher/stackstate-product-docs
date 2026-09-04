@@ -101,9 +101,9 @@ suse-observability/suse-observability
 
 == オープンテレメトリのためのイングレスルールを構成します。
 
-{stackstate-product-name} Helmチャートは、その値の中で`opentelemetry-collector`サービスを公開し、専用の`ingress`を作成できます。これはデフォルトでは無効になっています。`opentelemetry-collector`目的に必要なイングレスは、GRPCプロトコルをサポートする必要があります。コントローラー自体と証明書の設定は、この文書の範囲を超えていることに注意してください。
+{stackstate-product-name} Helmチャートは、その値の中で`otel-receiver`サービスを公開し、専用の`ingress`を作成できます。これはデフォルトでは無効になっています。`otel-receiver`目的に必要なイングレスは、GRPCプロトコルをサポートする必要があります。コントローラー自体と証明書の設定は、この文書の範囲を超えていることに注意してください。
 
-{stackstate-product-name}のために`opentelemetry-collector`イングレスを構成するには、以下のような内容のファイル`ingress_otel_values.yaml`を作成してください。`MY_DOMAIN`を自分のドメイン（イングレスコントローラーにリンクされている）に置き換え、`otlp-tls-secret`の正しい名前を設定してください。正しいアノテーションを設定するために、Ingressコントローラーのドキュメントを参照してください。以下のすべてのフィールドはオプションです。たとえば、TLSを使用しない場合はそのセクションを省略できますが、{stackstate-product-name}もトラフィックを暗号化しないことに注意してください。
+{stackstate-product-name}のために`otel-receiver`イングレスを構成するには、以下のような内容のファイル`ingress_otel_values.yaml`を作成してください。`MY_DOMAIN`を自分のドメイン（イングレスコントローラーにリンクされている）に置き換え、`otlp-tls-secret`の正しい名前を設定してください。正しいアノテーションを設定するために、Ingressコントローラーのドキュメントを参照してください。以下のすべてのフィールドはオプションです。たとえば、TLSを使用しない場合はそのセクションを省略できますが、{stackstate-product-name}もトラフィックを暗号化しないことに注意してください。
 
 [tabs]
 ====
@@ -120,12 +120,12 @@ Traefik < 3.6.3 or >= 3.6.7（Helmチャートバージョン>= 39.0.0）を使�
 =====
 OpenTelemetry Collector GRPCエンドポイントをTraefik経由で公開することは、{stackstate-product-name} Helmチャートバージョンv2.8.0以降でサポートされています。
 
-GRPCホストエントリは、トラフィックを正しいバックエンドサービスにルーティングするために明示的な`serviceName: suse-observability-otel-collector-grpc`を必要とすることに注意してください。
+GRPCホストエントリは、トラフィックを正しいバックエンドサービスにルーティングするために明示的な`serviceName: suse-observability-otel-receiver-grpc`を必要とすることに注意してください。
 =====
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -136,7 +136,7 @@ opentelemetry-collector:
         paths:
           - path: /
             pathType: Prefix
-            serviceName: suse-observability-otel-collector-grpc
+            serviceName: suse-observability-otel-receiver-grpc
             port: 4317
     tls:
       - hosts:
@@ -170,7 +170,7 @@ Ingress Nginxプロジェクトはhttps://kubernetes.io/blog/2025/11/11/ingress-
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: nginx
