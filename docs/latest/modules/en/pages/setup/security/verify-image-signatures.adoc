@@ -1,0 +1,53 @@
+= Verify container image signatures
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-08-26
+:page-revdate: {revdate}
+:description: How to verify the cryptographic signature of {stackstate-product-name} container images
+
+== Overview
+
+{stackstate-product-name} container images are cryptographically signed during the build pipeline using link:https://www.sigstore.dev/[Sigstore] keyless signing (`cosign`). Verifying a signature confirms that an image was genuinely built by SUSE from a specific source repository, workflow, and branch or tag — before you pull it into a cluster.
+
+Signing is keyless: there is no public key file to download or manage. Instead, each signature is backed by a short-lived certificate tied to the GitHub Actions job that produced it, and a public, tamper-evident record of the signing event.
+
+Image signing was introduced for platform images in release v2.10.4 and for agent images in release vA.B.C. Images published before this was rolled out do not carry a signature — verifying one of those tags fails with `no signatures found`, which does not indicate a problem with the image itself. If you rely on signature verification, pull a current tag.
+
+== Prerequisites
+
+Install `cosign` (the Sigstore client):
+
+[,bash]
+----
+# macOS
+brew install cosign
+
+# Linux, or any platform: download a release binary
+# https://github.com/sigstore/cosign/releases
+----
+
+== Verify a signature
+
+Run `cosign verify` against the image reference, pinning the OIDC issuer to GitHub Actions and matching the certificate identity to the `StackVista` GitHub organization:
+
+[,bash]
+----
+cosign verify \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github.com/StackVista/.*' \
+  registry.rancher.com/suse-observability/<image>:<tag>
+----
+
+Replace `<image>:<tag>` with the image and tag you want to verify, for example `clickhouse:26.5.1-so8`.
+
+A successful verification prints a `Verification for ...` banner followed by the signed claims, and the command exits with status `0`. If the image was not signed by SUSE, the command fails with a non-zero exit code and an error.
+
+== Troubleshooting
+
+`no signatures found`::
+This is either an older tag published before we started signing images (see <<_overview,Overview>>) or a mistyped registry, repository, or tag.
+
+`no matching signatures: none of the expected identities matched`::
+The image was signed, but not by a workflow matching your `--certificate-identity-regexp`. Double-check the organization in your pattern.
+
+Private registry access::
+If your environment pulls images through a private mirror or air-gapped registry, `cosign verify` needs read access to that registry. Log in first with `cosign login <registry>` or `docker login <registry>`.
