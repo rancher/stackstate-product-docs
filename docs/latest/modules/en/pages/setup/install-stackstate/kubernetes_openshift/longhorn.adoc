@@ -14,9 +14,6 @@ Provide at least three eligible Longhorn storage nodes and spread them across th
 Configure Longhorn replica node and zone anti-affinity so that this separation is enforced, rather than only preferred.
 Keep enough free capacity to rebuild all replicas from one failed or drained node.
 
-Configure the Longhorn CSI `kubeletRootDir` for the Kubernetes distribution.
-For example, RKE2 normally uses `/var/lib/kubelet`.
-
 Do not use Longhorn replicas as a replacement for backups.
 Configure xref:/setup/data-management/backup_restore/backup_enable.adoc[SUSE Observability backups] in external object storage and test the restore procedure.
 
@@ -29,6 +26,15 @@ An HA installation can reduce replication traffic by using one Longhorn replica 
 This optimization makes the loss of one storage node a service-specific recovery operation: the application must rebuild the lost member after its PVC is replaced.
 Use it only when that procedure has been tested.
 
+[IMPORTANT]
+====
+Keep the HA profile's default hard pod anti-affinity enabled when using one-replica Longhorn volumes.
+It spreads replicas of each stateful service across different nodes so that a single node failure doesn't remove multiple application members and their volumes.
+Pod anti-affinity and Longhorn replica anti-affinity protect different layers and don't replace each other.
+Ensure that the cluster has enough eligible nodes and spare capacity to satisfy the scheduling rules during maintenance; otherwise, replacement pods remain pending.
+See xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes affinities].
+====
+
 [cols="1,1,1,3",options="header"]
 |===
 |Purpose |Longhorn replicas |Data locality |Use
@@ -36,12 +42,12 @@ Use it only when that procedure has been tested.
 |Durable
 |3
 |Disabled
-|All durable Non-HA data. In HA installations, use for ClickHouse, Kafka, HDFS NameNodes, VictoriaMetrics, Workload Observer, settings, backups, StackPacks, and other state that cannot safely be recreated from an application peer.
+|All durable Non-HA data. In HA installations, use for ClickHouse, HDFS NameNodes, VictoriaMetrics, Workload Observer, settings, backups, StackPacks, Kafka before vX.Y.Z, and other state that cannot safely be recreated from an application peer.
 
 |Application-replicated
 |1
 |Best effort
-|HA installations only: Elasticsearch members, HDFS DataNodes, and ZooKeeper members. Losing the volume loses that member and requires application-level recovery.
+|HA installations only: Elasticsearch members, HDFS DataNodes, ZooKeeper members, and Kafka in vX.Y.Z or later. Losing the volume loses that member and requires application-level recovery.
 
 |Transient
 |1
@@ -49,8 +55,9 @@ Use it only when that procedure has been tested.
 |Temporary buffers and working data, such as vmagent and temporary component PVCs. Data in these volumes can be lost during a node failure.
 |===
 
-Keep Kafka on the durable class even in an HA installation.
-Kafka topic replication can differ between topics, including internal topics, so the number of broker pods alone doesn't prove that every partition can survive the loss of a broker volume.
+Kafka can use the application-replicated class starting with SUSE Observability vX.Y.Z.
+That release configures the Kafka internal transaction-state topic with HA replication and migrates the existing topic during an upgrade.
+Earlier versions must keep Kafka on the durable class because some internal topic partitions have only one Kafka replica.
 
 The following example creates the three classes.
 Adapt the names and other Longhorn parameters to your environment.
@@ -68,7 +75,6 @@ volumeBindingMode: Immediate
 parameters:
   numberOfReplicas: "3"
   dataLocality: disabled
-  fsType: ext4
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -81,7 +87,6 @@ volumeBindingMode: Immediate
 parameters:
   numberOfReplicas: "1"
   dataLocality: best-effort
-  fsType: ext4
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -94,7 +99,6 @@ volumeBindingMode: WaitForFirstConsumer
 parameters:
   numberOfReplicas: "1"
   dataLocality: best-effort
-  fsType: ext4
 ----
 
 Set the durable class as the default for the chart:
@@ -118,6 +122,12 @@ hbase:
     datanode:
       persistence:
         storageClass: longhorn-application
+
+kafka:
+  logPersistence:
+    storageClass: longhorn-application
+  persistence:
+    storageClass: longhorn-application
 
 zookeeper:
   persistence:
