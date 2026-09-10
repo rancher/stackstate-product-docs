@@ -296,14 +296,29 @@ After installation, verify that every PVC uses the intended class and that every
 
 == Maintain or rotate nodes
 
-Operate on one storage node at a time.
+This guidance applies regardless of Kubernetes distribution or cluster management platform.
+
+[IMPORTANT]
+.HA maintenance limitation
+====
+The current database liveness and readiness probes do not verify that application-level replication has recovered after a node disruption.
+Pod or node `Ready` status, a successful drain, and satisfied PodDisruptionBudgets are not sufficient checks.
+Healthy Longhorn volumes do not establish that application-level replication is complete.
+====
+
+Operate on one node hosting stateful SUSE Observability workloads or Longhorn replicas at a time.
 Before each node, confirm that:
 
 * SUSE Observability is healthy.
-* Application replication is complete: HDFS has no missing or under-replicated blocks, Elasticsearch has allocated its replicas, and Kafka partitions have all assigned replicas in sync.
+* Application replication is complete: HDFS has no missing or under-replicated blocks, Elasticsearch has allocated its replicas, Kafka partitions have all assigned replicas in sync, and ClickHouse replicated tables have caught up with their required replicas available.
 * All Longhorn volumes are healthy and have their expected replica count.
 * Other nodes have enough storage and compute capacity for the workloads and replica rebuilds.
 * A recent external backup is available.
+
+Automated Kubernetes upgrades, node rotations, and node restarts must perform these checks before disrupting the next node.
+SUSE Observability does not automatically add database-replication checks to your cluster's maintenance workflow.
+Configure the workflow to wait for recovery and stop further node disruptions if a check fails or times out.
+If the workflow cannot perform these checks, pause it between nodes and verify recovery before continuing; a fixed delay is not a substitute.
 
 [CAUTION]
 ====
@@ -335,7 +350,7 @@ Then:
 
 . If the drain is blocked, inspect Longhorn events and the replicas on the node. Do not force the drain past Longhorn's data-protection checks.
 . Complete the maintenance and return the node.
-. Uncordon the node and *wait until Longhorn and SUSE Observability are healthy before proceeding to the next node.*
+. Uncordon the node so workloads can be scheduled, then *wait until Longhorn has restored the expected replica count and application replication is complete before proceeding to the next node.*
 
 `Allow If Last Replica Is Stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
 Use that policy only when this risk is explicitly accepted.
@@ -346,7 +361,7 @@ Use that policy only when this risk is explicitly accepted.
 . Temporarily set the Longhorn node drain policy to `Block For Eviction`.
 . Cordon and drain the old node. Longhorn automatically requests eviction and blocks the drain until all replicas have moved.
 . Confirm that no volumes remain attached, then remove the node from Longhorn and Kubernetes.
-. *Wait for all volumes and SUSE Observability components to become healthy before removing another node.*
+. *Wait until Longhorn has restored the expected replica count and application replication is complete before removing another node.*
 
 For example:
 
