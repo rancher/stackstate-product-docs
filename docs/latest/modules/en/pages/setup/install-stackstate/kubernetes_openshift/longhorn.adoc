@@ -185,14 +185,50 @@ Keep Kafka on the durable class unless you have verified all of the following:
 
 * The release requirement above is met.
 * Every topic partition, including `__consumer_offsets` and `__transaction_state`, has at least two replicas and all assigned replicas are in sync.
-* No explicit override leaves an internal topic at replication factor one.
-* Recovery from the loss of a broker's data volume has been tested.
 
 An upgrade attempts to increase the existing transaction-state topic's replication, but can defer that migration with a warning when brokers are unavailable.
 A successful chart upgrade alone is not proof that the migration completed.
 Kafka's HA defaults use a replication factor of two, and the transaction-state topic permits a minimum in-sync replica count of one.
 Losing one replica therefore leaves less redundancy; restore full replication before any further maintenance.
 HDFS data replication also depends on the sizing profile, so do not assume that every HA datastore keeps three application copies.
+
+=== Check Kafka replication
+
+Find a Kafka broker pod in the SUSE Observability namespace:
+
+[,bash]
+----
+kubectl -n <suse-observability-namespace> get pods -l app.kubernetes.io/name=kafka
+----
+
+Run the following read-only command in one of those pods.
+Without a `--topic` filter, it describes all topics, including internal topics:
+
+[,bash]
+----
+kubectl -n <suse-observability-namespace> exec <kafka-pod-name> -c kafka -- kafka-topics.sh --bootstrap-server localhost:9092 --describe
+----
+
+This example uses the chart's default plaintext client listener.
+If you customized the listener, use its address and port; for an authenticated listener, also supply `--command-config <client-properties-path>` with a client configuration available inside the pod.
+
+Inspect *every partition line* in the output, not only each topic's summary.
+For example, these two partition lines meet the requirement:
+
+[,text]
+----
+Topic: __consumer_offsets  Partition: 0  Leader: 0  Replicas: 0,1  Isr: 1,0
+Topic: __transaction_state  Partition: 0  Leader: 1  Replicas: 1,2  Isr: 1,2
+----
+
+* `Replicas` must list at least two distinct broker IDs.
+* `Isr` must contain every broker ID listed in `Replicas`; the order can differ.
+* `Leader` must identify an available broker, not `-1`.
+
+`Replicas: 0` with `Isr: 0` is fully in sync but has only one copy, so it fails this check.
+`Replicas: 0,1` with `Isr: 0` has two assigned copies but one has not caught up, so it also fails.
+Check all partitions of `__consumer_offsets` and `__transaction_state` as well as the application topics.
+If an internal topic has not been created yet, repeat the check after the corresponding consumer or transactional workload has created it; absence does not verify its replication.
 
 Only after these checks, add the Kafka topic-data override:
 
@@ -203,16 +239,46 @@ kafka:
     storageClass: longhorn-application
 ----
 
-Kafka's optional `logPersistence` volume is for broker diagnostic logs, not replicated topic data, and is disabled by default.
-It is not needed for this configuration.
-
 === Optional PVCs with explicit StorageClass selection
 
 Most component PVCs inherit `global.storageClass`, including AI Assistant SQLite storage.
 The following optional configurations require a separate choice:
 
-* For an OpenTelemetry Collector running as a StatefulSet with custom `opentelemetry-collector.statefulset.volumeClaimTemplates`, set `spec.storageClassName` in each claim template. The chart renders these templates as supplied.
-* When enabling component transaction-log PVCs, set `stackstate.features.storeTransactionLogsToPVC.storageClass`. These PVCs do not inherit `global.storageClass`.
+For an OpenTelemetry Collector running as a StatefulSet with custom `opentelemetry-collector.statefulset.volumeClaimTemplates`, set `spec.storageClassName` in each claim template.
+The chart renders these templates as supplied.
+For example:
+
+[,yaml]
+----
+opentelemetry-collector:
+  mode: statefulset
+  statefulset:
+    volumeClaimTemplates:
+      - metadata:
+          name: data
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: longhorn-durable-2
+----
+
+Add the StorageClass to your existing claim templates, preserving the names, capacities, and matching volume mounts required by your Collector configuration.
+
+When enabling component transaction-log PVCs, set `stackstate.features.storeTransactionLogsToPVC.storageClass`.
+These PVCs do not inherit `global.storageClass`.
+For example:
+
+[,yaml]
+----
+stackstate:
+  features:
+    storeTransactionLogsToPVC:
+      enabled: true
+      storageClass: longhorn-durable-2
+----
 
 Choose these classes according to the data's recovery requirements; using the transient class accepts loss of the stored data.
 See xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Storage classes and customization] for the complete set of storage settings.
