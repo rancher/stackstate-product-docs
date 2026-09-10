@@ -24,7 +24,7 @@ This is the recommended starting point for both Non-HA and HA installations.
 
 An HA installation can reduce replication traffic by using one Longhorn replica for selected services that already maintain independent application-level replicas.
 This optimization makes the loss of one storage node a service-specific recovery operation: the application must rebuild the lost member after its PVC is replaced.
-Use it only when that procedure has been tested.
+*Use it only when that procedure has been tested.*
 
 [IMPORTANT]
 ====
@@ -199,35 +199,90 @@ Before each node, confirm that:
 * Other nodes have enough storage and compute capacity for the workloads and replica rebuilds.
 * A recent external backup is available.
 
-For a short reboot or operating-system update:
+[CAUTION]
+====
+The https://longhorn.io/docs/latest/maintenance/maintenance/[official Longhorn node maintenance and drain policy guide] is the source of truth for maintenance procedures and drain policy behavior.
+The following commands are examples for planning a procedure; verify them against the documentation for your installed Longhorn version and test the complete procedure before using it in production.
+====
 
-. Cordon and drain the node with `--ignore-daemonsets`.
+Longhorn drain policies act when a node is cordoned, even if it is not subsequently drained.
+Change the policy before cordoning the first node and restore the previous value after maintenance.
+
+=== Short restart or in-place upgrade
+
+For a short restart, operating-system update, or in-place Kubernetes upgrade, `Block For Eviction If Contains Last Replica` automatically relocates the last healthy replica of a volume.
+This allows one-replica volumes to drain while avoiding the evacuation of every replica on the node.
+
+For example:
+
+[,bash]
+----
+LONGHORN_DRAIN_POLICY="$(kubectl -n longhorn-system \
+  get settings.longhorn.io node-drain-policy -o jsonpath='{.value}')"
+
+kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy \
+  --type=merge \
+  -p '{"value":"block-for-eviction-if-contains-last-replica"}'
+
+kubectl cordon <node-name>
+kubectl drain <node-name> \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --timeout=0
+----
+
+Then:
+
 . If the drain is blocked, inspect Longhorn events and the replicas on the node. Do not force the drain past Longhorn's data-protection checks.
 . Complete the maintenance and return the node.
 . Uncordon the node and wait until Longhorn and SUSE Observability are healthy before proceeding to the next node.
 
-Longhorn normally keeps reusable replicas during short maintenance.
-The default `Block If Contains Last Replica` node drain policy prevents a drain from completing when the node contains the last healthy replica of a volume.
-With one-replica classes, evict the replica before draining, or deliberately use `Allow If Last Replica Is Stopped` only for short maintenance where the same disk is expected to return.
-The latter option loses the volume if the node or disk doesn't return.
-Do not use `Always Allow` in production.
-See the https://longhorn.io/docs/latest/maintenance/maintenance/[Longhorn node maintenance and drain policy guide].
+`Allow If Last Replica Is Stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
+Use that policy only when this risk is explicitly accepted.
 
-For permanent node removal or replacement:
+=== Permanent node removal or replacement
 
 . Add replacement capacity before removing capacity.
-. Disable Longhorn scheduling on the old node.
-. Request replica eviction and wait until the node contains no replicas.
-. Cordon and drain the node.
+. Temporarily set the Longhorn node drain policy to `Block For Eviction`.
+. Cordon and drain the old node. Longhorn automatically requests eviction and blocks the drain until all replicas have moved.
 . Confirm that no volumes remain attached, then remove the node from Longhorn and Kubernetes.
 . Wait for all volumes and SUSE Observability components to become healthy before removing another node.
+
+For example:
+
+[,bash]
+----
+LONGHORN_DRAIN_POLICY="$(kubectl -n longhorn-system \
+  get settings.longhorn.io node-drain-policy -o jsonpath='{.value}')"
+
+kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy \
+  --type=merge \
+  -p '{"value":"block-for-eviction"}'
+
+kubectl cordon <node-name>
+kubectl drain <node-name> \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --timeout=0
+----
 
 Follow the https://longhorn.io/docs/latest/nodes-and-volumes/nodes/disks-or-nodes-eviction/[Longhorn replica eviction procedure].
 Eviction rebuilds data over the storage network and can take a long time; schedule it as a storage-intensive maintenance operation.
 
+After the maintenance window, restore the previous policy:
+
+[,bash]
+----
+kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy \
+  --type=merge \
+  -p "{\"value\":\"${LONGHORN_DRAIN_POLICY}\"}"
+----
+
+Do not use `Always Allow` in production.
+
 == Operational checks
 
-Alert on degraded or faulted Longhorn volumes, unschedulable replicas, disk pressure, node readiness, and replica rebuild failures.
+Monitor degraded or faulted Longhorn volumes, unschedulable replicas, disk pressure, node readiness, and replica rebuild failures.
 Treat a degraded volume as reduced fault tolerance, not as a normal steady state.
 
 Before and after maintenance, list the relevant resources:
