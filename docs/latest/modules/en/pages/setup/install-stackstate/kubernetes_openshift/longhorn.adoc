@@ -181,44 +181,49 @@ stackstate:
         storageClass: longhorn-transient
 ----
 
-Keep Kafka on the durable class unless you have verified all of the following:
+=== Kafka transaction-state replication in HA
 
-* The release requirement above is met.
-* Every topic partition, including `__consumer_offsets` and `__transaction_state`, has at least two replicas and all assigned replicas are in sync.
+This section applies to HA installations considering the optional one-replica Longhorn class for Kafka.
+Before the fix, the `150-ha`, `250-ha`, and `500-ha` sizing profiles configured `__transaction_state` with replication factor one.
+This was the only topic with that replication gap; application topics and `__consumer_offsets` already had HA replication.
+The fix brings `__transaction_state` to replication factor two in those HA profiles and migrates the existing topic during upgrades.
+
+In Non-HA installations, Kafka replication factor one is expected.
+Keep Kafka on `longhorn-durable-2`; the HA check and one-replica StorageClass override below do not apply.
+
+For HA, keep Kafka on the durable class until the release requirement above is met and every partition of `__transaction_state` has at least two replicas with all assigned replicas in sync.
 
 An upgrade attempts to increase the existing transaction-state topic's replication, but can defer that migration with a warning when brokers are unavailable.
 A successful chart upgrade alone is not proof that the migration completed.
 Kafka's HA defaults use a replication factor of two, and the transaction-state topic permits a minimum in-sync replica count of one.
 Losing one replica therefore leaves less redundancy; restore full replication before any further maintenance.
-HDFS data replication also depends on the sizing profile, so do not assume that every HA datastore keeps three application copies.
 
-=== Check Kafka replication
+==== Check the transaction-state topic
 
-Find a Kafka broker pod in the SUSE Observability namespace:
+Find a Kafka broker pod in the HA installation's SUSE Observability namespace:
 
 [,bash]
 ----
 kubectl -n <suse-observability-namespace> get pods -l app.kubernetes.io/name=kafka
 ----
 
-Run the following read-only command in one of those pods.
-Without a `--topic` filter, it describes all topics, including internal topics:
+Run the following read-only command in one of those pods to describe `__transaction_state`:
 
 [,bash]
 ----
-kubectl -n <suse-observability-namespace> exec <kafka-pod-name> -c kafka -- kafka-topics.sh --bootstrap-server localhost:9092 --describe
+kubectl -n <suse-observability-namespace> exec <kafka-pod-name> -c kafka -- kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic __transaction_state
 ----
 
 This example uses the chart's default plaintext client listener.
 If you customized the listener, use its address and port; for an authenticated listener, also supply `--command-config <client-properties-path>` with a client configuration available inside the pod.
 
-Inspect *every partition line* in the output, not only each topic's summary.
+Inspect *every partition line* in the output, not only the topic's summary.
 For example, these two partition lines meet the requirement:
 
 [,text]
 ----
-Topic: __consumer_offsets  Partition: 0  Leader: 0  Replicas: 0,1  Isr: 1,0
-Topic: __transaction_state  Partition: 0  Leader: 1  Replicas: 1,2  Isr: 1,2
+Topic: __transaction_state  Partition: 0  Leader: 0  Replicas: 0,1  Isr: 1,0
+Topic: __transaction_state  Partition: 1  Leader: 1  Replicas: 1,2  Isr: 1,2
 ----
 
 * `Replicas` must list at least two distinct broker IDs.
@@ -227,10 +232,9 @@ Topic: __transaction_state  Partition: 0  Leader: 1  Replicas: 1,2  Isr: 1,2
 
 `Replicas: 0` with `Isr: 0` is fully in sync but has only one copy, so it fails this check.
 `Replicas: 0,1` with `Isr: 0` has two assigned copies but one has not caught up, so it also fails.
-Check all partitions of `__consumer_offsets` and `__transaction_state` as well as the application topics.
-If an internal topic has not been created yet, repeat the check after the corresponding consumer or transactional workload has created it; absence does not verify its replication.
+If `__transaction_state` has not been created yet, repeat the check after a transactional workload has created it; absence does not verify its replication.
 
-Only after these checks, add the Kafka topic-data override:
+Only after these HA checks, add the Kafka topic-data override:
 
 [,yaml]
 ----
@@ -239,34 +243,9 @@ kafka:
     storageClass: longhorn-application
 ----
 
-=== Optional PVCs with explicit StorageClass selection
+=== Optional component transaction-log PVCs
 
 Most component PVCs inherit `global.storageClass`, including AI Assistant SQLite storage.
-The following optional configurations require a separate choice:
-
-For an OpenTelemetry Collector running as a StatefulSet with custom `opentelemetry-collector.statefulset.volumeClaimTemplates`, set `spec.storageClassName` in each claim template.
-The chart renders these templates as supplied.
-For example:
-
-[,yaml]
-----
-opentelemetry-collector:
-  mode: statefulset
-  statefulset:
-    volumeClaimTemplates:
-      - metadata:
-          name: data
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 1Gi
-          storageClassName: longhorn-durable-2
-----
-
-Add the StorageClass to your existing claim templates, preserving the names, capacities, and matching volume mounts required by your Collector configuration.
-
 When enabling component transaction-log PVCs, set `stackstate.features.storeTransactionLogsToPVC.storageClass`.
 These PVCs do not inherit `global.storageClass`.
 For example:
@@ -280,7 +259,7 @@ stackstate:
       storageClass: longhorn-durable-2
 ----
 
-Choose these classes according to the data's recovery requirements; using the transient class accepts loss of the stored data.
+Choose this class according to the data's recovery requirements; using the transient class accepts loss of the stored data.
 See xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Storage classes and customization] for the complete set of storage settings.
 After installation, verify that every PVC uses the intended class and that every Longhorn volume is healthy.
 
