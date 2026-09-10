@@ -1,0 +1,51 @@
+= v2.11.0 - 14/Sep/2026
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-09-14
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: {stackstate-product-name} Helm Chart v2.11.0
+
+== Component Versions
+
+[cols="1,2"]
+|===
+| Component | Version
+
+| *SUSE Observability* | `2.11.0`
+| *SUSE Observability Agent* | `1.6.1`
+| *SUSE Observability CLI* | `3.9.0`
+|===
+
+== New Features & Enhancements
+
+* *Stackpacks:* Added the ability to install specific versions of a Stackpack rather than defaulting to the latest version.
+* *Tracing:* Added detailed inspection for trace spans and span events.
+* *Kubernetes & Helm:* Trust stores can now be loaded from user-managed Kubernetes secrets, preventing Helm release secrets from exceeding the 1MB limit during upgrades.
+* *Agent Configuration:* `podAnnotations` and `podLabels` can now be set per agent workload (`clusterAgent`, `nodeAgent`, `checksAgent`, `logsAgent`, and `remoteKubeCache`), allowing monitors to be disabled on specific agent pods via Helm values.
+* *Integrations:* Configuration items shipped by integrations now have immutable ownership and cannot be locked or unlocked. This applies to monitors, dashboards, views, main menu groups, and other configuration items.
+* *StackGraph Backup & Restore (Experimental):* Added a new `stackgraph-v2` backup and restore solution with incremental backups and improved performance.
+* *Topology Perspective:* Reduced CPU usage when using the "Find component" feature.
+* *Agent Performance:* Reduced the CPU limit for the logs agent.
+* *Backup Performance:* Limited S3Proxy to 32 threads to avoid out-of-memory errors when multiple restore operations run in parallel.
+* *Storage Configuration:* Per-volume `storageClass` values now override `global.storageClass` for Kafka, ZooKeeper, ClickHouse, and Elasticsearch volumes.
+
+== Bug Fixes
+
+* *Platform & CLI:* Fixed cloning issues for PromQL-based monitors in the CLI.
+* [Platform] Fix issue where the topology sync initial snapshot prevents switching active host
+* *Monitors:* Fixed an issue where the Out of Memory monitor disappeared due to an incorrect label value.
+* *Security & Compliance:* Updated all Helm chart containers to run with the `securityContext` required by the restricted Pod Security Standard, preventing admission failures on CIS-hardened RKE2 or Rancher-restricted clusters.
+* *Elasticsearch:* Fixed startup failures on FIPS-enabled nodes by including the complete NSS runtime and a corrected PKCS#11 FIPS configuration.
+* *Backup Infrastructure:*
+** Set `concurrencyPolicy: Forbid` on the `backup-init` CronJob.
+** Updated the `backup-init` Job and CronJob to use `restartPolicy: OnFailure`, so failed attempts no longer leave orphan Pods behind.
+** Hourly VictoriaMetrics backups now refuse to overwrite a completed backup when the local instance has no data older than 24 hours. This prevents a from-scratch redeploy from destroying its backup before data is restored. Configure the threshold per instance with `victoria-metrics-<instance>.backup.minHistorySeconds` (`0` disables the check). Refused backups exit non-zero, allowing the existing `VictoriaMetricsBackupsPerformed` alert to report the failure within about three hours.
+** The Backup CLI now retries when port-forwarding fails.
+** The Backup CLI now checks Elasticsearch restore operation status correctly and waits until all indices and shards are healthy.
+* *Topology Perspective:* Fixed component focus when using the "Find component" feature.
+* *User Interface:* Prevented drawer forms from automatically restoring after accidental closure with the Escape key or overlay clicks.
+
+== Agent Bug Fixes
+
+* *Agent Configuration Rendering:* Fixed invalid YAML generation when setting `global.extraLabels` or `global.extraAnnotations`, which previously caused `STS_CLUSTER_NAME` and the receiver URL to be dropped silently.
