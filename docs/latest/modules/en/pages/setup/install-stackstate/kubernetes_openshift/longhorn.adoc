@@ -1,6 +1,6 @@
 = Run SUSE Observability on Longhorn
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-09-10
+:revdate: 2026-09-11
 :page-revdate: {revdate}
 :description: Configure and operate Longhorn storage for SUSE Observability
 
@@ -22,11 +22,6 @@ Configure xref:/setup/data-management/backup_restore/backup_enable.adoc[SUSE Obs
 Use *two Longhorn replicas by default* for durable SUSE Observability volumes in both Non-HA and HA installations.
 This follows the https://longhorn.io/docs/latest/best-practices/#io-performance[Longhorn I/O performance best practices], which recommend two replicas for data availability with lower disk-space usage and less impact on system performance, especially for data-intensive applications.
 After one replica-host failure, a two-replica volume has only one healthy copy until Longhorn completes the rebuild; do not continue maintenance while any volume is degraded.
-
-Use three replicas when the required storage failure margin justifies the additional disk usage and replication traffic.
-Validate write latency under peak ingestion, backups, compaction, and replica rebuilds before choosing this alternative.
-In particular, HA HDFS replicates data between DataNodes as well as through Longhorn: increasing Longhorn replication adds work to every HDFS write and synchronization.
-An additional storage replica does not compensate for excessive synchronization latency or an unhealthy HBase/HDFS configuration.
 
 An HA installation can reduce replication traffic, and improve write performance, by using one Longhorn replica for selected services that already maintain independent application-level replicas.
 This optimization makes the loss of one storage node a service-specific recovery operation: the application must rebuild the lost member after its PVC is replaced.
@@ -50,19 +45,13 @@ See xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure 
 |`longhorn-durable-2`
 |2
 |Disabled
-|Use for all durable Non-HA and HA data unless applying the optional HA overrides below. Keep ClickHouse, HDFS NameNodes, VictoriaMetrics, Workload Observer, AI Assistant SQLite data, anomaly-detection manager data, settings, backups, StackPacks, and other state without a tested peer-recovery procedure on this class.
-
-|Additional storage redundancy
-|`longhorn-durable-3`
-|3
-|Disabled
-|Alternative for durable workloads that need an additional healthy copy after one replica-host failure. Validate the extra storage, network traffic, and write overhead, especially when the application also replicates its data.
+|Use for all durable Non-HA and HA data unless applying the optional HA overrides below. Keep single-replica ClickHouse, HDFS NameNodes, VictoriaMetrics, Workload Observer, AI Assistant SQLite data, anomaly-detection manager data, settings, backups, StackPacks, and other state without a tested peer-recovery procedure on this class.
 
 |Application-replicated HA
-|`longhorn-application`
+|`longhorn-ha-database`
 |1
 |Best effort
-|HA installations only: Elasticsearch members, HDFS DataNodes, and ZooKeeper members with verified application replication and volume placement. Kafka has additional prerequisites below. Losing the volume loses that member and requires application-level recovery.
+|HA installations only: Elasticsearch members, HDFS DataNodes, ZooKeeper members, and replicated ClickHouse with verified application replication and volume placement. ClickHouse and Kafka have additional prerequisites below. Losing the volume loses that member and requires application-level recovery.
 
 |Transient
 |`longhorn-transient`
@@ -78,7 +67,7 @@ They require its Elasticsearch StorageClass override, Kafka and ZooKeeper per-co
 On earlier releases, use the global durable class and do not apply the mixed-class HA examples below.
 ====
 
-The following example creates both durable strategies and the application-replicated and transient classes.
+The following example creates the durable, HA database, and transient classes.
 Adapt the names and other Longhorn parameters to your environment.
 
 [,yaml]
@@ -98,19 +87,7 @@ parameters:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: longhorn-durable-3
-provisioner: driver.longhorn.io
-allowVolumeExpansion: true
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-parameters:
-  numberOfReplicas: "3"
-  dataLocality: disabled
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: longhorn-application
+  name: longhorn-ha-database
 provisioner: driver.longhorn.io
 allowVolumeExpansion: true
 reclaimPolicy: Delete
@@ -132,8 +109,7 @@ parameters:
   dataLocality: best-effort
 ----
 
-Set the selected durable strategy as the default for the chart.
-The following example uses the two-replica strategy:
+Set the two-replica durable class as the default for the chart:
 
 [,yaml]
 ----
@@ -141,7 +117,6 @@ global:
   storageClass: longhorn-durable-2
 ----
 
-Use `longhorn-durable-3` instead when the installation requires the additional replica.
 Changing the chart's StorageClass value doesn't migrate existing PVCs.
 
 For the optional HA optimization, after meeting the release and recovery requirements above, add these overrides:
@@ -150,17 +125,17 @@ For the optional HA optimization, after meeting the release and recovery require
 ----
 elasticsearch:
   volumeClaimTemplate:
-    storageClassName: longhorn-application
+    storageClassName: longhorn-ha-database
 
 hbase:
   hdfs:
     datanode:
       persistence:
-        storageClass: longhorn-application
+        storageClass: longhorn-ha-database
 
 zookeeper:
   persistence:
-    storageClass: longhorn-application
+    storageClass: longhorn-ha-database
 
 stackstate:
   components:
@@ -180,6 +155,20 @@ stackstate:
       persistence:
         storageClass: longhorn-transient
 ----
+
+=== Replicated ClickHouse
+
+The `4000-ha` sizing profile runs ClickHouse with multiple replicas.
+For this profile, use the HA database class when each shard has at least two healthy replicas of its application data:
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    storageClass: longhorn-ha-database
+----
+
+Keep ClickHouse on `longhorn-durable-2` when it has only one replica per shard, including the default `150-ha`, `250-ha`, and `500-ha` profiles.
 
 === Kafka transaction-state replication in HA
 
@@ -240,15 +229,13 @@ Only after these HA checks, add the Kafka topic-data override:
 ----
 kafka:
   persistence:
-    storageClass: longhorn-application
+    storageClass: longhorn-ha-database
 ----
 
 === Optional component transaction-log PVCs
 
-Most component PVCs inherit `global.storageClass`, including AI Assistant SQLite storage.
-When enabling component transaction-log PVCs, set `stackstate.features.storeTransactionLogsToPVC.storageClass`.
-These PVCs do not inherit `global.storageClass`.
-For example:
+Component transaction-log PVCs store debugging data.
+If you enable this feature, use `longhorn-transient`:
 
 [,yaml]
 ----
@@ -256,10 +243,11 @@ stackstate:
   features:
     storeTransactionLogsToPVC:
       enabled: true
-      storageClass: longhorn-durable-2
+      storageClass: longhorn-transient
 ----
 
-Choose this class according to the data's recovery requirements; using the transient class accepts loss of the stored data.
+These PVCs do not inherit `global.storageClass`; the setting above applies only to component transaction logs.
+Most other component PVCs, including AI Assistant SQLite storage, inherit `global.storageClass`.
 See xref:/setup/install-stackstate/kubernetes_openshift/storage.adoc[Storage classes and customization] for the complete set of storage settings.
 After installation, verify that every PVC uses the intended class and that every Longhorn volume is healthy.
 
@@ -270,12 +258,12 @@ After installation, verify that every PVC uses the intended class and that every
 |Failure |Likely effect |Protection
 
 |One node or disk holding a replica fails
-|A two- or three-replica volume becomes degraded but remains available. A two-replica volume has no remaining storage redundancy until it rebuilds. A one-replica volume becomes unavailable and its data is lost if the disk cannot be recovered.
+|A two-replica volume becomes degraded but remains available, with no remaining storage redundancy until it rebuilds. A one-replica volume becomes unavailable and its data is lost if the disk cannot be recovered.
 |Spread replicas across independent nodes and failure domains. Restore the replica count before starting maintenance elsewhere.
 
 |Failures exceed the available replica count
 |Volumes become unavailable and may require restore. SUSE Observability components that depend on them become unavailable.
-|Choose two or three replicas according to the required failure margin. Use three when a second replica-host failure must be tolerated before rebuild completes. Maintain failure-domain separation and keep tested backups outside the cluster.
+|Maintain failure-domain separation and keep tested backups outside the cluster.
 
 |A one-replica application member is lost
 |The remaining application replicas may continue serving, but capacity or quorum is reduced. The lost PVC and member must be replaced and rebuilt.
