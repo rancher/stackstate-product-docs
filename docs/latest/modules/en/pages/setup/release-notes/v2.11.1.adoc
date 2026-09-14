@@ -1,0 +1,75 @@
+= v2.11.1 - 15/Sep/2026
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-09-15
+:page-revdate: {revdate}
+:description: SUSE Observability Self-hosted
+
+== Release Notes: {stackstate-product-name} Helm Chart v2.11.1
+
+ 
+== Component Versions
+
+[cols="1,2"]
+|===
+| Component | Version
+
+| *SUSE Observability* | `2.11.1`
+| *SUSE Observability Agent* | `1.6.1`
+| *SUSE Observability CLI* | `3.9.0`
+|===
+
+== SUSE Observability - StackPacks 2.0
+
+=== Overview
+StackPacks 2.0 makes it possible to integrate any technology into SUSE Observability through configuration alone. A StackPack maps OpenTelemetry traces, metrics, and logs into topology, and extends the UI with overview pages, detail-page widgets, menu items, and dashboards. StackPacks are published and shared through an open, community-driven Git marketplace and are automatically exposed to AI assistants via the SUSE Observability MCP Server.
+
+=== What's New
+* *Configuration-Driven Ingestion:* Map raw OpenTelemetry traces, metrics, and logs into topology maps and dashboards through configuration only. No platform code changes or custom plugins are required, so a new technology can be onboarded in minutes rather than months.
+* *Extensible UI:* StackPacks can now add and update overview pages, widgets on detail pages, menu items, and dashboards. This lets a StackPack deliver a complete, technology-specific experience rather than topology alone.
+* *Community-Driven StackPack Marketplace:* StackPacks can be built, extended, and shared through a public GitHub repository. StackPacks are based on open, vendor-neutral schema standards, so contributions from the community and partners work across environments.
+
+=== Example Use Case
+Engineering teams deploying AI frameworks such as vLLM, Ollama, or LangChain on Kubernetes can ship a StackPack that maps their OTel data into topology, adds dedicated dashboards and detail-page widgets, and exposes the resulting metrics to AI assistants for root-cause analysis.
+
+=== Getting Started
+* Browse and install StackPacks from the public GitHub marketplace.
+* Author or extend a StackPack using the open schema to map your OTel data and define UI extensions. *(Fun fact: StackPacks can be fully authored with current leading-edge AI models.)*
+* Create a pull request to share your StackPacks with the community.
+
+=== Resources
+* link:https://github.com/StackVista/contrib-stackpacks[StackPacks GitHub Marketplace]
+* xref:stackpacks/about-stackpacks.adoc[StackPacks 2.0 Documentation]
+
+== New Features & Enhancements
+
+* *UI Usability:* Form drawers no longer restore automatically upon accidental closure (such as clicking the overlay or pressing the Escape key).
+* *Trace Inspection:* Added the ability to perform detailed inspections of trace spans and span events.
+* *StackPack Version Management:* Added the ability to install specific versions of a StackPack rather than defaulting to the latest version.
+* *Integration Ownership:* Configuration items shipped by integrations now have *immutable ownership* and cannot be locked or unlocked. This applies to monitors, dashboards, views, main menu groups, and other resources.
+* *StackGraph v2 Backup & Restore (Experimental):* Introduced a new `stackgraph-v2` backup and restore system featuring incremental backups and significant performance improvements for both backup and restore operations.
+* *Resource & Performance Optimizations:*
+** Reduced overall CPU usage when working within the Topology perspective.
+** Limited S3Proxy to 32 threads to prevent out-of-memory (OOM) errors when multiple restore operations execute concurrently.
+* *Storage Configuration:* Per-volume `storageClass` overrides now take precedence over `global.storageClass` for Kafka, ZooKeeper, ClickHouse, and Elasticsearch volumes.
+
+== Bug Fixes
+
+* *Topology Perspective:* The "Find Component" feature now correctly shifts focus directly to the target component.
+* *Monitors:* Fixed an issue where the Out of Memory monitor disappeared due to an incorrect label value.
+* *Kubernetes & Helm Security:*
+** *Trust Store Secrets:* Trust stores can now be loaded from user-managed Kubernetes secrets rather than inline Helm values. This avoids exceeding the 1MB Helm release secret limit during upgrades.
+** *Restricted Pod Security Standard Compliance:* All containers across both Helm charts now execute with the required `securityContext` specified by the restricted Pod Security Standard, preventing admission failures on CIS-hardened RKE2 or Rancher-restricted clusters.
+* *FIPS Compliance (Elasticsearch):* Fixed Elasticsearch startup failures on FIPS-enabled nodes by including the complete NSS runtime and correcting the PKCS#11 FIPS configuration.
+* *Agent Workload Customization:* Added support for configuring `podAnnotations` and `podLabels` per individual agent workload (`clusterAgent`, `nodeAgent`, `checksAgent`, `logsAgent`, and `remoteKubeCache`). This enables users to selectively disable monitors on specific agent pods via Helm values.
+* *Platform CLI:* Fixed an issue where PromQL-based monitors could not be cloned via the CLI.
+* *Topology Synchronization:* Fixed an issue where an initial topology sync snapshot prevented switching the active host.
+* *Backup & Restore Infrastructure:*
+** *CronJob Policies:* The `backup-init` CronJob now sets `concurrencyPolicy: Forbid`.
+** *Pod Cleanup:* The `backup-init` Job and CronJob now use `restartPolicy: OnFailure`, preventing orphaned pods from lingering after failed attempts.
+** *VictoriaMetrics Data Protection:* Hourly VictoriaMetrics backups now refuse to overwrite completed backups if the local instance contains no data older than 24 hours (configurable via `victoria-metrics-<instance>.backup.minHistorySeconds`). Refused backups exit with a non-zero code to trigger the `VictoriaMetricsBackupsPerformed` alert within three hours.
+** *Backup CLI Fixes:* Added automatic retries when port-forwarding fails, and fixed the status check logic during Elasticsearch restores to ensure the CLI waits until all indices and shards reach a healthy state.
+
+== Agent Bug Fixes
+
+* *Log Agent Performance:* Reduced the default CPU limit for the logs agent.
+* *Configuration Rendering:* Resolved an issue where setting `global.extraLabels` or `global.extraAnnotations` generated invalid YAML in the cluster-name and URL ConfigMaps, which previously caused `STS_CLUSTER_NAME` and the receiver URL to be dropped.
