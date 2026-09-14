@@ -1,6 +1,6 @@
 = Run SUSE Observability on Longhorn
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-09-11
+:revdate: 2026-09-14
 :page-revdate: {revdate}
 :description: Configure and operate Longhorn storage for SUSE Observability
 
@@ -51,7 +51,7 @@ See xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure 
 |`longhorn-ha-database`
 |1
 |Best effort
-|HA installations only: Elasticsearch members, HDFS DataNodes, ZooKeeper members, and replicated ClickHouse with verified application replication and volume placement. ClickHouse and Kafka have additional prerequisites below. Losing the volume loses that member and requires application-level recovery.
+|HA installations only: Elasticsearch members, HDFS DataNodes, Kafka brokers, ZooKeeper members, and replicated ClickHouse with verified application replication and volume placement. ClickHouse has additional prerequisites below. Losing the volume loses that member and requires application-level recovery.
 
 |Transient
 |`longhorn-transient`
@@ -63,7 +63,7 @@ See xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure 
 [NOTE]
 ====
 The mixed-class examples below target the upcoming release, SUSE Observability {next-release-version}.
-They require its Elasticsearch StorageClass override, Kafka and ZooKeeper per-component precedence over `global.storageClass`, and Kafka transaction-state replication migration.
+They require its Elasticsearch StorageClass override and Kafka and ZooKeeper per-component precedence over `global.storageClass`.
 On earlier releases, use the global durable class and do not apply the mixed-class HA examples below.
 ====
 
@@ -133,6 +133,10 @@ hbase:
       persistence:
         storageClass: longhorn-ha-database
 
+kafka:
+  persistence:
+    storageClass: longhorn-ha-database
+
 zookeeper:
   persistence:
     storageClass: longhorn-ha-database
@@ -169,68 +173,6 @@ clickhouse:
 ----
 
 Keep ClickHouse on `longhorn-durable-2` when it has only one replica per shard, including the default `150-ha`, `250-ha`, and `500-ha` profiles.
-
-=== Kafka transaction-state replication in HA
-
-This section applies to HA installations considering the optional one-replica Longhorn class for Kafka.
-Before SUSE Observability {next-release-version}, the `150-ha`, `250-ha`, and `500-ha` sizing profiles configured `__transaction_state` with replication factor one.
-This was the only topic with that replication gap; application topics and `__consumer_offsets` already had HA replication.
-SUSE Observability {next-release-version} brings `__transaction_state` to replication factor two in those HA profiles and migrates the existing topic during upgrades.
-
-In Non-HA installations, Kafka replication factor one is expected.
-Keep Kafka on `longhorn-durable-2`; the HA check and one-replica StorageClass override below do not apply.
-
-For HA, keep Kafka on the durable class until the release requirement above is met and every partition of `__transaction_state` has at least two replicas with all assigned replicas in sync.
-
-An upgrade attempts to increase the existing transaction-state topic's replication, but can defer that migration with a warning when brokers are unavailable.
-A successful chart upgrade alone is not proof that the migration completed.
-Kafka's HA defaults use a replication factor of two, and the transaction-state topic permits a minimum in-sync replica count of one.
-Losing one replica therefore leaves less redundancy; restore full replication before any further maintenance.
-
-==== Check the transaction-state topic
-
-Find a Kafka broker pod in the HA installation's SUSE Observability namespace:
-
-[,bash]
-----
-kubectl -n <suse-observability-namespace> get pods -l app.kubernetes.io/name=kafka
-----
-
-Run the following read-only command in one of those pods to describe `__transaction_state`:
-
-[,bash]
-----
-kubectl -n <suse-observability-namespace> exec <kafka-pod-name> -c kafka -- kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic __transaction_state
-----
-
-This example uses the chart's default plaintext client listener.
-If you customized the listener, use its address and port; for an authenticated listener, also supply `--command-config <client-properties-path>` with a client configuration available inside the pod.
-
-Inspect *every partition line* in the output, not only the topic's summary.
-For example, these two partition lines meet the requirement:
-
-[,text]
-----
-Topic: __transaction_state  Partition: 0  Leader: 0  Replicas: 0,1  Isr: 1,0
-Topic: __transaction_state  Partition: 1  Leader: 1  Replicas: 1,2  Isr: 1,2
-----
-
-* `Replicas` must list at least two distinct broker IDs.
-* `Isr` must contain every broker ID listed in `Replicas`; the order can differ.
-* `Leader` must identify an available broker, not `-1`.
-
-`Replicas: 0` with `Isr: 0` is fully in sync but has only one copy, so it fails this check.
-`Replicas: 0,1` with `Isr: 0` has two assigned copies but one has not caught up, so it also fails.
-If `__transaction_state` has not been created yet, repeat the check after a transactional workload has created it; absence does not verify its replication.
-
-Only after these HA checks, add the Kafka topic-data override:
-
-[,yaml]
-----
-kafka:
-  persistence:
-    storageClass: longhorn-ha-database
-----
 
 === Optional component transaction-log PVCs
 
