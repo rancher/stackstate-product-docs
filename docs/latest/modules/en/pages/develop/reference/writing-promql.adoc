@@ -1,4 +1,3 @@
-ifdef::ss-ff-stackpacks2_enabled[]
 = Writing PromQL queries for representative charts
 :page-languages: [en, de, es, fr, ja, pt, zh]
 :revdate: 2025-07-10
@@ -14,20 +13,14 @@ When {stackstate-product-name} shows data in a chart it almost always needs to c
 * Use the `+${__rate_interval}+` parameter as the range for `rate` aggregations, it will also automatically adjust with the resolution of the chart but takes into account specific behaviors of `rate`.
 * Project metrics to just the labels used by aggregating over different time series.
 
-Applying an aggregation often means that a trade-off is made to emphasize certain patterns in metrics more than others. For example, for large time windows `max_over_time` will show all peaks, but it won't show all troughs. While `min_over_time` does the exact opposite and `avg_over_time` will smooth out both peaks and troughs. To show this behavior, here is an example metric binding using the CPU usage of pods. To try it yourself, copy it to a YAML file and use the xref:/setup/custom-integrations/metric-bindings/index.adoc#_create_or_update_the_metric_binding_in_stackstate[CLI to apply it] in your own {stackstate-product-name} (you can remove it later).
+Applying an aggregation often means that a trade-off is made to emphasize certain patterns in metrics more than others. For example, for large time windows `max_over_time` will show all peaks, but it won't show all troughs. While `min_over_time` does the exact opposite and `avg_over_time` will smooth out both peaks and troughs. To show this behavior, here is an example metric using the CPU usage of pods. To try it yourself, copy it into a xref:/setup/custom-integrations/presentation/metrics/README.adoc[Component Presentation YAML file].
 
-Projecting potentially multiple time-series to a subset of their labels folds time-series together that differ in an irrelevant detail.  When creating a metric binding, only the labels that are used in the legend are relevant.  Similarly, when creating monitors, only those labels that are needed for mapping to a (monitor status on a) component should be returned by the query.
+Projecting potentially multiple time-series to a subset of their labels folds time-series together that differ in an irrelevant detail.  When creating a metric, only the labels that are used in the legend are relevant.  Similarly, when creating monitors, only those labels that are needed for mapping to a (monitor status on a) component should be returned by the query.
 
 ----
-- _type: MetricBinding
-  chartType: line
-  enabled: true
-  tags: {}
-  unit: short
+- metricId: pod-cpu-usage-a
   name: CPU Usage (different aggregations and intervals)
-  priority: HIGH
-  identifier: urn:stackpack:my-stackpack:metric-binding:pod-cpu-usage-a
-  queries:
+  metricQueries:
     - expression: sum(max_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
       alias: max_over_time dynamic interval
     - expression: sum(min_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[${__interval}])) by (cluster_name, namespace, pod_name) /1000000000
@@ -44,18 +37,20 @@ Projecting potentially multiple time-series to a subset of their labels folds ti
       alias: avg_over_time 1m interval
     - expression: sum(last_over_time(container_cpu_usage{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", pod_name="${name}"}[1m])) by (cluster_name, namespace, pod_name) /1000000000
       alias: last_over_time 1m interval
-  scope: (label = "stackpack:kubernetes" and type = "pod")
+  chart:
+    _type: TimeSeriesChart
+    unit: short
 ----
 
 After applying it, open the metrics perspective for a pod in {stackstate-product-name} (preferably a pod with some spikes and troughs in CPU usage). Enlarge the chart using the icon in its top-right corner to get a better view. Now you can also change the time window to see what the effects are from the different aggregations (30 minutes vs 24 hours for example).
 
 [CAUTION]
 ====
-When the metric binding doesn't specify an aggregation {stackstate-product-name} will automatically use the `last_over_time` aggregation to reduce the number of data points for a chart. See also xref:/develop/reference/writing-promql.adoc#_why_aggregate[Why is aggregation necessary?] for an explanation.
+When the metric doesn't specify an aggregation {stackstate-product-name} will automatically use the `last_over_time` aggregation to reduce the number of data points for a chart. See also xref:/develop/reference/writing-promql.adoc#_why_aggregate[Why is aggregation necessary?] for an explanation.
 ====
 
 
-image::k8s/metric-aggregation-differences-30m.png[The chart for this metric binding for the last 30m, there are only a few lines in the chart visible because most time series are on top of each other]
+image::k8s/metric-aggregation-differences-30m.png[The chart for this metric for the last 30m, there are only a few lines in the chart visible because most time series are on top of each other]
 image::k8s/metric-aggregation-differences-24h.png[The same chart, same component and same end time, but now for the last 24h. It shows, sometimes completely, different results for the different aggregations]
 
 [#_why_aggregate]
@@ -108,4 +103,3 @@ Some more resources on understanding PromQL queries:
 * https://promlabs.com/blog/2020/07/02/selecting-data-in-promql/[Selecting Data in PromQL]
 * https://iximiuz.com/en/posts/prometheus-vector-matching/[How to join multiple metrics]
 * https://iximiuz.com/en/posts/prometheus-functions-agg-over-time/[Aggregation over time]
-endif::ss-ff-stackpacks2_enabled[]
