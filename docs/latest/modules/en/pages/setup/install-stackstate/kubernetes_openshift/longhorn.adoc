@@ -1,6 +1,6 @@
 = Run SUSE Observability on Longhorn
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-09-14
+:revdate: 2026-09-15
 :page-revdate: {revdate}
 :description: Configure and operate Longhorn storage for SUSE Observability
 
@@ -240,15 +240,85 @@ Operate on one node hosting stateful SUSE Observability workloads or Longhorn re
 Before each node, confirm that:
 
 * SUSE Observability is healthy.
-* Application replication is complete: HDFS has no missing or under-replicated blocks, Elasticsearch has allocated its replicas, Kafka partitions have all assigned replicas in sync, and ClickHouse replicated tables have caught up with their required replicas available.
+* Application replication checks pass for HDFS, Elasticsearch, Kafka, ClickHouse, and ZooKeeper. Use <<check-replication-status>> to check the deployed databases.
 * All Longhorn volumes are healthy and have their expected replica count.
 * Other nodes have enough storage and compute capacity for the workloads and replica rebuilds.
 * A recent external backup is available.
 
 Automated Kubernetes upgrades, node rotations, and node restarts must perform these checks before disrupting the next node.
-SUSE Observability does not automatically add database-replication checks to your cluster's maintenance workflow.
-Configure the workflow to wait for recovery and stop further node disruptions if a check fails or times out.
+Integrate `sts-backup replication check --wait` into the workflow as described below; SUSE Observability does not add this step automatically.
+Stop further node disruptions if a check fails or times out.
 If the workflow cannot perform these checks, pause it between nodes and verify recovery before continuing; a fixed delay is not a substitute.
+
+[#check-replication-status]
+=== Check replication status
+
+Use `sts-backup` *v0.10.0 or later*; see xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
+The replication command runs read-only checks and does not require enabled backups, backup credentials, or changes to GitOps reconciliation.
+It uses the current kubeconfig context; add `--kubeconfig <path>` to select another configuration.
+The Kubernetes identity needs permission to list Pods and StatefulSets and create `pods/exec` requests in the installation namespace.
+
+Replace `observability` with the namespace containing your SUSE Observability installation.
+No Helm release name is required; the checker expects one installation per namespace.
+To display the current replication status:
+
+[,bash]
+----
+sts-backup replication check --namespace observability
+----
+
+The report includes each database's status and diagnostic messages:
+
+[cols="1,4",options="header"]
+|===
+|Status |Meaning
+|`healthy` |The applicable replication checks passed.
+|`degraded` |Replication or workload availability has not recovered. Inspect the reported component before continuing maintenance.
+|`unknown` |The checker could not verify the state, for example because of permissions, a timeout, or an unsupported configuration. Resolve the reported cause and rerun.
+|`not_applicable` |The deployed configuration does not require that replication check, for example a single-replica database or HBase mono. Only Kubernetes availability is checked; this does not establish data redundancy.
+|===
+
+=== Wait for recovery during maintenance
+
+Run the wait command before the first node disruption and after each node returns or replacement capacity is ready to schedule workloads.
+For an in-place restart, uncordon the returned node first.
+Keep the configured database replica counts unchanged and allow only one maintenance workflow to operate on the installation at a time.
+
+The following shell step waits for recovery and stops the workflow on failure:
+
+[,bash]
+----
+if ! sts-backup replication check \
+  --namespace observability \
+  --wait --stable-for 30s --interval 10s --timeout 15m \
+  --output json > replication.json; then
+  printf '%s\n' 'Replication could not be verified. Stop node maintenance and inspect replication.json.' >&2
+  exit 1
+fi
+----
+
+Progress goes to stderr; `replication.json` contains the final report.
+Exit code `0` means every selected component is `healthy` or `not_applicable`; a failed check, timeout, or cancellation returns nonzero.
+Configure the maintenance system to honor that exit code and run its remaining checks before starting the next node.
+
+With applicable replication checks, `--wait` requires successful observations spanning the `--stable-for` period.
+An unhealthy observation or a relevant database topology, readiness, or restart change resets that period.
+After stability, the checker performs a final HDFS file/block audit when applicable and rechecks health before returning success.
+If all components are `not_applicable`, it returns after the first successful availability check.
+Choose `--timeout` for your recovery window; for large HDFS installations, `--hdfs-audit-timeout 5m` can allow more time for the audit within that overall deadline.
+
+If a database is intentionally disabled, use `--components` to select the databases you actually run.
+Omitted components are not checked; do not exclude a failing database to continue maintenance.
+Use `sts-backup replication check --help` for connection options when database authentication or TLS is customized.
+
+[IMPORTANT]
+====
+A successful report describes observed replication; it does not reserve a maintenance window or certify that a particular node can be removed.
+Continue checking Longhorn volume health and placement, spare capacity, application health, and backups separately.
+The checker does not verify HBase region recovery, durability of the latest active WAL writes, VictoriaMetrics redundancy, or quorum survival after removing the next node.
+====
+
+=== Configure Longhorn node draining
 
 [CAUTION]
 ====
@@ -280,7 +350,7 @@ Then:
 
 . If the drain is blocked, inspect Longhorn events and the replicas on the node. Do not force the drain past Longhorn's data-protection checks.
 . Complete the maintenance and return the node.
-. Uncordon the node so workloads can be scheduled, then *wait until Longhorn has restored the expected replica count and application replication is complete before proceeding to the next node.*
+. Uncordon the node so workloads can be scheduled, then run <<_wait_for_recovery_during_maintenance,the replication wait command>> and verify Longhorn has restored the expected replica count before proceeding to the next node.
 
 `Allow If Last Replica Is Stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
 Use that policy only when this risk is explicitly accepted.
@@ -291,7 +361,7 @@ Use that policy only when this risk is explicitly accepted.
 . Temporarily set the Longhorn node drain policy to `Block For Eviction`.
 . Cordon and drain the old node. Longhorn automatically requests eviction and blocks the drain until all replicas have moved.
 . Confirm that no volumes remain attached, then remove the node from Longhorn and Kubernetes.
-. *Wait until Longhorn has restored the expected replica count and application replication is complete before removing another node.*
+. Ensure replacement capacity can schedule workloads, run <<_wait_for_recovery_during_maintenance,the replication wait command>>, and verify Longhorn has restored the expected replica count before removing another node.
 
 For example:
 
@@ -334,5 +404,5 @@ kubectl -n longhorn-system get volumes.longhorn.io
 kubectl -n <suse-observability-namespace> get pvc
 ----
 
-Do not proceed to the next maintenance step until Longhorn has restored the expected replica count and application replication is complete.
+Run <<_wait_for_recovery_during_maintenance,the replication wait command>> before proceeding to the next node, and confirm Longhorn has restored the expected replica count and the remaining maintenance checks pass.
 Pod readiness alone does not establish that the databases have finished rebuilding their data.
