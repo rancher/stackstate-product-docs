@@ -297,6 +297,7 @@ The report includes each database's status and diagnostic messages:
 |`not_applicable` |The deployed configuration does not require that replication check, for example a single-replica database or HBase mono. Only Kubernetes availability is checked; this does not establish data redundancy.
 |===
 
+[#wait-for-recovery]
 === Wait for recovery during maintenance
 
 Run the wait command before the first node disruption and after each node returns or replacement capacity is ready to schedule workloads.
@@ -378,7 +379,7 @@ Then:
 
 . If the drain is blocked, inspect Longhorn events and the replicas on the node. Do not force the drain past Longhorn's data-protection checks.
 . Complete the maintenance and return the node.
-. Uncordon the node so workloads can be scheduled, then run <<_wait_for_recovery_during_maintenance,the replication wait command>> and verify Longhorn has restored the expected replica count before proceeding to the next node.
+. Uncordon the node so workloads can be scheduled, then run <<wait-for-recovery,the replication wait command>> and verify Longhorn has restored the expected replica count before proceeding to the next node.
 
 `allow-if-replica-is-stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
 Use that policy only when this risk is explicitly accepted.
@@ -389,7 +390,7 @@ Use that policy only when this risk is explicitly accepted.
 . Temporarily set the Longhorn node drain policy to `Block For Eviction`.
 . Cordon and drain the old node. Longhorn automatically requests eviction and blocks the drain until all replicas have moved.
 . Confirm that no volumes remain attached, then remove the node from Longhorn and Kubernetes.
-. Ensure replacement capacity can schedule workloads, run <<_wait_for_recovery_during_maintenance,the replication wait command>>, and verify Longhorn has restored the expected replica count before removing another node.
+. Ensure replacement capacity can schedule workloads, run <<wait-for-recovery,the replication wait command>>, and verify Longhorn has restored the expected replica count before removing another node.
 
 For example:
 
@@ -437,5 +438,5 @@ kubectl -n longhorn-system get volumes.longhorn.io
 kubectl -n <suse-observability-namespace> get pvc
 ----
 
-Run <<_wait_for_recovery_during_maintenance,the replication wait command>> before proceeding to the next node, and confirm Longhorn has restored the expected replica count and the remaining maintenance checks pass.
+Run <<wait-for-recovery,the replication wait command>> before proceeding to the next node, and confirm Longhorn has restored the expected replica count and the remaining maintenance checks pass.
 Pod readiness alone does not establish that the databases have finished rebuilding their data.
