@@ -1,6 +1,6 @@
 = Run SUSE Observability on Longhorn
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-09-15
+:revdate: 2026-09-16
 :page-revdate: {revdate}
 :description: Configure and operate Longhorn storage for SUSE Observability
 
@@ -253,14 +253,29 @@ If the workflow cannot perform these checks, pause it between nodes and verify r
 [#check-replication-status]
 === Check replication status
 
-Use `sts-backup` *v0.10.0 or later*; see xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
 The replication command runs read-only checks and does not require enabled backups, backup credentials, or changes to GitOps reconciliation.
-It uses the current kubeconfig context; add `--kubeconfig <path>` to select another configuration.
-The Kubernetes identity needs permission to list Pods and StatefulSets and create `pods/exec` requests in the installation namespace.
-
 Replace `observability` with the namespace containing your SUSE Observability installation.
 No Helm release name is required; the checker expects one installation per namespace.
-To display the current replication status:
+
+Starting with SUSE Observability {next-release-version}, the workload-observer Pod includes a `replication-checker` container by default.
+Use it through `kubectl` without installing `sts-backup` locally:
+
+[,bash]
+----
+kubectl -n observability get pods -l app.kubernetes.io/component=workload-observer
+kubectl -n observability exec <workload-observer-pod> -c replication-checker -- \
+  sts-backup replication check --namespace observability
+----
+
+Replace `<workload-observer-pod>` with the Pod name from the first command.
+The chart grants the Pod's service account the required permissions to list Pods and StatefulSets and execute database queries.
+Your Kubernetes identity needs access to find and exec into the workload-observer Pod.
+Both containers share the service account; its `pods/exec` permission permits arbitrary commands in namespace Pods.
+Set `stackstate.components.workloadObserver.replicationChecker.enabled: false` to remove the sidecar and its additional permissions.
+
+Alternatively, install `sts-backup` *v0.10.0 or later*; see xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
+The local CLI uses the current kubeconfig context; add `--kubeconfig <path>` to select another configuration.
+Its Kubernetes identity needs permission to list Pods and StatefulSets and create `pods/exec` requests in the installation namespace.
 
 [,bash]
 ----
@@ -290,13 +305,15 @@ The following shell step waits for recovery and stops the workflow on failure:
 ----
 if ! sts-backup replication check \
   --namespace observability \
-  --wait --stable-for 30s --interval 10s --timeout 15m \
+  --wait --stable-for 30s --timeout 15m \
   --output json > replication.json; then
   printf '%s\n' 'Replication could not be verified. Stop node maintenance and inspect replication.json.' >&2
   exit 1
 fi
 ----
 
+To run this step in the sidecar, replace `sts-backup replication check` with `kubectl -n observability exec <workload-observer-pod> -c replication-checker -- sts-backup replication check`.
+The Pod must be available; if it is rescheduling or an exec session is interrupted, wait for it to return and rerun the check before continuing maintenance.
 Progress goes to stderr; `replication.json` contains the final report.
 Exit code `0` means every selected component is `healthy` or `not_applicable`; a failed check, timeout, or cancellation returns nonzero.
 Configure the maintenance system to honor that exit code and run its remaining checks before starting the next node.
@@ -305,11 +322,11 @@ With applicable replication checks, `--wait` requires successful observations sp
 An unhealthy observation or a relevant database topology, readiness, or restart change resets that period.
 After stability, the checker performs a final HDFS file/block audit when applicable and rechecks health before returning success.
 If all components are `not_applicable`, it returns after the first successful availability check.
-Choose `--timeout` for your recovery window; for large HDFS installations, `--hdfs-audit-timeout 5m` can allow more time for the audit within that overall deadline.
+Choose `--timeout` for your recovery window, including the final HDFS audit and subsequent checks.
 
 If a database is intentionally disabled, use `--components` to select the databases you actually run.
 Omitted components are not checked; do not exclude a failing database to continue maintenance.
-Use `sts-backup replication check --help` for connection options when database authentication or TLS is customized.
+Kafka SASL/TLS and Elasticsearch HTTPS customizations are unsupported by this version of the checker.
 
 [IMPORTANT]
 ====
