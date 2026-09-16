@@ -62,8 +62,8 @@ See xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure 
 
 [NOTE]
 ====
-The mixed-class examples below target the upcoming release, SUSE Observability {next-release-version}.
-They require its Elasticsearch StorageClass override and Kafka and ZooKeeper per-component precedence over `global.storageClass`.
+The mixed-class examples below require SUSE Observability *2.11.1 or later*.
+That release includes the Elasticsearch StorageClass override and Kafka and ZooKeeper per-component precedence over `global.storageClass`.
 On earlier releases, use the global durable class and do not apply the mixed-class HA examples below.
 ====
 
@@ -257,21 +257,25 @@ The replication command runs read-only checks and does not require enabled backu
 Replace `observability` with the namespace containing your SUSE Observability installation.
 No Helm release name is required; the checker expects one installation per namespace.
 
-Starting with SUSE Observability {next-release-version}, the workload-observer Pod includes a `replication-checker` container by default.
+Starting with SUSE Observability {next-release-version}, HA sizing profiles enable a separate `replication-checker` Deployment by default.
+It uses no persistent storage and runs checks only when invoked.
+Non-HA profiles and installations without a sizing profile leave it disabled.
+If you retain older generated sizing files, regenerate them or set `stackstate.components.replicationChecker.enabled: true` explicitly.
 Use it through `kubectl` without installing `sts-backup` locally:
 
 [,bash]
 ----
-kubectl -n observability get pods -l app.kubernetes.io/component=workload-observer
-kubectl -n observability exec <workload-observer-pod> -c replication-checker -- \
+kubectl -n observability get deployments -l app.kubernetes.io/component=replication-checker
+kubectl -n observability exec deployment/<replication-checker-deployment> -c replication-checker -- \
   sts-backup replication check --namespace observability
 ----
 
-Replace `<workload-observer-pod>` with the Pod name from the first command.
-The chart grants the Pod's service account the required permissions to list Pods and StatefulSets and execute database queries.
-Your Kubernetes identity needs access to find and exec into the workload-observer Pod.
-Both containers share the service account; its `pods/exec` permission permits arbitrary commands in namespace Pods.
-Set `stackstate.components.workloadObserver.replicationChecker.enabled: false` to remove the sidecar and its additional permissions.
+Replace `<replication-checker-deployment>` with the Deployment name from the first command.
+The checker has a dedicated service account with namespace-scoped permissions to list Pods and StatefulSets and create `pods/exec` requests.
+Your Kubernetes identity needs access to get the Deployment, find its Pods, and exec into the checker container.
+Although the checker runs read-only queries, its service account's `pods/exec` permission permits arbitrary commands in namespace Pods.
+Set `stackstate.components.replicationChecker.enabled: false` to remove the Deployment and its dedicated RBAC resources.
+An explicit `true` or `false` overrides the built-in profile default.
 
 Alternatively, install `sts-backup` *v0.10.0 or later*; see xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
 The local CLI uses the current kubeconfig context; add `--kubeconfig <path>` to select another configuration.
@@ -303,7 +307,8 @@ The following shell step waits for recovery and stops the workflow on failure:
 
 [,bash]
 ----
-if ! sts-backup replication check \
+if ! kubectl -n observability exec deployment/<replication-checker-deployment> -c replication-checker -- \
+  sts-backup replication check \
   --namespace observability \
   --wait --stable-for 30s --timeout 15m \
   --output json > replication.json; then
@@ -312,8 +317,8 @@ if ! sts-backup replication check \
 fi
 ----
 
-To run this step in the sidecar, replace `sts-backup replication check` with `kubectl -n observability exec <workload-observer-pod> -c replication-checker -- sts-backup replication check`.
-The Pod must be available; if it is rescheduling or an exec session is interrupted, wait for it to return and rerun the check before continuing maintenance.
+For a locally installed CLI, run `sts-backup replication check` with the same arguments instead of the `kubectl exec` command.
+The Pod must be available; if it is rescheduling or an exec session is interrupted, wait for a replacement Pod and rerun the complete check successfully before continuing maintenance.
 Progress goes to stderr; `replication.json` contains the final report.
 Exit code `0` means every selected component is `healthy` or `not_applicable`; a failed check, timeout, or cancellation returns nonzero.
 Configure the maintenance system to honor that exit code and run its remaining checks before starting the next node.
@@ -326,7 +331,10 @@ Choose `--timeout` for your recovery window, including the final HDFS audit and 
 
 If a database is intentionally disabled, use `--components` to select the databases you actually run.
 Omitted components are not checked; do not exclude a failing database to continue maintenance.
-Kafka SASL/TLS and Elasticsearch HTTPS customizations are unsupported by this version of the checker.
+The v0.10.0 checker supports the chart's standard database layouts and containers.
+Custom images or container names, overridden database labels, external databases, alternative NameNode topologies, erasure-coded HDFS, Kafka SASL/TLS, Elasticsearch HTTPS, and ZooKeeper TLS-only or nonstandard quorum layouts are unsupported.
+See the https://github.com/StackVista/stackstate-backup-cli/blob/v0.10.0/docs/replication.md[replication checker documentation] for the full requirements and limitations.
+If a check returns `unknown`, resolve the cause before continuing automated maintenance.
 
 [IMPORTANT]
 ====
@@ -345,6 +353,7 @@ The following commands are examples for planning a procedure; verify them agains
 
 Longhorn drain policies act when a node is cordoned, even if it is not subsequently drained.
 Change the policy before cordoning the first node and restore the previous value after maintenance.
+Record the original value in your maintenance log and keep the same shell open; capture it only once per maintenance window.
 
 === Short restart or in-place upgrade
 
@@ -356,6 +365,8 @@ For example:
 [,bash]
 ----
 LONGHORN_DRAIN_POLICY="$(kubectl -n longhorn-system get settings.longhorn.io node-drain-policy -o jsonpath='{.value}')"
+: "${LONGHORN_DRAIN_POLICY:?Could not read the original Longhorn drain policy. Stop maintenance.}"
+printf 'Original Longhorn drain policy: %s\n' "$LONGHORN_DRAIN_POLICY"
 
 kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy --type=merge -p '{"value":"block-for-eviction-if-contains-last-replica"}'
 
@@ -369,7 +380,7 @@ Then:
 . Complete the maintenance and return the node.
 . Uncordon the node so workloads can be scheduled, then run <<_wait_for_recovery_during_maintenance,the replication wait command>> and verify Longhorn has restored the expected replica count before proceeding to the next node.
 
-`Allow If Last Replica Is Stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
+`allow-if-replica-is-stopped` avoids rebuilding a one-replica volume when the same node and disk are expected to return, but the volume is lost if they do not return.
 Use that policy only when this risk is explicitly accepted.
 
 === Permanent node removal or replacement
@@ -385,6 +396,8 @@ For example:
 [,bash]
 ----
 LONGHORN_DRAIN_POLICY="$(kubectl -n longhorn-system get settings.longhorn.io node-drain-policy -o jsonpath='{.value}')"
+: "${LONGHORN_DRAIN_POLICY:?Could not read the original Longhorn drain policy. Stop maintenance.}"
+printf 'Original Longhorn drain policy: %s\n' "$LONGHORN_DRAIN_POLICY"
 
 kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy --type=merge -p '{"value":"block-for-eviction"}'
 
@@ -397,10 +410,13 @@ Eviction rebuilds data over the storage network and can take a long time; schedu
 
 [IMPORTANT]
 ====
-After the maintenance window, restore the previous policy:
+After the maintenance window, restore the previous policy.
+If you changed shells, first set `LONGHORN_DRAIN_POLICY` to the original value recorded in your maintenance log; reading the current setting would capture the temporary policy instead.
+If the original value is unavailable, confirm the intended policy with your cluster administrator before restoring it:
 
 [,bash]
 ----
+: "${LONGHORN_DRAIN_POLICY:?Set LONGHORN_DRAIN_POLICY to the original value recorded before maintenance.}"
 kubectl -n longhorn-system patch settings.longhorn.io node-drain-policy --type=merge -p '{"value":"'"${LONGHORN_DRAIN_POLICY}"'"}'
 ----
 ====
