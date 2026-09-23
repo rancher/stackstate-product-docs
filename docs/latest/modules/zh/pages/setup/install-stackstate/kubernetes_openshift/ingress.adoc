@@ -101,9 +101,9 @@ suse-observability/suse-observability
 
 == 为开放遥测配置入口规则
 
-{stackstate-product-name} Helm 图表在其值中公开了一个 `opentelemetry-collector` 服务，可以创建一个专用的 `ingress`。默认情况下，这处于禁用状态。用于 `opentelemetry-collector` 目的的入口需要支持 GRPC 协议。请注意，设置控制器本身和证书超出了本文件的范围。
+{stackstate-product-name} Helm 图表在其值中公开了一个 `otel-receiver` 服务，可以创建一个专用的 `ingress`。默认情况下，这处于禁用状态。用于 `otel-receiver` 目的的入口需要支持 GRPC 协议。请注意，设置控制器本身和证书超出了本文件的范围。
 
-要为 {stackstate-product-name} 配置 `opentelemetry-collector` 入口，请创建一个文件 `ingress_otel_values.yaml`，内容如下。将 `MY_DOMAIN` 替换为您自己的域名（与您的入口控制器关联）并为 `otlp-tls-secret` 设置正确的名称。请查阅您的入口控制器的文档以获取正确的注释设置。以下所有字段都是可选的，例如，如果不使用 TLS，请省略该部分，但请注意 {stackstate-product-name} 也不会加密流量。
+要为 {stackstate-product-name} 配置 `otel-receiver` 入口，请创建一个文件 `ingress_otel_values.yaml`，内容如下。将 `MY_DOMAIN` 替换为您自己的域名（与您的入口控制器关联）并为 `otlp-tls-secret` 设置正确的名称。请查阅您的入口控制器的文档以获取正确的注释设置。以下所有字段都是可选的，例如，如果不使用 TLS，请省略该部分，但请注意 {stackstate-product-name} 也不会加密流量。
 
 [tabs]
 ====
@@ -120,12 +120,12 @@ Traefik::
 =====
 通过 Traefik 暴露 OpenTelemetry Collector GRPC 端点从 {stackstate-product-name} Helm 图表版本 v2.8.0 开始得到支持。
 
-请注意，GRPC 主机条目需要一个明确的 `serviceName: suse-observability-otel-collector-grpc` 来将流量路由到正确的后端服务。
+请注意，GRPC 主机条目需要一个明确的 `serviceName: suse-observability-otel-receiver-grpc` 来将流量路由到正确的后端服务。
 =====
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -136,7 +136,7 @@ opentelemetry-collector:
         paths:
           - path: /
             pathType: Prefix
-            serviceName: suse-observability-otel-collector-grpc
+            serviceName: suse-observability-otel-receiver-grpc
             port: 4317
     tls:
       - hosts:
@@ -170,7 +170,7 @@ Ingress Nginx 项目正在 https://kubernetes.io/blog/2025/11/11/ingress-nginx-r
 
 [,text]
 ----
-opentelemetry-collector:
+otel-receiver:
   ingress:
     enabled: true
     ingressClassName: nginx

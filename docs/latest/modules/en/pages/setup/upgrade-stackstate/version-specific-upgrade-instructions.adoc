@@ -17,6 +17,19 @@ This page provides specific instructions and details of any required manual step
 
 == Upgrade instructions
 
+=== 2.10.4
+
+* The `opentelemetry-collector` Helm values key has been renamed to `otel-receiver`, to make clear that it configures a fixed part of the {stackstate-product-name} platform rather than a general-purpose OpenTelemetry Collector. Rename this block in your `values.yaml`; leaving the old key in place will cause the deployment to **fail**, because Helm would otherwise silently ignore everything under it.
++
+[,yaml]
+----
+otel-receiver:
+  resources:
+    limits:
+      memory: 512Mi
+----
+* The Kubernetes resources of this component are renamed from `suse-observability-otel-collector` to `suse-observability-otel-receiver`, and its `app.kubernetes.io/name` label changes from `opentelemetry-collector` to `otel-receiver`. Update anything that selects on the old names, such as your own `NetworkPolicy`, `ServiceMonitor` or `PrometheusRule` resources, dashboards, and scripts that reference the pod or StatefulSet by name. The OTLP endpoints exposed through the ingress are unchanged.
+
 === 2.10.0
 
 * The Helm chart `values.yaml` has undergone a major refactoring to improve readability and maintainability, you must review the xref:setup/upgrade-stackstate/v2.10.0-helm.adoc[Helm chart migration guide for v2.10.0] and update your `values.yaml` accordingly.
