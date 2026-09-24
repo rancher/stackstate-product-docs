@@ -15,7 +15,7 @@ Before you can configure SUSE Observability to authenticate using OIDC, you need
 === Rancher
 
 [NOTE]
-This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider].
+This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider]. If group permissions are not working please check xref:/setup/security/authentication/troubleshooting.adoc#_known-issues[Known issues]. 
 
 For Rancher 2.14 or later, create an OIDCClient resource with the following scopes in the Rancher local cluster.
 For Rancher 2.12 and 2.13, omit `spec.scopes` from this example; these versions do not support the `groups` scope.
@@ -77,7 +77,7 @@ The result of this configuration should produce a *clientId* and a *secret*. Cop
 === Rancher
 
 [NOTE]
-This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider].
+This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider]. If group permissions are not working please check xref:/setup/security/authentication/troubleshooting.adoc#_known-issues[Known issues].
 
 For Rancher 2.14 or later, add the following OIDC configuration to your authentication values.
 The `stackstate.authentication.rancher.scope` option is available from SUSE Observability {next-release-version}.
@@ -115,22 +115,17 @@ When upgrading Rancher to 2.14 or later, update both the existing OIDCClient and
 Rancher 2.15 and later require the `groups` scope to return group claims.
 Without it, group-based access can disappear while direct user assignments and Rancher's own group permissions still work.
 
-. First, update the existing OIDCClient through the configuration that manages your Rancher local cluster.
-  Set `spec.scopes` to include `openid`, `profile`, `offline_access`, and `groups`.
-  Preserve any other scopes that the client requires.
-  An empty `spec.scopes` uses defaults without `groups`.
-  Requesting `groups` before allowing it on the client can fail login with `invalid_scope`.
-. Upgrade to SUSE Observability {next-release-version} or later, and set `stackstate.authentication.rancher.scope` to `[openid, profile, offline_access, groups]`.
-  Keep the existing client ID, secret, and Rancher URL.
-. After the Helm rollout completes, log out of SUSE Observability and log in again.
-  An existing session does not establish that the new scope works.
-. Check that the authorization request contains `groups` in its `scope` parameter.
-  Check that the new session contains the expected group identities.
-. With a user whose access comes from an existing group binding, check that the expected resources are accessible.
-  Direct user assignments alone do not test group access.
+* First, update the existing OIDCClient through the configuration that manages your Rancher local cluster.
+  Set `spec.scopes` to include `openid`, `profile`, `offline_access`, and `groups`. You can patch the existing client with:
+[,bash]
+----
+kubectl patch oidcclients.management.cattle.io oidc-observability --type=merge -p '{"spec":{"scopes":["openid","profile","offline_access","groups"]}}'
+----
 
-The Rancher preset keeps `usernameField = "sub"` and `groupsField = "groups"`.
-Do not change these claim mappings or switch to the generic OIDC configuration for this upgrade.
+  Requesting `groups` before allowing it on the client can fail login with `invalid_scope`.
+* Upgrade to SUSE Observability {next-release-version} or later, and set `stackstate.authentication.rancher.scope` to `[openid, profile, offline_access, groups]`.
+  Keep the existing client ID, secret, and Rancher URL.
+* After the Helm rollout completes, log out of SUSE Observability and log in again to verify that the group-based access is working correctly after updating the scope.
 
 ==== TLS verification
 

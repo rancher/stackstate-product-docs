@@ -35,6 +35,34 @@ Now run the `helm upgrade` command you used before but include this one extra ya
 To disable the debug logging run the `+helm upgrade ....+` command again but omit the `--values debug-auth.yaml`. After 30 seconds the updated logging configuration is loaded and the debug logging stops.
 
 
+== Known issues
+
+With Rancher authentication users don't get permissions assigned to their groups. This is caused by a missing `groups` scope. Rancher 2.14 introduced this `groups` scope. In SUSE Observability versions < {next-release-version} the `groups` scope is not set and is also not configurable. Here is a work-around for older SUSE Observability versions
+
+1. Update the OIDC Client configuration in Rancher:
++
+[,bash]
+----
+    kubectl patch oidcclients.management.cattle.io oidc-observability --type=merge -p '{"spec":{"scopes":["openid","profile","offline_access","groups"]}}'
+----
+
+2. Update the SUSE Observability configuration, remove the `stackstate.authentication.rancher` section and replace it with the normal OIDC configuration as shown below:
++
+[,yaml]
+----
+stackstate:
+  authentication:
+    oidc:
+      clientId: "<oidc-client-id>"
+      secret: "<oidc-secret>"
+      discoveryUri: https://<rancher-url>/oidc/.well-known/openid-configuration
+      scope: [openid, profile, offline_access, groups]
+      jwsAlgorithm: RS256
+      jwtClaims:
+        usernameField: sub
+        groupsField: groups
+----
+
 == Troubleshooting issues with permissions
 
 * xref:/setup/security/rbac/rbac_permissions.adoc#_list_subjects_for_a_user[Inspect the user subjects] (user and roles) and verify the configuration depending on the authentication model being used.
