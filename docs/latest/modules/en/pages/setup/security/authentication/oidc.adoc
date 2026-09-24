@@ -1,6 +1,6 @@
 = Open ID Connect (OIDC)
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-09-24
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
@@ -17,7 +17,8 @@ Before you can configure SUSE Observability to authenticate using OIDC, you need
 [NOTE]
 This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider].
 
-Create an OIDCClient resource in the Rancher local cluster:
+For Rancher 2.14 or later, create an OIDCClient resource with the following scopes in the Rancher local cluster.
+For Rancher 2.12 and 2.13, omit `spec.scopes` from this example; these versions do not support the `groups` scope.
 [,yaml]
 ----
 apiVersion: management.cattle.io/v3
@@ -25,6 +26,7 @@ kind: OIDCClient
 metadata:
   name: oidc-observability
 spec:
+  scopes: [openid, profile, offline_access, groups]
   tokenExpirationSeconds: 600
   refreshTokenExpirationSeconds: 3600
   redirectURIs:
@@ -39,6 +41,7 @@ kind: OIDCClient
 metadata:
   name: oidc-observability
 spec:
+  scopes: [openid, profile, offline_access, groups]
   tokenExpirationSeconds: 600
   refreshTokenExpirationSeconds: 3600
   redirectURIs:
@@ -76,7 +79,9 @@ The result of this configuration should produce a *clientId* and a *secret*. Cop
 [NOTE]
 This only works with Rancher 2.12 or later.  You need to https://documentation.suse.com/cloudnative/rancher-manager/latest/en/rancher-admin/users/authn-and-authz/configure-oidc-provider.html[configure Rancher as an OIDC provider].
 
-To configure Rancher as the OIDC provider for SUSE Observability, you need to add the OIDC details to the authentication values:
+For Rancher 2.14 or later, add the following OIDC configuration to your authentication values.
+The `stackstate.authentication.rancher.scope` option is available from SUSE Observability {next-release-version}.
+For Rancher 2.12 and 2.13, omit `scope` to retain the existing behavior.
 [,yaml]
 ----
 stackstate:
@@ -85,6 +90,7 @@ stackstate:
       clientId: "<oidc-client-id>"
       secret: "<oidc-secret>"
       baseUrl: "<rancher-url>"
+      scope: [openid, profile, offline_access, groups]
       # oidcLogout and skipLoginPage are optional and both default to false
       #_ oidcLogout: false
       #_ skipLoginPage: false
@@ -94,6 +100,7 @@ You can override and extend the OIDC config for Rancher with the following field
 * **discoveryUri** - URI that you can use to discover the OIDC provider. Normally, also documented or returned when creating the client in the OIDC provider.
 * **redirectUri** - Optional (not in the example): The URI where the login callback endpoint of SUSE Observability is reachable. Populated by default using the `stackstate.baseUrl`, but can be overridden. This must be a fully qualified URL that points to the `/loginCallback` path.
 * **customParameters** - Optional map of key/value pairs that you send to the OIDC provider as custom request parameters. Certain OIDC providers require extra request parameters not sent by default.
+* **scope** - Optional array containing `openid` and any of `profile`, `offline_access`, and `groups`. When omitted, the chart requests `[openid, profile, offline_access]`. Every requested scope must be allowed by the Rancher OIDCClient.
 * **oidcLogout** - Optional (default `false`): when set to `true`, logging out of {stackstate-product-name} also logs the user out of the OIDC provider. When `false`, logging out only ends the {stackstate-product-name} session.
 * **skipLoginPage** - Optional (default `false`): when set to `true`, the {stackstate-product-name} login page is skipped and users are redirected straight to the OIDC provider.
 
@@ -101,6 +108,31 @@ You can override and extend the OIDC config for Rancher with the following field
 ====
 Setting `oidcLogout: false` and `skipLoginPage: true` will cause the logout process to immediately redirect to the OIDC provider and re-authenticate, which will make it appear that the user was not logged out.
 ====
+
+==== Upgrade Rancher and retain group access
+
+When upgrading Rancher to 2.14 or later, update both the existing OIDCClient and the SUSE Observability configuration.
+Rancher 2.15 and later require the `groups` scope to return group claims.
+Without it, group-based access can disappear while direct user assignments and Rancher's own group permissions still work.
+
+. First, update the existing OIDCClient through the configuration that manages your Rancher local cluster.
+  Set `spec.scopes` to include `openid`, `profile`, `offline_access`, and `groups`.
+  Preserve any other scopes that the client requires.
+  An empty `spec.scopes` uses defaults without `groups`.
+  Requesting `groups` before allowing it on the client can fail login with `invalid_scope`.
+. Upgrade to SUSE Observability {next-release-version} or later, and set `stackstate.authentication.rancher.scope` to `[openid, profile, offline_access, groups]`.
+  Keep the existing client ID, secret, and Rancher URL.
+. After the Helm rollout completes, log out of SUSE Observability and log in again.
+  An existing session does not establish that the new scope works.
+. Check that the authorization request contains `groups` in its `scope` parameter.
+  Check that the new session contains the expected group identities.
+. With a user whose access comes from an existing group binding, check that the expected resources are accessible.
+  Direct user assignments alone do not test group access.
+
+The Rancher preset keeps `usernameField = "sub"` and `groupsField = "groups"`.
+Do not change these claim mappings or switch to the generic OIDC configuration for this upgrade.
+
+==== TLS verification
 
 If you need to disable TLS verification due to a setup not using verifiable SSL certificates, you can disable SSL checks with application config (don't use in production):
 
