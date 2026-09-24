@@ -41,12 +41,8 @@ Rancher 2.15 and later require the `groups` scope to return group claims.
 Without it, users can lose permissions assigned through groups while direct user assignments still work.
 The `groups` scope is available from Rancher 2.14.
 For SUSE Observability installations whose Rancher preset cannot configure scopes, use the following workaround.
-Do not request `groups` from Rancher 2.12 or 2.13.
 
-. Update the existing OIDCClient in the Rancher local cluster to allow the required scopes.
-  Replace `oidc-observability` with your client name.
-  If the client allows additional scopes, preserve them in the list below.
-  This patch replaces the scope list.
+1. Update the existing OIDCClient in the Rancher local cluster to allow the required scopes.
 +
 [,bash]
 ----
@@ -54,9 +50,7 @@ kubectl patch oidcclients.management.cattle.io oidc-observability --type=merge -
 ----
 +
 An empty `spec.scopes` defaults to a list without `groups`.
-Requesting `groups` before allowing it on the client can prevent login with `invalid_scope`.
-
-. Remove `stackstate.authentication.rancher` from your SUSE Observability values and replace it with the generic OIDC configuration below.
+2. Remove `stackstate.authentication.rancher` from your SUSE Observability values and replace it with the generic OIDC configuration below.
   Keep your existing client ID and secret, and use your Rancher URL in `discoveryUri`.
   Preserve any custom redirect URI, logout options, and custom parameters under `oidc`.
   Keep existing role and group bindings.
@@ -65,6 +59,7 @@ Requesting `groups` before allowing it on the client can prevent login with `inv
 ----
 stackstate:
   authentication:
+    sessionLifetime: "16h"
     oidc:
       clientId: "<oidc-client-id>"
       secret: "<oidc-secret>"
@@ -76,7 +71,7 @@ stackstate:
         groupsField: groups
 ----
 
-. Apply the values with your usual Helm upgrade procedure.
+3. Apply the values with your usual Helm upgrade procedure.
   After the rollout, log out of SUSE Observability and log in again.
   Check that the new session contains the expected group identities and grants access through an existing group binding.
 
