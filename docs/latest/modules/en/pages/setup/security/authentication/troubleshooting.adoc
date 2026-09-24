@@ -37,31 +37,43 @@ To disable the debug logging run the `+helm upgrade ....+` command again but omi
 
 == Known issues
 
-With Rancher authentication users don't get permissions assigned to their groups. This is caused by a missing `groups` scope. Rancher 2.14 introduced this `groups` scope. In SUSE Observability versions < {next-release-version} the `groups` scope is not set and is also not configurable. Here is a work-around for older SUSE Observability versions
+Rancher 2.15 and later require the `groups` scope to return group claims.
+Without it, users can lose permissions assigned through groups while direct user assignments still work.
+The `groups` scope is available from Rancher 2.14.
+For SUSE Observability installations whose Rancher preset cannot configure scopes (any version up to 2.11.2), use the following workaround.
 
-1. Update the OIDC Client configuration in Rancher:
+1. Update the existing OIDCClient in the Rancher local cluster to allow the required scopes.
 +
 [,bash]
 ----
-    kubectl patch oidcclients.management.cattle.io oidc-observability --type=merge -p '{"spec":{"scopes":["openid","profile","offline_access","groups"]}}'
+kubectl patch oidcclients.management.cattle.io oidc-observability --type=merge -p '{"spec":{"scopes":["openid","profile","offline_access","groups"]}}'
 ----
-
-2. Update the SUSE Observability configuration, remove the `stackstate.authentication.rancher` section and replace it with the normal OIDC configuration as shown below:
++
+An empty `spec.scopes` defaults to a list without `groups`.
+2. Remove `stackstate.authentication.rancher` from your SUSE Observability values and replace it with the generic OIDC configuration below.
+  Keep your existing client ID and secret, and use your Rancher URL in `discoveryUri`.
+  Preserve any custom redirect URI, logout options, and custom parameters under `oidc`.
+  Keep existing role and group bindings.
 +
 [,yaml]
 ----
 stackstate:
   authentication:
+    sessionLifetime: "16h"
     oidc:
       clientId: "<oidc-client-id>"
       secret: "<oidc-secret>"
-      discoveryUri: https://<rancher-url>/oidc/.well-known/openid-configuration
+      discoveryUri: https://<rancher-host>/oidc/.well-known/openid-configuration
       scope: [openid, profile, offline_access, groups]
       jwsAlgorithm: RS256
       jwtClaims:
         usernameField: sub
         groupsField: groups
 ----
+
+3. Apply the values with your usual Helm upgrade procedure.
+  After the rollout, log out of SUSE Observability and log in again.
+  Check that the new session contains the expected group identities and grants access through an existing group binding.
 
 == Troubleshooting issues with permissions
 
