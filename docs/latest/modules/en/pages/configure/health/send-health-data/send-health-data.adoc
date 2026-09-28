@@ -52,6 +52,39 @@ SUSE Observability accepts health data based on a chosen xref:/configure/health/
 * xref:/configure/health/send-health-data/repeat_snapshots.adoc[Repeat Snapshots JSON]
 * xref:/configure/health/send-health-data/transactional_increments.adoc[Transactional Increments JSON]
 
+ifdef::ss-ff-silencing_enabled[]
+== Silence an external health result
+
+To mark an external health result as muted, add a `silenced` object to its entry in `check_states`.
+The object requires a `note` string that explains the reason.
+This format works with both Repeat Snapshots and Transactional Increments.
+
+[,json]
+----
+{
+  "checkStateId": "disk-usage",
+  "name": "Disk Usage",
+  "health": "Critical",
+  "topologyElementIdentifier": "server-1",
+  "message": "Disk usage exceeds the threshold",
+  "silenced": {
+    "note": "Disk expansion in progress"
+  }
+}
+----
+
+Include `silenced` in each update while the result is muted.
+To end external silencing, send an update for the same check state without `silenced`.
+For Repeat Snapshots, keep the check state in the snapshot.
+Removing the whole check state deletes it instead.
+
+The health value stays unchanged.
+SUSE Observability records the silencing start time when it processes the external data.
+External silencing has no local expiry and must end at the source.
+Any separate silencing rule in SUSE Observability can still keep the result muted.
+See xref:/use/alerting/silencing.adoc[Silencing] for the effect on component state.
+endif::ss-ff-silencing_enabled[]
+
 == See also
 
 * xref:/setup/cli/cli-sts.adoc[Install the SUSE Observability CLI]
