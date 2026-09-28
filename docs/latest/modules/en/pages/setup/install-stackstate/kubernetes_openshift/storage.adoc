@@ -213,3 +213,83 @@ minio:
 ====
 The NonHa example belongs to the biggest NonHa instance meant to observe 100 nodes and retain data for 2 weeks.
 ====
+
+== Avoiding double replication on components that already replicate
+
+Some `HA` sizing-profile components run with both application-level replication (2-3 copies of their own data across pods) and storage-level replication (your StorageClass keeping another 2-3 copies of each volume). Combined, this multiplies storage usage far beyond what's needed for redundancy -- for example, 3 application copies on a StorageClass that also keeps 3 copies results in 9 copies of the same data.
+
+For components where the application already replicates, you can use a StorageClass that keeps only one copy per volume, relying entirely on the application's own replication for redundancy instead. This applies to any storage backend that replicates by default -- consult your backend's own documentation for the equivalent setting. https://longhorn.io/[Longhorn] is documented in detail below since it's the backend we've tested this against.
+
+=== Longhorn
+
+Longhorn's own https://longhorn.io/docs/latest/best-practices/#io-performance[best practices] recommend `strict-local` data locality with a single replica for exactly this case ("applications that support data replication, e.g. a distributed database"), or reducing `numberOfReplicas` to `2` as a smaller middle-ground step.
+
+Create a StorageClass mirroring Longhorn's default one, except for `numberOfReplicas`, `dataLocality`, and `volumeBindingMode`:
+
+[,yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-database-sc
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: "ext4"
+  dataLocality: "strict-local"
+  disableRevisionCounter: "true"
+  dataEngine: "v1"
+----
+
+Set this as the global storage class to cover Kafka and Elasticsearch. Override the HDFS metadata nodes, which do not replicate their data, back to your normal storage class:
+
+[,yaml]
+----
+global:
+  storageClass: "longhorn-database-sc"
+
+hbase:
+  hdfs:
+    namenode:
+      persistence:
+        storageClass: "longhorn"
+    secondarynamenode:
+      persistence:
+        storageClass: "longhorn"
+----
+
+[NOTE]
+====
+`global.storageClass` also applies to other PVCs, including backup, cache, VictoriaMetrics, vmagent, and workload-observer PVCs. Render your chosen profile with `helm template` and review the resulting `storageClassName` values before applying this configuration.
+====
+
+[WARNING]
+====
+Do *not* assign this StorageClass to the HDFS NameNode or SecondaryNameNode (`hbase.hdfs.namenode`/`hbase.hdfs.secondarynamenode`). Unlike DataNodes, they hold a single, non-replicated copy of the HDFS filesystem metadata regardless of sizing profile. Losing their only copy doesn't just lose data -- it can leave HDFS (and anything reading from it, like HBase) unable to start at all. Keep them on your normal, fully-redundant storage class.
+====
+
+[NOTE]
+====
+This optimization is for `HA` profiles only. ClickHouse only replicates (`clickhouse.replicaCount > 1`) in the `4000-ha` profile; in other profiles, override it to use your normal storage class:
+
+[,yaml]
+----
+clickhouse:
+  persistence:
+    storageClass: "longhorn"
+----
+====
+
+[NOTE]
+====
+`dataLocality: strict-local` is incompatible with `ReadWriteMany` volumes. StorageClass selection applies only when a PVC is created; changing Helm values does not migrate existing PVCs. Check the rendered manifests and existing PVCs before an upgrade.
+====
+
+[NOTE]
+====
+With one storage-level copy, replace or drain one node at a time and wait for application-level replication to converge before starting the next node. For Longhorn, review https://longhorn.io/docs/latest/high-availability/node-failure/[node failure handling], https://longhorn.io/docs/latest/nodes-and-volumes/nodes/graceful-node-removal/[graceful node removal], and the https://longhorn.io/docs/latest/references/settings/#node-drain-policy[Node Drain Policy] before maintenance.
+====
