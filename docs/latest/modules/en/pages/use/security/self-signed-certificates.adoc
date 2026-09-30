@@ -1,6 +1,6 @@
 = Self-signed certificates
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-29
+:revdate: 2026-09-30
 :page-revdate: {revdate}
 :description: SUSE Observability Self-hosted
 
@@ -615,47 +615,13 @@ Certificate configurations are stored in: `~/.config/stackstate-cli/config.yaml`
 **Important**: The `--skip-ssl` flag disables all SSL verification and ignores certificate configurations. Always use the CA certificate options for secure connections with custom certificates.
 ====
 
-== SUSE Observability Open Telemetry  
+== SUSE Observability Open Telemetry
 
-=== Create a configmap for the custom Certificate Authority
+The xref:setup/otel/getting-started/getting-started-k8s.adoc[Kubernetes OpenTelemetry setup] uses the collector included in the SUSE Observability Agent. This collector uses the Agent's `global.customCertificates` Helm values to trust self-signed certificates or certificates signed by a private Certificate Authority (CA).
 
-----
-kubectl create configmap tls-config \
-  --namespace open-telemetry \
-  --from-file=tls.crt=<your-certificate>
-----
+Follow the <<_suse_observability_agent,SUSE Observability Agent instructions>> to configure the certificate and upgrade your Agent release. If you use an existing ConfigMap, create it in the Agent's namespace. No separate collector installation or `otel-collector.yaml` file is needed for this setup.
 
-. Mount the configmap by adding the following at the top-level of `otel-collector.yaml`:
-
-----
-# Mounting volume for CA certificate
-extraVolumes: 
-  - name: tls-config
-    configMap:
-      items:
-        - key: tls.crt
-          path: tls.crt
-      name: tls-config
-extraVolumeMounts:
-  - mountPath: "/certs"
-    name: tls-config
-    readOnly: true
-----
-
-. Update the exporter configuration in the `otel-collector.yaml` to use the certificate *ca_file* by adding the `tls.ca_file` key:
-
-----
-otlp/suse-observability:
-  auth:
-    authenticator: bearertokenauth
-  # Put in your own otlp endpoint, for example suse-observability.my.company.com:443
-  endpoint: <your-endpoint>
-  compression: snappy
-  tls:
-    ca_file: /certs/tls.crt
-----
-
-. Install (or upgrade) your Open Telemetry collector.
+If you manage a separate OpenTelemetry Collector outside the Agent, configure that collector's trusted CA certificates independently.
 
 == Rancher UI extension for SUSE Observability
 
