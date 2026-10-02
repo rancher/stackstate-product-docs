@@ -8,7 +8,7 @@
 
 In some clusters, nodes are rotated regularly, for example during node image upgrades or maintenance windows in which nodes are drained and restarted one after another. In such clusters the HDFS storage of the {stackstate-product-name} topology database is restarted many times within a short period.
 
-The `150-ha`, `250-ha` and `500-ha` sizing profiles run HDFS with 3 data nodes and store every block twice. When data nodes restart in quick succession while data is being written, HDFS can end up without a usable copy of the most recently written data. For clusters with regular maintenance windows, use the HDFS settings of the `4000-ha` profile, which store every block 3 times on 5 data nodes:
+The `150-ha`, `250-ha` and `500-ha` sizing profiles run HDFS with 3 data nodes and store every block twice. When data nodes restart in quick succession while data is being written, HDFS becomes more vulnerable to additional node failures. The restarting nodes leave only 2 nodes at most active at a time, so any additional node issue can cause additional downtime at best or corruption/data loss in the worst case. For clusters with regular maintenance windows, we advise to use the HDFS settings which are standard for the `4000-ha` profile, which store every block 3 times on 5 data nodes:
 
 [cols="3,2,2"]
 |===
@@ -68,13 +68,3 @@ If you deploy with `--set` flags instead of a values file, add these flags to yo
   --set hbase.hdfs.datanode.replicaCount=5 \
 ----
 
-== Existing installations
-
-The new number of copies applies to data written after the upgrade. To store the existing data 3 times as well, run the following command once all 5 HDFS data nodes are running:
-
-[,bash]
-----
-kubectl exec -n suse-observability suse-observability-hbase-hdfs-nn-0 -- hdfs dfs -setrep -R 3 /
-----
-
-HDFS creates the additional copies in the background.
