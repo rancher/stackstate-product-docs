@@ -6,9 +6,9 @@
 
 == Overview
 
-In some clusters, nodes are rotated regularly, for example during node image upgrades or maintenance windows in which nodes are drained and restarted one after another. In such clusters the HDFS storage of the {stackstate-product-name} topology database is restarted many times within a short period.
+In some clusters, nodes are rotated regularly, for example during node image upgrades or maintenance windows, in which nodes are drained and restarted one after another. In such clusters, the HDFS storage of the {stackstate-product-name} topology database is restarted multiple times within a short period.
 
-The `150-ha`, `250-ha` and `500-ha` sizing profiles run HDFS with 3 data nodes and store every block twice. When data nodes restart in quick succession while data is being written, HDFS becomes more vulnerable to further node failures. While a data node restarts, at most 2 data nodes are active, so any additional node issue can cause downtime at best, or data corruption or data loss at worst. For clusters with regular maintenance windows, we recommend using the HDFS settings of the `4000-ha` profile, which store every block 3 times on 5 data nodes:
+The `150-ha`, `250-ha` and `500-ha` sizing profiles run HDFS with 3 data nodes and store every block twice. When data nodes restart in quick succession while data is being written, HDFS becomes more vulnerable to further node failures. When a data node restarts, a maximum of two nodes are active. Consequently, any subsequent additional node issue risks downtime, or worse, data corruption and data loss. For clusters with regular maintenance windows, you are recommend to use the HDFS settings of the `4000-ha` profile, which stores every block 3 times on 5 data nodes:
 
 [cols="3,2,2"]
 |===
@@ -33,11 +33,11 @@ These settings add resilience, but they do not replace a careful maintenance pro
 
 * {stackstate-product-name} Helm chart version 2.10.0 or later, installed with the `150-ha`, `250-ha` or `500-ha` sizing profile.
 * At least 5 Kubernetes nodes. Every HDFS data node runs on a separate node.
-* Capacity for 2 additional HDFS data nodes. Each data node requests 600m CPU and 4Gi memory and uses its own persistent volume (250Gi by default). Because every block is stored 3 times across 5 data nodes, the amount of data per data node does not increase.
+* Capacity for 2 additional HDFS data nodes. Each data node requests 600m CPU and 4Gi memory and uses its own persistent volume (250Gi by default). The volume of data per data node does not increase as every block is stored 3 times across 5 data nodes. 
 
 == Configure the HDFS settings
 
-Add the following to the `values.yaml` file that you use to install or upgrade {stackstate-product-name}:
+Add the following to the `values.yaml` file to install or upgrade {stackstate-product-name}:
 
 [,yaml]
 ----
@@ -49,7 +49,7 @@ hbase:
       replicaCount: 5
 ----
 
-Apply the configuration by installing or upgrading {stackstate-product-name}:
+. Apply the configuration by installing or upgrading {stackstate-product-name}:
 
 [,text]
 ----
@@ -61,7 +61,7 @@ suse-observability \
 suse-observability/suse-observability
 ----
 
-If you deploy with `--set` flags instead of a values file, add these flags to your `helm upgrade` command:
+. If you deploy with `--set` flags instead of a values file, add these flags to your `helm upgrade` command:
 
 [,text]
 ----
@@ -70,5 +70,8 @@ If you deploy with `--set` flags instead of a values file, add these flags to yo
   --set hbase.hdfs.datanode.replicaCount=5 \
 ----
 
+[NOTE]
+====
 On an existing installation, the new settings apply to data written after the upgrade. Data that already exists keeps 2 copies until it is rewritten.
+====
 
