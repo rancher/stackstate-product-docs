@@ -1,6 +1,6 @@
 = Webhook
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-10-08
 :page-revdate: {revdate}
 :description: SUSE Observability
 
@@ -80,7 +80,7 @@ The Webhook channel sends data as HTTP POST requests. The endpoint and payload a
 The sections in the `open` payload are:
 
 . Component: the SUSE Observability component that the notification applies to. This includes the components name, identifier, type, and tags. It also has a link to the SUSE Observability UI that will open the component at the time of the health state change
-. Event: the event that triggered this notification. It can either be of type `open` or `close` (see next section). An `open` state means that the monitor is still in a critical (or deviating) state for the specified component. A `close` state means that the monitor was open before but that the issue has been resolved. The state and triggered time are included. Also included is a `title` which is a short description of the problem as provided by the monitor, it is the same title shown in the highlights page of the component, this can be different and more detailed than the monitor name.
+. Event: the event that triggered this notification. The `type` is `open` for both new notifications and updates. For health notifications, `state` is `CRITICAL` or `DEVIATING`. For silencing notifications, `state` is `MUTED` and `reason` contains the silencing note, even when the monitor result is `CLEAR`. The event also includes the triggered time and a `title` supplied by the monitor.
 . Monitor: the monitor that triggered the notification. Next to the monitor name, tags and identifier also a link is included. The link opens the monitor in the SUSE Observability UI.
 . Notification configuration: The notification configuration for this notification. Includes a name, identifier and link. The link will open the notification configuration in the SUSE Observability UI.
 . Notification id: A unique identifier for this notification. See also the <<notification-life-cycle,Notification life cycle>>
@@ -135,21 +135,74 @@ The sections in the `open` payload are:
 }
 ----
 
-The sections in the `close` payload are the same as in the `open` payload except for the `event`. The `type` is now `close` and there is only a `reason` field indicating why the notification was closed. The value in this field is an enum, the https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI specification] documents the possible values.
+The sections in the `close` payload are the same as in the `open` payload except for the `event`.
+The event has `type: "close"` and a `reason` that identifies why the notification closed.
+The https://github.com/StackVista/stackstate-openapi/tree/master/spec_webhook[OpenAPI specification] documents the possible reasons.
+When silencing closes a notification, the event also includes `silencingNote`.
+A close event does not include `state`, `title`, or `triggeredTimeMs`.
+
+[#silencing-payloads]
+=== Silencing payloads
+
+Under *Notify when*, the *The silencing rules change* option controls how notifications respond to silencing.
+The examples below show only the `event` section of the webhook payload.
+
+When the option is enabled, silencing opens or updates a notification with `state: "MUTED"` and the silencing note in `reason`.
+This also applies when the monitor result is `CLEAR`: `MUTED` describes silencing, not the underlying health state.
+
+[source,json]
+----
+{
+    "event": {
+        "state": "MUTED",
+        "title": "HTTP - response time - is above 3.0 seconds",
+        "triggeredTimeMs": 1702635356757,
+        "reason": "Scheduled maintenance",
+        "type": "open"
+    }
+}
+----
+
+When the option is disabled, muting an existing notification closes it with `reason: "HealthStateSilenced"`.
+The `silencingNote` field contains the silencing note; it is separate from `reason`.
+Muted results do not open notifications while the option is disabled.
+
+[source,json]
+----
+{
+    "event": {
+        "reason": "HealthStateSilenced",
+        "silencingNote": "Scheduled maintenance",
+        "type": "close"
+    }
+}
+----
 
 [#notification-life-cycle]
 == Notification life cycle
 
 As can be seen from the payload each notification is uniquely identified by its `notificationId`. It's possible, even common, to receive more than one message for the same notification, but they will always be sent according to this life cycle.
 
-A notification is first created when a monitor state changes to deviating or critical (whether deviating is applicable depends on the xref:/use/alerting/notifications/configure.adoc#_configure_when_to_notify[notification settings]). A message with event type `open` is sent to the webhook.
+An unmuted monitor result creates a notification when its health state matches the xref:/use/alerting/notifications/configure.adoc#configure-when-to-notify[notification configuration].
+Critical results qualify; deviating results qualify when included in the configuration.
+When *The silencing rules change* is enabled, a muted result also creates a notification, including a `CLEAR` result.
+The webhook receives an event with `type: "open"`.
+See <<silencing-payloads,Silencing payloads>> for the fields sent in each silencing case.
 
-A notification can be updated when the `state` or the `title` in the event change. Changes to the component and other parts of the message will be included but on their own they won't trigger an update. A notification update also sends a message with event type `open` to the webhook. The message will have the same `notificationId` which can be used to update the data in the external system (instead of creating a new notification).
+A notification updates when the event's `state`, `title`, or silencing note changes.
+Changes to the component and other parts of the payload appear in the next message but do not trigger an update themselves.
+An update also sends `type: "open"` with the same `notificationId`.
+Use this identifier to update the existing notification in the external system.
 
-Finally a notification is closed when the monitor state changes back to a non-critical (or deviating) state. A message with event type `close` is sent to the webhook. This is also the last time that the specific `notificationId` is used.
+A notification closes when its monitor result no longer qualifies for notification.
+With *The silencing rules change* disabled, muting an existing notification also closes it.
+When silencing ends, a qualifying health state opens or updates a health notification; otherwise, an open silencing notification closes.
+A close sends `type: "close"` and is the last message for that `notificationId`.
+A close does not always mean the health issue resolved: inspect `event.reason` and, when present, `event.silencingNote`.
 
 Note that a notification can be both opened and closed for different reasons than a health state change:
 
+* The triggering health state is muted (or unmuted) by a change in silencing rules.
 * A tag is added to a component or monitor. This can cause some critical monitor health state to match the selection criteria in a notification configuration and corresponding notifications will be opened.
 * For the same reason removal of a tag from a component or monitor can close a notification even though the health state is still critical.
 * Changes to the notification configuration itself can also result in many new notifications being opened or closed.

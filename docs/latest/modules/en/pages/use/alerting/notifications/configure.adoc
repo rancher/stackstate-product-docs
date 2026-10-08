@@ -1,6 +1,6 @@
 = Configure notifications
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-10-08
 :page-revdate: {revdate}
 :description: SUSE Observability
 
@@ -20,14 +20,36 @@ You can check if the desired notification already exists. If not create a new on
 [#configure-when-to-notify]
 == Configure when to notify
 
-image::k8s/notifications-add-new-notification.png[Adding a new notification]
+image::k8s/notifications-add-new-notification-silencing.png[Notification configuration showing the silencing option and scope filters]
 
 Configure the notification:
 
 . Name - Choose a name that is short but still describes what the intent is of this notification. It is for your own reference in the notifications overview.
 . Status - The notification can be disabled temporarily in case it is not yet needed, turns out to be too noisy etc.
 . Notify when - A critical health state always triggers a notification, but optionally also deviating states can be included.
-. Scope - In the example health states for all monitors on pods in the default Kubernetes namespace is sent. Use the available  filters in the <<scope,scope>> section to change this selection.
+Silencing changes this behavior as described in <<silencing,Silencing and notifications>>.
+. Scope - The example includes all monitors and resources. Use the filters in the <<scope,scope>> section to limit this selection.
+
+[#silencing]
+=== Silencing and notifications
+
+xref:/use/alerting/silencing.adoc[Silencing] mutes a monitor result without changing its health state.
+By default, a muted result does not trigger health notifications.
+If a notification is already open, silencing closes it.
+For webhooks, the close event contains `reason: "HealthStateSilenced"` and the note in `silencingNote`.
+Other monitor results continue to trigger notifications when they match the configuration.
+
+Under *Notify when*, enable *The silencing rules change* to receive notifications about silencing.
+With this option enabled, silencing opens a notification or updates an existing notification with the silencing reason.
+For webhooks, the open event contains `state: "MUTED"` and the note in `reason`, including when the monitor result is `CLEAR`.
+See xref:/use/alerting/notifications/channels/webhook.adoc#silencing-payloads[Silencing payloads] for examples.
+The scope filters still apply.
+Changes to the silencing reason update the notification.
+
+When silencing ends, the current health state determines what happens next.
+A critical result, or a deviating result included in the configuration, opens or updates a health notification.
+Otherwise, an open silencing notification closes.
+These rules also apply to silencing from external health sources.
 
 [#scope]
 === Scope
@@ -68,5 +90,10 @@ SUSE Observability can send notifications to different external systems via chan
 
 In general SUSE Observability sends two types of messages for notifications:
 
-. An `open` message when a health state goes to Critical or Deviating. This message can be repeated when there are changes in the health state
-. A `close` message when the health state isn't Critical or Deviating anymore or when for other reasons (the component disappeared, the monitor was removed, etc.) the notification isn't active anymore.
+. An `open` message when an unmuted health state is Critical, or Deviating if included in the configuration.
+When *The silencing rules change* is enabled, muted results also send `open` messages, including `CLEAR` results.
+For webhooks, these silencing events contain `state: "MUTED"` and the note in `reason`.
+Updates send another `open` message for the same notification.
+. A `close` message when the result no longer qualifies, or when the component disappears or the monitor is removed.
+With *The silencing rules change* disabled, muting an existing notification also sends a `close` message.
+For webhooks, this event contains `reason: "HealthStateSilenced"` and the note in `silencingNote`.
