@@ -1,7 +1,7 @@
 = Sampling
 :description: Sampling helps reduce the amount of data sent to observability systems by selecting a representative subset of telemetry data allowing you to manage costs
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-10-20
 :page-revdate: {revdate}
 
 Sampling is used to reduce the volume of data that is exported to SUSE Observability, while compromising the quality of the telemetry data as little as possible. The main reason to apply sampling is to reduce cost (of network, storage, etc).
@@ -9,6 +9,9 @@ Sampling is used to reduce the volume of data that is exported to SUSE Observabi
 If your applications generate little data there is no need for sampling and it can even hinder observability due to a lack of telemetry data. However if your application has a significant amount of traffic, for example more than 1000 spans per second, it can already make sense to apply sampling.
 
 There are 2 main types of sampling, head sampling and tail sampling.
+
+The {stackstate-product-name} Agent telemetry gateway already applies tail sampling. For its configuration and limitations, see xref:/setup/otel/telemetry-gateway.adoc#_trace_sampling[Gateway trace sampling].
+The examples below apply to self-managed collectors.
 
 == Head sampling
 
@@ -87,18 +90,22 @@ processors:
 
 The example samples:
 
-* A maximum of 500 spans per second
+* traces within a budget of 500 spans per second per collector
 * all spans in traces that have errors up to 33% of the maximum
 * all spans in traces slower than 1 second up to 33% of the maximum
-* other spans up to the maximum rate allowed
+* other spans up to 34% of the maximum
+
+Unused budget is not redistributed; an exhausted policy drops the trace without trying later policies.
+Late spans of retained traces bypass this budget check.
 
 For more details on the configuration options and different policies use the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor[tail sampling readme].
 
-It is, however, not completely set-it-and-forget-it. If its resource usage starts growing you need to scale out to use multiple collectors to handle the tail sampling which will then also require https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/routingconnector/README.md[routing] to route traffic based on trace ID.
+It is, however, not completely set-it-and-forget-it. If its resource usage starts growing you need to scale out to use multiple collectors to handle the tail sampling which will then also require a collector tier with the https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/loadbalancingexporter[load-balancing exporter] in front of the sampling collectors to route traffic based on trace ID.
+The agent chart's current scale-out limitation is documented under xref:/setup/otel/telemetry-gateway.adoc#_scaling[Gateway scaling].
 
 == Sampling traces in combination with span metrics
 
-In the getting started section the collector configuration doesn't include sampling. When adding sampling we want to be careful to keep the metrics that are calculated from traces as accurate as possible. Especially tail-sampling can result in very skewed metrics, because typically the relative amount of errors is much higher. To avoid this we split the traces pipeline into multiple parts and connect them with the forward connector. Modify the config to include the extra connector and sampling processor. And modify the pipelines as shown here:
+In a self-managed collector, when adding sampling we want to be careful to keep the metrics that are calculated from traces as accurate as possible. Especially tail-sampling can result in very skewed metrics, because typically the relative amount of errors is much higher. To avoid this we split the traces pipeline into multiple parts and connect them with the forward connector. Modify the config to include the extra connector and sampling processor. And modify the pipelines as shown here:
 
 [,yaml]
 ----
