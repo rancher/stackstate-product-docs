@@ -102,7 +102,7 @@ These metrics are forwarded to {stackstate-product-name} alongside your applicat
 
 == Trace sampling
 
-The gateway uses the upstream OpenTelemetry tail-sampling processor. It buffers spans for approximately 10 seconds after first receiving a trace, then decides whether to export the spans received so far.
+The gateway uses the upstream OpenTelemetry tail-sampling processor. By default, it buffers spans for approximately 10 seconds after first receiving a trace, then decides whether to export the spans received so far.
 Span metrics are generated before sampling, so sampling does not bias the gateway's request rates, error rates, or duration histograms.
 The platform does not apply another tail-sampling stage to received traces.
 
@@ -121,7 +121,8 @@ A trace is dropped if its spans exceed its matching policy's remaining budget, i
 Unused capacity is not shared between policies, and an exhausted policy does not fall through to the next policy.
 Late spans of retained traces bypass a new budget check, so this is not a strict limit on exporter throughput.
 
-Tune the budget in the agent Helm values:
+Tune sampling in the agent Helm values:
+The waiting-period, capacity, and cache settings require Agent Helm chart version 1.7.27 or later.
 
 [,yaml]
 ----
@@ -129,14 +130,23 @@ otel:
   telemetryGateway:
     traceSampling:
       maxTotalSpansPerSecond: 500
+      decisionWait: 10s
+      numTraces: 50000
+      decisionCache:
+        sampledCacheSize: 0
+        nonSampledCacheSize: 0
 ----
 
-The chart does not expose settings for the wait time, policies, trace-buffer capacity, or decision caches.
+`decisionWait` controls the waiting period; `numTraces` controls trace-entry capacity per pod.
+The cache sizes count remembered keep and drop decisions; zero disables a cache.
+Choose cache sizes substantially larger than `numTraces` to retain decisions longer, and allow for their memory use.
+Longer waiting periods and larger buffers or caches require more memory.
+The sampling policies remain fixed.
 
 === Limitations
 
-* *Late spans*: A span arriving after the decision cannot change it, even if it contains an error. No decision caches are configured. Late spans inherit the decision while the trace entry remains in memory; after eviction, they are evaluated again and can receive a different decision, producing incomplete traces.
-* *Buffer capacity*: The chart leaves `num_traces` unset, so each gateway pod uses the upstream default of 50,000 trace entries. This counts pending traces and remembered decisions, not spans or bytes; memory usage depends on span count and size. When full, the oldest entry is evicted. If its 10-second wait has not finished, its buffered spans are lost. Increasing the export budget does not increase buffer capacity.
+* *Late spans*: A span arriving after the decision cannot change it, even if it contains an error. Decision caches are disabled by default. Without caches, late spans inherit the decision while the trace entry remains in memory; after eviction, they are evaluated again and can receive a different decision, producing incomplete traces.
+* *Buffer capacity*: Each gateway pod defaults to 50,000 trace entries (`numTraces`). This counts pending traces and, when decision caches are disabled, remembered decisions, not spans or bytes; memory usage depends on span count and size. When full, the oldest entry is evicted. If its decision wait has not finished, its buffered spans are lost. Increasing the export budget does not increase buffer capacity.
 * *Restarts*: Buffered spans and remembered decisions are held in memory and are lost if a gateway pod terminates unexpectedly.
 * *SDK sampling*: Spans dropped by an application SDK never reach the gateway. SDK head sampling can therefore hide errors from the tail sampler and reduce the traffic represented by span metrics.
 * *Multiple gateways*: All spans of a trace must reach the same sampling pod, including traces spanning services or clusters. See <<_scaling,Scaling>>.
