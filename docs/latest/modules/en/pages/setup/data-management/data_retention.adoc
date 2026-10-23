@@ -8,6 +8,7 @@
 
 SUSE Observability imposes data retention limits to save storage space and improve performance. You can configure the data retention period to balance the amount of data stored with SUSE Observability performance and data availability.
 
+[#_retention_of_topology_graph_data]
 == Retention of topology graph data
 
 By default, topology graph data will be retained for 30 days. This works in a way that the latest state of topology graph will always be retained; only history older than 30 days will be removed.
@@ -21,12 +22,16 @@ stackstate:
     retentionHours: 144
 ----
 
-Note that by adding more time to the data retention period, the amount of data stored is also going to grow and requires more storage space. This may also affect the performance of the Views.
+[NOTE]
+====
+By adding more time to the data retention period, the amount of data stored grows and requires more storage space. This may also affect the performance of the Views.
+====
 
-When lowering the retention period, it can take some time until disk space is freed up (at least 15 minutes).
+When lowering the retention period, it can take time until disk space is freed up (at least 15 minutes).
 
+[#_troubleshooting_topology_disk_space_issues]
 === Troubleshooting topology disk space issues
-In case of running into disk space issues, a log line - `Not enough replicas was chosen. Reason: {NOT_ENOUGH_STORAGE_SPACE=1` appears in the namenode. Follow the below steps to deal with this scenario:
+In case of running into disk space issues, a log line - `Not enough replicas was chosen. Reason: {NOT_ENOUGH_STORAGE_SPACE=1` appears in the name node. Follow the below steps to deal with this scenario:
 
 * Lower the retention, prepare the instance to recover disk space immediately, and trigger a helm upgrade:
 [,yaml]
@@ -73,17 +78,47 @@ stackstate:
     retentionHours: 144
 ----
 
+[#_retention_of_events_and_logs]
 == Retention of events and logs
 
+[#_suse_observability_data_store]
 === SUSE Observability data store
 
-If you are using the event/logs store provided with SUSE Observability, your data will by default be retained for 30 days. In most cases, the default settings will be sufficient to store all indices for this amount of time.
+Refer the table below to understand the data retention limits for different types of data and profiles in {stackstate-product-name}.
 
+.Data Retention Limits
+[%header,cols="3*"]
+|===
+| Data type | Trial profile limit | Other profiles limit
+
+| Logs | 3 days | 7 days 
+| Traces | 3 days | 7 days 
+| Topology | 3 days | 30 days 
+| Events | 3 days | 30 days
+|===
+
+[IMPORTANT] 
+==== 
+**Supported Retention Policy** 
+
+Configuring retention periods beyond the specified limits for **Logs, Traces, Topology, or Events** is not supported. Only **Metrics** retention can be configured for longer retention periods, up to a maximum limit of **15 months**. 
+====
+
+[#_configure_disk_space_for_elasticsearch]
 ==== Configure disk space for Elasticsearch
 
-In some circumstances it may be necessary to adjust the disk space available to Elasticsearch and how it's allocated to logs and events, for example if you anticipate a lot of data to arrive for a specific data type.
+.Click to view advanced retention parameters (Unsupported beyond specified limits) 
+[%collapsible] 
+==== 
 
-Here is a snippet with the complete disk space and retention config for Elasticsearch, including the default values.
+[WARNING] 
+===== 
+Configuring retention periods for \*\*Logs, Traces, Topology, or Events\*\* beyond the default limits is \*\*unsupported\*\*. Attempting to increase retention for these telemetry types can lead to excessive storage consumption, database performance degradation, and cluster instability. 
+=====
+
+In certain circumstances it may be necessary to adjust the disk space available to Elasticsearch and how it is allocated to logs and events, for example, if you anticipate a lot of data to arrive for a specific data type.
+
+Here is a snippet with the complete disk space and retention configuration for Elasticsearch, including the default values.
 
 [,yaml]
 ----
@@ -102,29 +137,35 @@ stackstate:
       esDiskSpaceShare: 30
       # Number of days to keep the events data on Es
       retention: 30
+      default: 30
 ----
 
 The disk space available for Elasticsearch is configured via the `elasticsearch.volumeClaimTemplate.resources.requests.storage` key. To change this value after the initial installation some xref:/setup/data-management/data_retention.adoc#_resizing_storage[extra steps are required].
 
-NOTE: this is the disk space for each instance of ElasticSearch. For non-HA this is the total available disk space, but for HA there are 3 instances and a replication factor of 1. The end result is that the total available Elasticsearch storage will be `(250Gi * 3) / 2 = 375Gi`.
+[NOTE] 
+=====
+This is the disk space for each instance of ElasticSearch. For non-HA this is the total available disk space, but for HA there are 3 instances and a replication factor of 1. The result is that the total available Elasticsearch storage is `(250Gi * 3) / 2 = 375Gi`.
 Based on the `esDiskSpaceShare` and `retention` a portion of the Elasticsearch disk space is reserved for each data type.
+=====
+====
 
+[#_retention_of_metrics]
 == Retention of metrics
 
-SUSE Observability uses VictoriaMetrics to store metrics. It's configured with a default retention of 30 days. The helm chart allocates disk space and configures the retention period for the 1 or 2 Victoria metrics instances like this:
+{stackstate-product-name} uses VictoriaMetrics to store metrics. The helm chart allocates disk space and configures the retention period *(up to a maximum of* **15 months** *)* for the 1 or 2 Victoria metrics instances like this:
 
 ----
 victoria-metrics-0:
   server:
     persistentVolume:
       size: 250Gi
-    retentionPeriod: 1 # month
+    retentionPeriod: 15 # months
 # For HA setups:
 victoria-metrics-1:
   server:
     persistentVolume:
       size: 250Gi
-    retentionPeriod: 1 # month
+    retentionPeriod: 15 # months
 ----
 
 To change the volume size after the initial installation some xref:/setup/data-management/data_retention.adoc#_resizing_storage[extra steps are required].
@@ -134,6 +175,7 @@ To change the retention period override both `retentionPeriod` keys with the sam
 * The following optional suffixes are supported: h (hour), d (day), w (week), y (year). If no suffix is set the duration is in months.
 * Minimum retention period is 24h or 1 day.
 
+[#_update_suse_observability]
 == Update SUSE Observability
 
 After making changes to the values.yaml SUSE Observability needs to be updated to apply those changes to the runtime. This may cause some short downtime while the services restart. To update SUSE Observability use the same command that was used during installation of SUSE Observability and make sure to include the same configuration files including the changes that have been made:
@@ -141,16 +183,18 @@ After making changes to the values.yaml SUSE Observability needs to be updated t
 * xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[Kubernetes]
 * xref:/setup/install-stackstate/kubernetes_openshift/openshift_install.adoc#_deploy_suse_observability_with_helm[OpenShift]:
 
+[#_resizing_storage]
 == Resizing storage
 
-In most clusters it's possible to resize a persistent volume after it has been created and without interrupting the operation of applications at all. However this can't be done by simply changing the configured storage size in the values.yaml of the SUSE Observability Helm chart. Instead several steps are needed:
+In most clusters it is possible to resize a persistent volume after it has been created and without interrupting the operation of applications at all. However this cannot be done by simply changing the configured storage size in the values.yaml of the SUSE Observability Helm chart. Instead several steps are needed:
 
 . Verify the used storage class can be resized
 . Resize the volumes
 . Update values.yaml and apply change (optional but recommended)
 
-The examples below use the VictoriaMetrics storage as an example. SUSE Observability is installed in the `suse-observability` namespace. The volume is going to be resized to 500Gi.
+The examples below use the VictoriaMetrics storage as an example. {stackstate-product-name} is installed in the `suse-observability` namespace. The volume is resized to 500Gi.
 
+[#_verify_the_storage_class_supports_resizing]
 === Verify the storage class supports resizing
 
 Use the following `kubectl` commands to get the storage class used and check that the `allowVolumeExpansion` is set to true.
@@ -170,13 +214,14 @@ Verify that the output contains this line:
 AllowVolumeExpansion:  True
 ----
 
-If the line is absent or if it's set to `False` please consult with your Kubernetes administrator if resizing is supported and can be enabled.
+If the line is absent or if it is set to `False` please consult with your Kubernetes administrator if resizing is supported and can be enabled.
 
+[#_resize_the_volumes]
 === Resize the volumes
 
-The SUSE Observability Helm chart creates a stateful set, which has a template to create the persistent volume claim (PVC). This template is only used to create the PVC once, after that it won't be applied anymore and it's also not allowed to change it. So to make the PVC's bigger the PVC itself needs to be edited.
+The {stackstate-product-name} Helm chart creates a stateful set, which has a template to create the persistent volume claim (PVC). This template is only used to create the PVC once, after which it is not be applied anymore and it is also not allowed to change it. Hence, to make the PVCs bigger, the PVC itself needs to be edited.
 
-To change the PVC size use the following commands.
+To change the PVC size use the following commands:
 
 [,bash]
 ----
@@ -190,15 +235,15 @@ kubectl patch pvc server-volume-stackstate-victoria-metrics-0-0 -p '{"spec":{"re
 kubectl get pvc --namespace suse-observability
 ----
 
+[#_update_values_yaml_and_apply_the_change]
 === Update values.yaml and apply the change
 
-The change made to the persistent volume claim (PVC) will remain for the lifetime of the PVC, but whenever a clean install is done it will be lost. More importantly however, after resizing the PVC there is now a discrepancy between the cluster state and the definition of the desired state in the values.yaml. Therefore it's recommended to update the values.yaml as well. To circumvent the fact that this change is not allowed, first remove the stateful set (but keep the pods running) to re-create it with the new settings.
+The change made to the Persistent Volume Claim (PVC) remains for the lifetime of the PVC, but whenever a clean install is done it is lost. After resizing the PVC, there is a discrepancy between the cluster state and the definition of the desired state in the values.yaml. Therefore, it is recommended to update the values.yaml as well. To circumvent the fact that this change is not allowed, first remove the stateful set (but keep the pods running) to re-create it with the new settings.
 
 [NOTE]
 ====
-This step doesn't change the size of the PVC itself, so only doing this step will result in no changes at all to the running environment.
+This step does not change the size of the PVC itself, so only doing this step will result in no changes at all to the running environment.
 ====
-
 
 First edit your values.yaml to update the volume size for the PVC's you've just resized. See the sections on xref:/setup/data-management/data_retention.adoc#_retention_of_metrics[Metrics] or xref:/setup/data-management/data_retention.adoc#_retention_of_events_traces_and_logs[Events and Logs].
 
