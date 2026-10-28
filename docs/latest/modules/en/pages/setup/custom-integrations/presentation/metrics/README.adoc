@@ -54,7 +54,7 @@ presentation:
       name: Memory available for scheduling (Custom)
       metricQueries:
       - alias: ${cluster_name} - ${node}
-        expression: max_over_time(kubernetes_state_node_memory_allocatable{cluster_name="${tags['cluster-name']}", node="${name}"}[${__interval}])
+        expression: max_over_time(kubernetes_state_node_memory_allocatable{cluster_name="${tags.singleValue('cluster-name')}", node="${name}"}[${__interval}])
       chart:
         _type: TimeSeriesChart
         unit: bytes(IEC)
@@ -113,12 +113,17 @@ image::k8s/k8s-replica-counts-without-binding.png[The incorrect chart for a sing
 To fix this make the PromQL query specific for a component using information from the component. Filter on enough metric labels to select only the specific time series for the component. This is the "binding" of the correct time series to the component. For anyone experienced in making Grafana dashboards this is similar to a dashboard with parameters that are used in queries on the dashboard. Let's change the query in the metric to this:
 
 ----
-max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags['cluster-name']}", namespace="${tags['namespace']}", deployment="${name}"}[${__interval}])
+max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}", deployment="${name}"}[${__interval}])
 ----
 
 image::k8s/k8s-replica-counts-with-binding.png[After adding the parameterized filters the resulting chart looks as expected, only one time series for this component]
 
-The PromQL query now filters on three labels, `cluster_name`, `namespace` and `deployment`. Instead of specifying an actual value for these labels a variable reference to fields of the component is used. In this case the labels `cluster-name` and `namespace` are used, referenced using `$\{tags['cluster-name']}` and `$\{tags['namespace']}`. Further the component name is referenced with `+${name}+`.  The complete xref:/setup/custom-integrations/presentation/interpolation.adoc#cel_context[CEL Context] gives access to a number of other fields as well.
+The PromQL query now filters on three labels, `cluster_name`, `namespace` and `deployment`. Instead of specifying an actual value for these labels a variable reference to fields of the component is used. In this case the labels `cluster-name` and `namespace` are used, referenced using `$\{tags.singleValue('cluster-name')}` and `$\{tags.singleValue('namespace')}`. `tags` maps each tag key to a list of values, and `singleValue` returns the value of a tag that has exactly one value. Further the component name is referenced with `+${name}+`.  The complete xref:/setup/custom-integrations/presentation/interpolation.adoc#cel_context[CEL Context] gives access to a number of other fields as well.
+
+[CAUTION]
+====
+`tags.singleValue('key')` returns an empty string when the component doesn't have the tag, or has more than one value for it. In PromQL, `label=""` also matches series that don't have that label. Keep a selector in the query that only matches the series of this component, such as `deployment="${name}"` in the example.
+====
 
 image::k8s/k8s-carts-highlights.png[Component Highlights page that shows the labels and component name (both highlighted in red)]
 
@@ -169,13 +174,13 @@ To add more queries to a metric simply repeat xref:/setup/custom-integrations/pr
 - metricId: my-deployment-replica-counts
   name: Replica counts
   metricQueries:
-    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}", deployment="${name}"}[${__interval}])
+    - expression: max_over_time(kubernetes_state_deployment_replicas{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}", deployment="${name}"}[${__interval}])
       alias: Total replicas
-    - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+    - expression: max_over_time(kubernetes_state_deployment_replicas_available{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}",  deployment="${name}"}[${__interval}])
       alias: Available - ${cluster_name} - ${namespace} - ${deployment}
-    - expression: max_over_time(kubernetes_state_deployment_replicas_unavailable{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+    - expression: max_over_time(kubernetes_state_deployment_replicas_unavailable{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}",  deployment="${name}"}[${__interval}])
       alias: Unavailable - ${cluster_name} - ${namespace} - ${deployment}
-    - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.cluster-name}", namespace="${tags.namespace}",  deployment="${name}"}[${__interval}])
+    - expression: min_over_time(kubernetes_state_deployment_replicas_desired{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}",  deployment="${name}"}[${__interval}])
       alias: Desired - ${cluster_name} - ${namespace} - ${deployment}
   chart:
     _type: TimeSeriesChart
@@ -198,7 +203,7 @@ If the multiple time series naturally correspond to other components in the syst
   queries:
   - alias: Restarts - ${container}
     componentIdentifierTemplate: urn:kubernetes:/${cluster_name}:${namespace}:pod/${pod_name}:container/${container}
-    expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags['cluster-name']}", namespace="${tags['namespace']}", pod_name="${name}"})
+    expression: max by (cluster_name, namespace, pod_name, container) (kubernetes_state_container_restarts{cluster_name="${tags.singleValue('cluster-name')}", namespace="${tags.singleValue('namespace')}", pod_name="${name}"})
   chart:
     _type: TimeSeriesChart
     unit: short
