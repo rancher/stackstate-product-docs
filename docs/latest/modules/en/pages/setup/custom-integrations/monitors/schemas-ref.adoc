@@ -164,7 +164,12 @@ A `+${...}+` placeholder is resolved in one of two ways:
 * A placeholder that names a <<promql-parameters,parameter>>, such as `+${tags.namespace}+`, is replaced with the value of that parameter. Parameters are always tried first. A plain parameter name is never evaluated as CEL.
 * Any other placeholder is evaluated as a <<promql-cel,CEL expression>> against the component, for example `+${tags.singleValue('namespace')}+`.
 
-A placeholder that can't be resolved is left in the query unchanged.
+A parameter that the component doesn't have, or a CEL expression that fails, is left in the query unchanged, so the query matches nothing.
+
+[CAUTION]
+====
+`tags.singleValue('key')` always resolves. It returns an empty string when the component doesn't have the tag, or has more than one value for it. In PromQL, `label=""` also matches series that don't have that label, so the query can match unrelated series. Use the parameter `+${tags.key}+` when a component without the tag should match nothing.
+====
 
 [#promql-parameters]
 === Parameters
