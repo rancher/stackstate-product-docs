@@ -191,6 +191,23 @@ When the platform is overloaded, it also processes its own monitoring data late.
 
 When the UI is not available or too slow to use, these checks find the most common problems with `kubectl` and `curl`: crashing or throttled pods, rejected data and data that does not arrive. They are a first check, not a replacement for the SUSE Observability StackPack.
 
+=== Run the check script
+
+The xref::attachment$suse-observability_pipeline_check.sh[suse-observability_pipeline_check.sh] script runs all checks in this section. It reads the metrics twice with an interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. The script does not change anything in the cluster.
+
+[,bash]
+----
+bash suse-observability_pipeline_check.sh [-i <seconds>] [-k] [<namespace>]
+----
+
+* `-i` sets the interval between the two samples, 60 seconds by default.
+* `-k` keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.
+* The namespace defaults to `suse-observability`.
+
+The script needs `kubectl`, `curl` and `awk`. It exits with a non-zero status when it finds a warning or a failure. To run the checks by hand, follow the steps below.
+
+=== Run the checks by hand
+
 You need permission to list pods, to port-forward to pods and services, and to read node metrics through the API server proxy, in the namespace where {stackstate-product-name} runs. Set the namespace and define a helper that reads the metrics endpoint of a pod or service:
 
 [,bash]
@@ -215,7 +232,7 @@ Pod names differ between profiles:
 * Non-HA profiles run the Kafka consumers in `suse-observability-server`. HA profiles run `suse-observability-sync`, `suse-observability-health-sync`, `suse-observability-correlate` and `suse-observability-e2es`.
 
 [#check-restarts]
-=== Restarts and memory
+==== Restarts and memory
 
 List the pods that restarted and the reason for the last restart:
 
@@ -237,7 +254,7 @@ kubectl -n "$NS" get pods -o custom-columns='POD:.metadata.name,CPU_LIMIT:.spec.
 A JVM service close to its memory limit spends more time in garbage collection and processes data more slowly.
 
 [#check-throttling]
-=== CPU throttling
+==== CPU throttling
 
 This script reads the CPU throttling counters of all containers in the namespace from the kubelet, waits a minute, and prints the share of CPU periods in which each container was throttled:
 
@@ -263,7 +280,7 @@ awk 'NR == FNR { a[$1 FS $2] = $3; next }
 A container that is throttled in more than about a quarter of its periods is short of CPU. Raise its CPU limit. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them.
 
 [#check-receiver]
-=== Data arriving at the Receiver
+==== Data arriving at the Receiver
 
 Check that agents send data with a valid API key. The loop covers the single Receiver on non-HA profiles and each Receiver role on HA profiles:
 
@@ -294,7 +311,7 @@ done
 * A growing `events_rejected_size_total{element_type="k8sLogs"}` means logs are rejected. See <<_logs_are_missing>>. On HA profiles this metric is on the logs role.
 
 [#check-kafka-lag]
-=== Kafka consumer lag
+==== Kafka consumer lag
 
 Each consumer reports its own lag. This loop prints the three topics with the highest lag for each consumer that exists in the profile:
 
@@ -321,7 +338,7 @@ Lag that stays high or grows between runs shows which consumer cannot keep up:
 Check CPU throttling and memory of that consumer first, and add resources to it. On non-HA profiles, all of these run in the `server` pod.
 
 [#check-vmagent]
-=== vmagent
+==== vmagent
 
 [,bash]
 ----
@@ -337,7 +354,7 @@ metrics pod/suse-observability-vmagent-0 8429 | awk '
 In a healthy pipeline, the pending queue stays close to zero, the dropped and retry counters stay at zero, and only `2XX` requests grow. A growing queue, retries or non-`2XX` requests mean VictoriaMetrics accepts data slower than it arrives. See <<check-victoriametrics>>. Dropped data is lost.
 
 [#check-otel-collector]
-=== OpenTelemetry Collector
+==== OpenTelemetry Collector
 
 [,bash]
 ----
@@ -356,7 +373,7 @@ metrics pod/suse-observability-otel-collector-0 8888 | awk '
 The failure and drop counters only appear after the first failure.
 
 [#check-clickhouse]
-=== ClickHouse
+==== ClickHouse
 
 [,bash]
 ----
@@ -366,7 +383,7 @@ metrics svc/suse-observability-clickhouse 8001 | grep -E '^ClickHouseProfileEven
 Both counters must stay at zero. Growing values mean ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse, and check its disk usage.
 
 [#check-victoriametrics]
-=== VictoriaMetrics
+==== VictoriaMetrics
 
 [,bash]
 ----
@@ -382,7 +399,7 @@ done
 The share of slow inserts is calculated since the pod started and should stay below 5%. A higher share means VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics. Ignored rows are rejected on ingestion, for example because they exceed the label limits.
 
 [#check-elasticsearch]
-=== Elasticsearch disk
+==== Elasticsearch disk
 
 [,bash]
 ----
