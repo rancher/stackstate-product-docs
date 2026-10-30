@@ -1,0 +1,485 @@
+= Data ingestion pipeline
+:description: How telemetry flows through SUSE Observability, which signals show each stage is overloaded, and how to check the pipeline with or without the UI
+:page-languages: [en, de, es, fr, ja, pt, zh]
+:revdate: 2026-10-30
+:page-revdate: {revdate}
+
+This page describes how data moves through {stackstate-product-name}, from the agents and OpenTelemetry sources to the storage the UI queries. Use it to find the stage that limits throughput when data is delayed, missing or rejected, and to decide what to scale.
+
+The pipeline is the same for every sizing profile. Profiles differ in how many replicas run and in how components are grouped into pods.
+
+== Overview
+
+image::data-ingestion-pipeline.svg[{stackstate-product-name} data ingestion pipeline]
+
+Data passes through five stages:
+
+* *Entry*: the Router receives all agent and OpenTelemetry traffic and routes it by path.
+* *Intake*: the OpenTelemetry Collector and the Receiver authorize and validate data, then write it to a buffer or directly to storage.
+* *Buffer*: Kafka holds topology, health, events and connections until they are processed. vmagent queues metrics before writing them to VictoriaMetrics.
+* *Processing*: services consume Kafka topics and turn the data into topology, health states and stored events.
+* *Storage*: StackGraph holds topology and health, VictoriaMetrics holds metrics, ClickHouse holds traces, and Elasticsearch holds events and logs.
+
+Each stage absorbs short bursts. When a stage cannot keep up for longer, the stage before it fills up: Kafka consumer lag grows, the vmagent queue grows, or the Receiver starts rejecting data.
+
+=== Differences between profiles
+
+Non-HA profiles run a single Receiver that handles all agent data. HA profiles split the Receiver into three deployments:
+
+* `receiver-base` for topology, health, events and metrics.
+* `receiver-process-agent` for process and network connection data.
+* `receiver-logs` for container logs.
+
+On non-HA profiles, Topology sync, Health sync, State, Checks and the API run inside the `server` pod. On HA profiles each runs as its own deployment. The diagram marks these components with a dashed border.
+
+For a description of each pod, see xref:/setup/install-stackstate/advanced-troubleshooting.adoc[Advanced troubleshooting].
+
+== Data paths
+
+[cols="1,3,2"]
+|===
+| Data | Path | Stored in
+
+| Topology
+| Agent → Receiver → Kafka → Topology sync → StackGraph. OpenTelemetry topology derived from traces and metrics goes through the Receiver. Topology derived from logs goes from the collector to Kafka.
+| StackGraph
+
+| Health
+| Agent → Receiver → Kafka → Health sync → StackGraph. Monitors run in Checks and publish health to Kafka.
+| StackGraph
+
+| Events
+| Agent → Receiver → Kafka → Events to Elasticsearch (`e2es`) → Elasticsearch
+| Elasticsearch
+
+| Connections
+| Process agent → Receiver → Kafka → Correlate → Kafka (topology) and vmagent (metrics)
+| StackGraph, VictoriaMetrics
+
+| Metrics
+| Agent, Receiver, Correlate and OpenTelemetry Collector → vmagent → VictoriaMetrics
+| VictoriaMetrics
+
+| Logs
+| Logs agent → Receiver → Elasticsearch. Logs do not pass through Kafka.
+| Elasticsearch
+
+| Traces
+| OpenTelemetry → OpenTelemetry Collector → ClickHouse
+| ClickHouse
+|===
+
+== Signals per stage
+
+For every component, also check CPU throttling and memory usage with the *Overrunning requested CPU* and *Long GCs* monitors. A component that is throttled or close to its memory limit is the first candidate to scale.
+
+The *How to check* column names the SUSE Observability StackPack monitors for each signal, and the step in <<check-without-ui>> that checks it when the UI is not available.
+
+[cols="2,3,3,3"]
+|===
+| Component | Overload signal | How to check | What to scale or change
+
+| OpenTelemetry Collector
+| Refused spans or metric points, export failures, processor drops
+| *OTel Collector - spans refused by a receiver*, *OTel Collector - metric points refused by a receiver* and the export failure and processor drop monitors. Without the UI: <<check-otel-collector>>.
+| Collector CPU and memory. If exports fail, check the destination: ClickHouse, vmagent or the Receiver.
+
+| Receiver
+| Memory limiter saturation, element budget saturation, a growing number of open HTTP requests
+| *Receiver - Memory Limiter saturation*, *Receiver - unique element budget saturation*, *Receiver - hourly element budget saturation*, *Receiver - Active number of http requests growing*. Without the UI: <<check-receiver>>.
+| Receiver memory. Element budgets through environment variables, see <<_receiver_element_budget_saturated>>.
+
+| Receiver (process agent)
+| CPU throttling
+| *Overrunning requested CPU*. Without the UI: <<check-throttling>>.
+| Receiver CPU
+
+| Receiver (logs)
+| Rejected logs
+| *Receiver - Logs rejected*. Without the UI: <<check-receiver>>.
+| Elasticsearch disk or log retention. Reduce noisy log sources.
+
+| vmagent
+| Growing persistent queue, dropped samples, saturated remote write
+| *Vmagent - Persistent queue is droppingData*, *Vmagent - RemoteWrite packets dropped*, *Vmagent - Remote write connection is saturated*. Without the UI: <<check-vmagent>>.
+| VictoriaMetrics resources, then vmagent resources
+
+| Kafka
+| Consumer lag per topic
+| The Kafka lag metric on the Server component, or on Topology sync and Health sync on HA profiles. Without the UI: <<check-kafka-lag>>.
+| The consumer of the lagging topic, not Kafka itself, unless Kafka shows disk or CPU pressure
+
+| Topology sync
+| Sync latency, blocked sync workers
+| *Topology Sync - latency too high*, *Topology Sync - high processing time*, *Topology Sync - Sync Workers blocked*. Without the UI: lag on the topology topics in <<check-kafka-lag>>.
+| Topology sync CPU, or a lower topology update frequency on the source
+
+| Health sync
+| Processing latency
+| *Health sync data processing latency*. Without the UI: lag on the health topics in <<check-kafka-lag>>.
+| Health sync CPU and memory
+
+| State
+| CPU usage. State runs as a single instance and does not scale out.
+| *Overrunning requested CPU*. Without the UI: <<check-throttling>>.
+| State CPU
+
+| Correlate
+| Processing latency
+| *Correlate - Processing latency*. Without the UI: lag on the correlate topics in <<check-kafka-lag>>.
+| Correlate CPU and memory
+
+| Events to Elasticsearch
+| Ingestion latency
+| *Elasticsearch data ingestion latency*, *Elasticsearch data processing latency*. Without the UI: lag on `sts_topology_events` in <<check-kafka-lag>>.
+| `e2es` CPU and memory, then Elasticsearch
+
+| Checks
+| Monitor execution time, failure percentage
+| *Failure percentage*
+| Checks CPU and memory
+
+| ClickHouse
+| Delayed or rejected inserts
+| *ClickHouse - rejected insert*, *ClickHouse - delayed insert*. Without the UI: <<check-clickhouse>>.
+| ClickHouse CPU, memory and disk
+
+| VictoriaMetrics
+| Slow inserts, rejected rows, high churn rate
+| *VictoriaMetrics - Too high slow insert rate*, *VictoriaMetrics - Rows rejected on ingestion*, *VictoriaMetrics - Too high churn rate*. Without the UI: <<check-victoriametrics>>.
+| VictoriaMetrics memory
+
+| StackGraph
+| HBase slow gets
+| *HBase slow gets*
+| HBase region server memory and CPU
+
+| Elasticsearch
+| Volume usage
+| The volume usage view on the Elasticsearch pods. Without the UI: <<check-elasticsearch>>.
+| Elasticsearch disk
+|===
+
+Resources for each component are set in the Helm values of the `suse-observability` chart, for example `stackstate.components.receiver.resources`, `stackstate.components.vmagent.resources`, `victoria-metrics-0.server.resources`, `clickhouse.resources` and `elasticsearch.resources`. On HA profiles, Receiver resources are set per role under `stackstate.components.receiver.split`. After you change values, run `helm upgrade` with all the values files you used for the installation.
+
+== Self-monitoring
+
+{stackstate-product-name} can monitor itself with the *SUSE Observability* StackPack. The StackPack adds monitors, metric bindings and dashboards for the platform components to the Kubernetes topology of the cluster where {stackstate-product-name} runs. Each monitor links to remediation steps.
+
+Prerequisites:
+
+* The Kubernetes StackPack is installed for the cluster that runs {stackstate-product-name}.
+* The SUSE Observability Agent is installed on that cluster and reports to the same instance, or to a second instance used for monitoring.
+
+The agent scrapes platform metrics through pod annotations, which the chart sets by default with `stackstate.components.all.metrics.agentAnnotationsEnabled`. Scraped metric names get a `stackstate_` prefix.
+
+The StackPack provides these dashboards:
+
+* SUSE Observability - Data ingestion
+* SUSE Observability - Topology processing
+* SUSE Observability - Metrics processing
+* SUSE Observability - Logs processing
+* SUSE Observability - Traces processing
+
+[NOTE]
+====
+When the platform is overloaded, it also processes its own monitoring data late. For production installations, consider sending the platform's agent data to a separate {stackstate-product-name} instance.
+====
+
+[#check-without-ui]
+== Check the pipeline without the UI
+
+When the UI is not available or too slow to use, these checks find the most common problems with `kubectl` and `curl`: crashing or throttled pods, rejected data and data that does not arrive. They are a first check, not a replacement for the SUSE Observability StackPack.
+
+=== Run the check script
+
+The xref::attachment$suse-observability_pipeline_check.sh[suse-observability_pipeline_check.sh] script runs all checks in this section. It reads the metrics twice with an interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. The script does not change anything in the cluster.
+
+[,bash]
+----
+bash suse-observability_pipeline_check.sh [-i <seconds>] [-k] [<namespace>]
+----
+
+* `-i` sets the interval between the two samples, 60 seconds by default.
+* `-k` keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.
+* The namespace defaults to `suse-observability`.
+
+The script needs `kubectl`, `curl` and `awk`. It exits with a non-zero status when it finds a warning or a failure. To run the checks by hand, follow the steps below.
+
+=== Run the checks by hand
+
+You need permission to list pods, to port-forward to pods and services, and to read node metrics through the API server proxy, in the namespace where {stackstate-product-name} runs. Set the namespace and define a helper that reads the metrics endpoint of a pod or service:
+
+[,bash]
+----
+NS=suse-observability
+
+metrics() {
+  kubectl -n "$NS" port-forward "$1" 19999:"$2" >/dev/null 2>&1 &
+  pf=$!
+  sleep 3
+  curl -s "localhost:19999${3:-/metrics}"
+  kill "$pf"
+  wait "$pf" 2>/dev/null
+}
+----
+
+The metrics on these endpoints do not have the `stackstate_` prefix that the agent adds, unless the name already starts with it. Most values are counters since the pod started. Run a check twice, a few minutes apart, and look at whether the value grows.
+
+Pod names differ between profiles:
+
+* Non-HA profiles run a single `suse-observability-receiver`. HA profiles run `suse-observability-receiver-base`, `suse-observability-receiver-logs` and `suse-observability-receiver-process-agent`.
+* Non-HA profiles run the Kafka consumers in `suse-observability-server`. HA profiles run `suse-observability-sync`, `suse-observability-health-sync`, `suse-observability-correlate` and `suse-observability-e2es`.
+
+[#check-restarts]
+==== Restarts and memory
+
+List the pods that restarted and the reason for the last restart:
+
+[,bash]
+----
+kubectl -n "$NS" get pods -o custom-columns='RESTARTS:.status.containerStatuses[*].restartCount,LAST_REASON:.status.containerStatuses[*].lastState.terminated.reason,POD:.metadata.name' | awk 'NR == 1 || $1 ~ /[1-9]/'
+----
+
+`OOMKilled` means the container needs more memory. For other reasons, check the logs of the previous container with `kubectl -n "$NS" logs <pod> --previous`.
+
+Compare the current usage with the limits:
+
+[,bash]
+----
+kubectl -n "$NS" top pods --containers
+kubectl -n "$NS" get pods -o custom-columns='POD:.metadata.name,CPU_LIMIT:.spec.containers[*].resources.limits.cpu,MEMORY_LIMIT:.spec.containers[*].resources.limits.memory'
+----
+
+A JVM service close to its memory limit spends more time in garbage collection and processes data more slowly.
+
+[#check-throttling]
+==== CPU throttling
+
+This script reads the CPU throttling counters of all containers in the namespace from the kubelet, waits a minute, and prints the share of CPU periods in which each container was throttled:
+
+[,bash]
+----
+sample() {
+  for node in $(kubectl -n "$NS" get pods -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u); do
+    kubectl get --raw "/api/v1/nodes/$node/proxy/metrics/cadvisor"
+  done | awk -v ns="$NS" '
+    /^container_cpu_cfs_(throttled_)?periods_total/ && index($0, "namespace=\"" ns "\"") && !/container=""/ {
+      match($0, /pod="[^"]*"/); pod = substr($0, RSTART + 5, RLENGTH - 6)
+      match($0, /container="[^"]*"/); c = substr($0, RSTART + 11, RLENGTH - 12)
+      print ($1 ~ /throttled/ ? "t" : "p"), pod "/" c, $2
+    }'
+}
+sample > /tmp/throttle-1; sleep 60; sample > /tmp/throttle-2
+awk 'NR == FNR { a[$1 FS $2] = $3; next }
+     { d[$1 FS $2] = $3 - a[$1 FS $2] }
+     END { for (k in d) if (k ~ /^p / && d[k] > 0) { split(k, s, FS); printf "%5.1f%%  %s\n", 100 * d["t" FS s[2]] / d[k], s[2] } }' \
+  /tmp/throttle-1 /tmp/throttle-2 | sort -nr | head -10
+----
+
+A container that is throttled in more than about a quarter of its periods is short of CPU. Raise its CPU limit. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them.
+
+[#check-receiver]
+==== Data arriving at the Receiver
+
+Check that agents send data with a valid API key. The loop covers the single Receiver on non-HA profiles and each Receiver role on HA profiles:
+
+[,bash]
+----
+for r in $(kubectl -n "$NS" get deploy -o name | grep -E '/suse-observability-receiver(-|$)'); do
+  echo "== $r"
+  metrics "$r" 9404 | awk '
+    /^receiver_agent_request_total\{/ { match($0, /valid_api_key="[^"]*"/); n[substr($0, RSTART, RLENGTH)] += $NF }
+    END { for (k in n) print k, n[k] }'
+done
+----
+
+The `valid_api_key="true"` count must grow between two runs. If it does not, the agents do not reach the Receiver. Check the agent logs and the ingress or route in front of the Router. A growing `valid_api_key="false"` count means some agents use a wrong API key.
+
+Check the Receiver limits:
+
+[,bash]
+----
+for r in $(kubectl -n "$NS" get deploy -o name | grep -E '/suse-observability-receiver(-|$)'); do
+  echo "== $r"
+  metrics "$r" 9404 | grep -E '^stackstate_receiver_(memory_limiter_(claimed_size|limit)|unique_element_passed_(count|max)|events_rejected_size_total)'
+done
+----
+
+* `memory_limiter_claimed_size` above 80% of `memory_limiter_limit` means the Receiver is short of memory and starts rejecting requests. Add memory to the Receiver.
+* `unique_element_passed_count` close to `unique_element_passed_max` for an `element_type` means that budget is saturated. See <<_receiver_element_budget_saturated>>. On HA profiles these metrics are on the process agent role.
+* A growing `events_rejected_size_total{element_type="k8sLogs"}` means logs are rejected. See <<_logs_are_missing>>. On HA profiles this metric is on the logs role.
+
+[#check-kafka-lag]
+==== Kafka consumer lag
+
+Each consumer reports its own lag. This loop prints the three topics with the highest lag for each consumer that exists in the profile:
+
+[,bash]
+----
+for d in server sync health-sync correlate e2es; do
+  kubectl -n "$NS" get deploy "suse-observability-$d" >/dev/null 2>&1 || continue
+  echo "== $d"
+  metrics "deploy/suse-observability-$d" 9404 | awk '
+    /^kafka_consumer_consumer_fetch_manager_metrics_records_lag\{/ {
+      match($0, /topic="[^"]*"/); lag[substr($0, RSTART + 7, RLENGTH - 8)] += $NF
+    }
+    END { for (t in lag) printf "%12d  %s\n", lag[t], t }' | sort -nr | head -3
+done
+----
+
+Lag that stays high or grows between runs shows which consumer cannot keep up:
+
+* `sts_topo_*` and `sts_topology_stream`: Topology sync.
+* `sts_health_sync`, `sts_intake_health` and `sts_health_sync_settings`: Health sync.
+* `sts_correlate_*` and `sts_correlated_connections`: Correlate.
+* `sts_topology_events`: Events to Elasticsearch.
+
+Check CPU throttling and memory of that consumer first, and add resources to it. On non-HA profiles, all of these run in the `server` pod.
+
+[#check-vmagent]
+==== vmagent
+
+[,bash]
+----
+metrics pod/suse-observability-vmagent-0 8429 | awk '
+  /^(vm_persistentqueue_bytes_(pending|dropped_total)|vmagent_remotewrite_(packets_dropped_total|samples_dropped_total|retries_count_total|requests_total))[{ ]/ {
+    name = $1; sub(/\{.*/, "", name)
+    if (match($0, /status_code="[^"]*"/)) name = name "{" substr($0, RSTART, RLENGTH) "}"
+    sum[name] += $NF
+  }
+  END { for (n in sum) print n, sum[n] }' | sort
+----
+
+In a healthy pipeline, the pending queue stays close to zero, the dropped and retry counters stay at zero, and only `2XX` requests grow. A growing queue, retries or non-`2XX` requests mean VictoriaMetrics accepts data slower than it arrives. See <<check-victoriametrics>>. Dropped data is lost.
+
+[#check-otel-collector]
+==== OpenTelemetry Collector
+
+[,bash]
+----
+metrics pod/suse-observability-otel-collector-0 8888 | awk '
+  /^otelcol_(receiver_refused_|exporter_send_failed_|processor_dropped_|exporter_queue_)/ {
+    name = $1; sub(/\{.*/, "", name)
+    if (match($0, /(receiver|exporter|processor)="[^"]*"/)) name = name "{" substr($0, RSTART, RLENGTH) "}"
+    sum[name] += $NF
+  }
+  END { for (n in sum) printf "%s %.0f\n", n, sum[n] }' | sort
+----
+
+* Growing `otelcol_receiver_refused_*` counters mean the collector refuses incoming data, usually because its memory limiter is reached. Add memory and CPU to the collector.
+* An `otelcol_exporter_queue_size` close to `otelcol_exporter_queue_capacity`, or growing `otelcol_exporter_send_failed_*` counters, mean the destination does not accept data fast enough. `clickhousests` writes traces to ClickHouse, `prometheusremotewrite/victoria-metrics` writes metrics and `sts_kafka_exporter` writes topology to Kafka.
+
+The failure and drop counters only appear after the first failure.
+
+[#check-clickhouse]
+==== ClickHouse
+
+[,bash]
+----
+metrics svc/suse-observability-clickhouse 8001 | grep -E '^ClickHouseProfileEvents_(RejectedInserts|DelayedInserts) '
+----
+
+Both counters must stay at zero. Growing values mean ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse, and check its disk usage.
+
+[#check-victoriametrics]
+==== VictoriaMetrics
+
+[,bash]
+----
+for v in $(kubectl -n "$NS" get pods -o name | grep -E 'victoria-metrics-[0-9]+-0$'); do
+  metrics "$v" 8428 | awk -v pod="$v" '
+    /^vm_slow_row_inserts_total / { slow = $NF }
+    /^vm_rows_inserted_total\{type="promremotewrite"\}/ { rows = $NF }
+    /^vm_rows_ignored_total\{/ { ignored += $NF }
+    END { printf "%s slow inserts %.1f%%, ignored rows %d\n", pod, 100 * slow / rows, ignored }'
+done
+----
+
+The share of slow inserts is calculated since the pod started and should stay below 5%. A higher share means VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics. Ignored rows are rejected on ingestion, for example because they exceed the label limits.
+
+[#check-elasticsearch]
+==== Elasticsearch disk
+
+[,bash]
+----
+metrics svc/suse-observability-elasticsearch-master 9200 '/_cat/allocation?v&h=node,disk.percent,disk.used,disk.avail'
+----
+
+When disk usage is high, the Receiver lowers the log budget and rejects more logs. Increase the Elasticsearch disk size or reduce the log retention.
+
+== Runbooks
+
+These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, use the matching step in <<check-without-ui>> instead of the monitor.
+
+=== Topology is delayed or components are missing
+
+. Check the Kafka consumer lag for the topology topics. If lag grows, Topology sync cannot keep up.
+. Check the Topology sync latency and the *Topology Sync - Sync Workers blocked* monitor.
+. If a sync worker is blocked, restart the pod that runs Topology sync, `sync` on HA profiles or `server` on non-HA profiles. Check its logs for the cause after the restart.
+. If latency is high but no worker is blocked, check CPU throttling and add CPU to Topology sync. More CPU allows more parallel processing.
+. If one integration causes most of the load, reduce how often that source sends topology.
+
+=== Receiver element budget saturated
+
+The Receiver limits how many unique agents, components, connections and relations it accepts. When a budget is saturated, the Receiver drops data for that element type, which shows up as missing topology or metrics.
+
+. Find the saturated `element_type` in the *Receiver - unique element budget saturation* monitor.
+. Raise the matching limit with an environment variable on the Receiver:
++
+[,yaml]
+----
+stackstate:
+  components:
+    receiver:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_receiver_processAgent_maxComponents: "<new limit>"
+----
++
+The variables are `CONFIG_FORCE_stackstate_receiver_processAgent_maxAgents`, `..._maxComponents`, `..._maxConnections` and `..._maxRelations`.
+. Run `helm upgrade`. A higher budget increases the load on Correlate and Topology sync, so watch their latency afterwards.
+
+=== Receiver rejects data or requests time out
+
+. Check *Receiver - Memory Limiter saturation*. If it stays high, add memory to the Receiver.
+. Check *Receiver - Active number of http requests growing*. A steady increase usually means the Receiver cannot write to Kafka. Check Kafka health, then restart the Receiver.
+. Check CPU throttling on the Receiver pods. On HA profiles, check each Receiver role separately.
+
+=== Health states are delayed
+
+. Check the Kafka consumer lag for the health topics and the *Health sync data processing latency* monitor.
+. Add CPU to Health sync. Check JVM heap usage and garbage collection time with the *Long GCs* monitor.
+. If State shows high CPU usage, add CPU to State. State runs as a single instance and cannot be scaled out.
+
+=== Metrics are delayed or missing
+
+. Check the vmagent monitors. A growing persistent queue or dropped samples means VictoriaMetrics accepts data slower than it arrives.
+. Check the vmagent logs for write errors to VictoriaMetrics.
+. Check *VictoriaMetrics - Too high slow insert rate* and the churn rate monitors. Add memory to VictoriaMetrics if slow inserts are high.
+. If the problem is only in OpenTelemetry metrics, check the collector's export failure monitors.
+
+=== Logs are missing
+
+. Check *Receiver - Logs rejected*. Each log source gets a budget based on Elasticsearch disk space and log retention.
+. If a single source sends much more than usual, for example after debug logging was enabled, reduce its log volume.
+. If the volume is expected, increase Elasticsearch disk space or reduce the log retention.
+
+=== Events are delayed
+
+. Check the *Elasticsearch data ingestion latency* and *Elasticsearch data processing latency* monitors.
+. Add CPU to `e2es`. Check Elasticsearch volume usage and CPU.
+
+=== Traces are missing
+
+. Check the OpenTelemetry Collector monitors for refused spans, export failures and processor drops.
+. Refused spans with a busy collector mean the collector needs more CPU or memory.
+. Export failures mean the destination does not accept data. Check the ClickHouse delayed and rejected insert monitors.
+
+=== Process and connection data is delayed
+
+. Check the Kafka consumer lag for the connection topics and the Correlate processing latency.
+. Check CPU throttling on Correlate and on the Receiver process agent role.
+. If latency stays high after you add resources, contact {stackstate-product-name} support.
+
+If none of these steps help, collect a xref:/setup/install-stackstate/support-package-logs.adoc[Support Package (Logs)] and a xref:/setup/install-stackstate/support-package-performance.adoc[Support Package (Performance)], and contact support.
