@@ -66,8 +66,8 @@ arguments:
 * `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
 * `threshold`: A numeric threshold to compare against.
 * `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in {stackstate-product-name} and "DEVIATING" as orange, to denote different severity.
-* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be <<bind-monitor-results-to-components,bound to>>.
-* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
+* `urnTemplate`: A template to construct the urn of the component a result of the monitor will be <<bind-monitor-results-to-components,bound to>>. Placeholders can contain <<template-expressions,expressions>>.
+* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder, or an <<template-expressions,expression>>.
 
 === Derived State
 
@@ -111,7 +111,7 @@ arguments:
 * `comparator`: Choose one of LTE/LT/GTE/GT to compare the threshold against the metric. Time series for which `<metric> <comparator> <threshold>` holds true will produce the failure state.
 * `threshold`: A numeric threshold to compare against.
 * `failureState`: Either "CRITICAL" or "DEVIATING". "CRITICAL" will show as read in {stackstate-product-name} and "DEVIATING" as orange, to denote different severity.
-* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder.
+* `titleTemplate`: A title for the result of a monitor. Because multiple monitor results can bind to the same component, it's possible to substitute time series labels using the `+${my_label}+` placeholder, or an <<template-expressions,expression>>.
 
 [#dynamic-threshold]
 === Dynamic Threshold
@@ -201,4 +201,23 @@ The identifier is shown as `urn:kubernetes:/preprod-dev.preprod.stackstate.io:ca
 ----
 
 xref:/setup/custom-integrations/monitors/troubleshooting.adoc#verifying-the-results-of-a-monitor[To verify] whether the `urnTemplate` is correct, is explained further below.
+
+[#template-expressions]
+=== Expressions in templates
+
+Available from {stackstate-product-name} {next-release-version}.
+
+A placeholder in `urnTemplate` or `titleTemplate` can contain a https://cel.dev[CEL] expression instead of a label name. The labels of the time series are available in the `labels` map. A placeholder that's only a label name, such as `+${namespace}+`, is still replaced by the value of that label.
+
+In a <<topological-threshold>> monitor, a `titleTemplate` expression can also use the component the time series was queried for, as `name`, `identifiers`, `tags` and `properties`. For example, `+${tags.singleValue('namespace')}+`.
+
+For example, PromQL drops labels with an empty value. To bind time series with and without a `service_namespace` label, replace a missing label with an empty string:
+
+----
+  ...
+  urnTemplate: "urn:opentelemetry:namespace/${'service_namespace' in labels ? labels.service_namespace : ''}:service/${service_name}"
+  ...
+----
+
+When a label is missing or an expression can't be evaluated, the monitor reports an error for that time series.
 
