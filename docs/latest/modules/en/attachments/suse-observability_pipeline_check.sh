@@ -3,6 +3,8 @@
 
 INTERVAL=60
 KEEP=false
+ALL_CHECKS="pods cpu memory volumes receiver kafka vmagent otel clickhouse victoriametrics elasticsearch"
+CHECKS=$ALL_CHECKS
 
 usage() {
   cat <<EOF
@@ -15,6 +17,8 @@ Usage: $0 [options] [<namespace>]
 
 options:
   -i <seconds>  Interval between the two samples, default $INTERVAL
+  -c <checks>   Comma-separated list of checks to run, default all:
+                ${ALL_CHECKS// /,}
   -k            Keep the collected samples in a directory in the current directory
   -h            Print this help
 
@@ -22,18 +26,19 @@ options:
   The namespace that is running SUSE Observability, or
   "suse-observability" when not specified
 
-Required permissions in the namespace: list pods, create pods/portforward.
+Required permissions in the namespace: list pods, get pods.metrics.k8s.io, create pods/portforward.
 Required cluster permission for the CPU throttling and volume checks: get nodes/proxy.
 Without it, the script compares CPU and memory usage from pods.metrics.k8s.io with the
 limits instead. That CPU check is an approximation, it does not measure throttling.
 EOF
 }
 
-while getopts "hki:" option; do
+while getopts "hki:c:" option; do
   case $option in
     h) usage; exit 0;;
     k) KEEP=true;;
     i) INTERVAL=$OPTARG;;
+    c) CHECKS=${OPTARG//,/ };;
     \?) echo "ERROR: Invalid option"; exit 1;;
   esac
 done
@@ -48,6 +53,21 @@ if [ "$INTERVAL" -lt 10 ]; then
   echo "ERROR: The interval must be at least 10 seconds"
   exit 1
 fi
+
+for c in $CHECKS; do
+  case " $ALL_CHECKS " in
+    *" $c "*) ;;
+    *) echo "ERROR: Unknown check '$c', use one of: ${ALL_CHECKS// /,}"; exit 1;;
+  esac
+done
+
+wants() {
+  local c
+  for c in "$@"; do
+    case " $CHECKS " in *" $c "*) return 0;; esac
+  done
+  return 1
+}
 
 for cmd in kubectl curl awk sed sort mktemp; do
   if ! command -v "$cmd" &>/dev/null; then
@@ -149,27 +169,42 @@ running_pods() {
 discover() {
   local pod
   : > "$WORK/targets"
-  for pod in $(running_pods 'app.kubernetes.io/component in (receiver,receiver-base,receiver-logs,receiver-process-agent)'); do
-    echo "receiver $pod 9404 $KEEP_RECEIVER" >> "$WORK/targets"
-  done
-  for pod in $(running_pods 'app.kubernetes.io/component in (server,sync,health-sync,correlate,e2es)'); do
-    echo "consumer $pod 9404 $KEEP_CONSUMER" >> "$WORK/targets"
-  done
-  for pod in $(running_pods 'app.kubernetes.io/component=vmagent'); do
-    echo "vmagent $pod 8429 $KEEP_VMAGENT" >> "$WORK/targets"
-  done
-  for pod in $(running_pods 'app.kubernetes.io/name=opentelemetry-collector'); do
-    echo "otel $pod 8888 $KEEP_OTEL" >> "$WORK/targets"
-  done
-  for pod in $(running_pods 'app.kubernetes.io/name=clickhouse'); do
-    echo "clickhouse $pod 8001 $KEEP_CLICKHOUSE" >> "$WORK/targets"
-  done
-  for pod in $(running_pods 'app.kubernetes.io/name in (victoria-metrics-0,victoria-metrics-1)'); do
-    echo "vm $pod 8428 $KEEP_VM" >> "$WORK/targets"
-  done
+  if wants receiver; then
+    for pod in $(running_pods 'app.kubernetes.io/component in (receiver,receiver-base,receiver-logs,receiver-process-agent)'); do
+      echo "receiver $pod 9404 $KEEP_RECEIVER" >> "$WORK/targets"
+    done
+  fi
+  if wants kafka; then
+    for pod in $(running_pods 'app.kubernetes.io/component in (server,sync,health-sync,correlate,e2es)'); do
+      echo "consumer $pod 9404 $KEEP_CONSUMER" >> "$WORK/targets"
+    done
+  fi
+  if wants vmagent; then
+    for pod in $(running_pods 'app.kubernetes.io/component=vmagent'); do
+      echo "vmagent $pod 8429 $KEEP_VMAGENT" >> "$WORK/targets"
+    done
+  fi
+  if wants otel; then
+    for pod in $(running_pods 'app.kubernetes.io/name=opentelemetry-collector'); do
+      echo "otel $pod 8888 $KEEP_OTEL" >> "$WORK/targets"
+    done
+  fi
+  if wants clickhouse; then
+    for pod in $(running_pods 'app.kubernetes.io/name=clickhouse'); do
+      echo "clickhouse $pod 8001 $KEEP_CLICKHOUSE" >> "$WORK/targets"
+    done
+  fi
+  if wants victoriametrics; then
+    for pod in $(running_pods 'app.kubernetes.io/name in (victoria-metrics-0,victoria-metrics-1)'); do
+      echo "vm $pod 8428 $KEEP_VM" >> "$WORK/targets"
+    done
+  fi
   NODES=$(kubectl -n "$NAMESPACE" get pods --field-selector=status.phase=Running \
     -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u)
-  ES_POD=$(running_pods 'app.kubernetes.io/name=elasticsearch,app.kubernetes.io/component=master' | head -1)
+  ES_POD=""
+  if wants elasticsearch; then
+    ES_POD=$(running_pods 'app.kubernetes.io/name=elasticsearch,app.kubernetes.io/component=master' | head -1)
+  fi
 }
 
 sample() {
@@ -181,13 +216,17 @@ sample() {
     (fetch "$pod" "$port" /metrics | normalize "$kind" "$pod" "$keep" > "$dir/$kind-$pod.tsv") &
   done < "$WORK/targets"
   for node in $NODES; do
-    (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics/cadvisor" 2>/dev/null | normalize cadvisor "$node" "$KEEP_CADVISOR" > "$dir/cadvisor-$node.tsv") &
-    (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics" 2>/dev/null | normalize kubelet "$node" "$KEEP_KUBELET" > "$dir/kubelet-$node.tsv") &
+    if wants cpu memory; then
+      (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics/cadvisor" 2>/dev/null | normalize cadvisor "$node" "$KEEP_CADVISOR" > "$dir/cadvisor-$node.tsv") &
+    fi
+    if wants volumes && [ "$n" = 2 ]; then
+      (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics" 2>/dev/null | normalize kubelet "$node" "$KEEP_KUBELET" > "$dir/kubelet-$node.tsv") &
+    fi
   done
-  (kubectl -n "$NAMESPACE" get pods.metrics.k8s.io 2>/dev/null \
+  wants cpu memory && (kubectl -n "$NAMESPACE" get pods.metrics.k8s.io 2>/dev/null \
     -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.window}{"|"}{range .containers[*]}{.name}{"="}{.usage.cpu}{"="}{.usage.memory}{";"}{end}{"\n"}{end}' \
     | podmetrics usage > "$dir/usage.tsv") &
-  if [ "$n" = 2 ]; then
+  if wants cpu memory && [ "$n" = 2 ]; then
     (kubectl -n "$NAMESPACE" get pods --field-selector=status.phase=Running \
       -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.containers[*]}{.name}{"="}{.resources.limits.cpu}{"="}{.resources.limits.memory}{";"}{end}{"\n"}{end}' \
       | podmetrics limit > "$dir/limits.tsv") &
@@ -539,16 +578,15 @@ check_elasticsearch() {
 }
 
 echo "Checking the data ingestion pipeline in context $CONTEXT, namespace $NAMESPACE"
-discover
-if [ ! -s "$WORK/targets" ]; then
+if [ -n "$(running_pods 'app.kubernetes.io/component=sync')" ]; then
+  echo "Profile: HA"
+elif [ -n "$(running_pods 'app.kubernetes.io/component in (server,receiver)')" ]; then
+  echo "Profile: non-HA"
+else
   echo "No SUSE Observability pods found in namespace $NAMESPACE. Exiting."
   exit 1
 fi
-if grep -q '^consumer [^ ]*-sync-' "$WORK/targets"; then
-  echo "Profile: HA"
-else
-  echo "Profile: non-HA"
-fi
+discover
 echo "Taking the first sample"
 sample 1
 echo "Waiting $INTERVAL seconds"
@@ -558,17 +596,17 @@ sample 2
 SECS=$(( $(cat "$WORK/sample-2/time") - $(cat "$WORK/sample-1/time") ))
 : > "$WORK/levels"
 
-check_pods | section "Pods"
-check_cpu | section "CPU throttling"
-check_memory | section "Memory"
-check_volumes | section "Volumes"
-check_receiver | section "Receiver"
-check_kafka | section "Kafka consumer lag"
-check_vmagent | section "vmagent"
-check_otel | section "OpenTelemetry Collector"
-check_clickhouse | section "ClickHouse"
-check_vm | section "VictoriaMetrics"
-check_elasticsearch | section "Elasticsearch"
+wants pods && check_pods | section "Pods"
+wants cpu && check_cpu | section "CPU throttling"
+wants memory && check_memory | section "Memory"
+wants volumes && check_volumes | section "Volumes"
+wants receiver && check_receiver | section "Receiver"
+wants kafka && check_kafka | section "Kafka consumer lag"
+wants vmagent && check_vmagent | section "vmagent"
+wants otel && check_otel | section "OpenTelemetry Collector"
+wants clickhouse && check_clickhouse | section "ClickHouse"
+wants victoriametrics && check_vm | section "VictoriaMetrics"
+wants elasticsearch && check_elasticsearch | section "Elasticsearch"
 
 FAILS=$(grep -c '^FAIL$' "$WORK/levels")
 WARNS=$(grep -c '^WARN$' "$WORK/levels")

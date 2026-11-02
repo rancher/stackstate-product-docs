@@ -73,7 +73,7 @@ For a description of each pod, see xref:/setup/install-stackstate/advanced-troub
 
 For every component, also check CPU throttling and memory usage with the *Overrunning requested CPU* and *Long GCs* monitors. A component that is throttled or close to its memory limit is the first candidate to scale.
 
-The *How to check* column names the SUSE Observability StackPack monitors for each signal, and the step in <<check-without-ui>> that checks it when the UI is not available.
+The *How to check* column names the SUSE Observability StackPack monitors for each signal, and the check in <<check-without-ui>> that covers it when the UI is not available.
 
 [cols="2,3,3,3"]
 |===
@@ -189,151 +189,70 @@ When the platform is overloaded, it also processes its own monitoring data late.
 [#check-without-ui]
 == Check the pipeline without the UI
 
-When the UI is not available or too slow to use, these checks find the most common problems with `kubectl` and `curl`: crashing or throttled pods, rejected data and data that does not arrive. They are a first check, not a replacement for the SUSE Observability StackPack.
-
-=== Run the check script
-
-The xref::attachment$suse-observability_pipeline_check.sh[suse-observability_pipeline_check.sh] script runs all checks in this section. It reads the metrics twice with an interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. The script does not change anything in the cluster.
+When the UI is not available or too slow to use, the xref::attachment$suse-observability_pipeline_check.sh[suse-observability_pipeline_check.sh] script finds the most common problems with `kubectl` and `curl`: crashing or throttled pods, rejected data and data that does not arrive. It is a first check, not a replacement for the SUSE Observability StackPack. The script does not change anything in the cluster.
 
 [,bash]
 ----
-bash suse-observability_pipeline_check.sh [-i <seconds>] [-k] [<namespace>]
+bash suse-observability_pipeline_check.sh [-i <seconds>] [-c <checks>] [-k] [<namespace>]
 ----
 
 * `-i` sets the interval between the two samples, 60 seconds by default.
+* `-c` runs only the given checks, for example `-c cpu,kafka`. The check names are listed in the sections below. All checks run by default.
 * `-k` keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.
 * The namespace defaults to `suse-observability`.
 
-The script needs `kubectl`, `curl` and `awk`, and the permissions described in <<check-by-hand>>. Without permission on `nodes/proxy`, it skips the volume check and compares CPU and memory usage with the limits instead of measuring CPU throttling. It exits with a non-zero status when it finds a warning or a failure. To run the checks by hand, follow the steps below.
+The script reads the metrics endpoints of the platform components through `kubectl port-forward`, and the node metrics through the API server proxy. It reads all metrics twice with the interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. The script exits with a non-zero status when it finds a warning or a failure. It needs `kubectl`, `curl` and `awk`.
 
-[#check-by-hand]
-=== Run the checks by hand
+[#check-permissions]
+=== Required permissions
 
-You need permission to list pods, to read `pods.metrics.k8s.io` and to port-forward to pods and services in the namespace where {stackstate-product-name} runs. The CPU throttling and volume checks read the kubelet metrics through the API server proxy, which needs cluster-wide `get` permission on `nodes/proxy`. The default `view`, `edit` and `admin` roles do not include it. Set the namespace and define a helper that reads the metrics endpoint of a pod or service:
+* In the namespace where {stackstate-product-name} runs: list pods, get `pods.metrics.k8s.io`, and create `pods/portforward`.
+* For the CPU throttling and volume checks: cluster-wide `get` on `nodes/proxy`. The default `view`, `edit` and `admin` roles do not include it, and some managed node types, such as serverless nodes, do not serve the kubelet metrics. Without it, the script skips the volume check and compares CPU and memory usage with the limits instead of measuring throttling.
 
-[,bash]
-----
-NS=suse-observability
-
-metrics() {
-  kubectl -n "$NS" port-forward "$1" 19999:"$2" >/dev/null 2>&1 &
-  pf=$!
-  sleep 3
-  curl -s "localhost:19999${3:-/metrics}"
-  kill "$pf"
-  wait "$pf" 2>/dev/null
-}
-----
-
-The metrics on these endpoints do not have the `stackstate_` prefix that the agent adds, unless the name already starts with it. Most values are counters since the pod started. Run a check twice, a few minutes apart, and look at whether the value grows.
-
-Pod names differ between profiles:
-
-* Non-HA profiles run a single `suse-observability-receiver`. HA profiles run `suse-observability-receiver-base`, `suse-observability-receiver-logs` and `suse-observability-receiver-process-agent`.
-* Non-HA profiles run the Kafka consumers in `suse-observability-server`. HA profiles run `suse-observability-sync`, `suse-observability-health-sync`, `suse-observability-correlate` and `suse-observability-e2es`.
+The metrics on these endpoints do not have the `stackstate_` prefix that the agent adds, unless the name already starts with it.
 
 [#check-restarts]
-==== Restarts and memory
+=== Pods and memory
 
-List the pods that restarted and the reason for the last restart:
+Check names: `pods`, `memory`.
 
-[,bash]
-----
-kubectl -n "$NS" get pods -o custom-columns='RESTARTS:.status.containerStatuses[*].restartCount,LAST_REASON:.status.containerStatuses[*].lastState.terminated.reason,POD:.metadata.name' | awk 'NR == 1 || $1 ~ /[1-9]/'
-----
-
-`OOMKilled` means the container needs more memory. For other reasons, check the logs of the previous container with `kubectl -n "$NS" logs <pod> --previous`.
-
-Compare the current usage with the limits:
-
-[,bash]
-----
-kubectl -n "$NS" top pods --containers
-kubectl -n "$NS" get pods -o custom-columns='POD:.metadata.name,CPU_LIMIT:.spec.containers[*].resources.limits.cpu,MEMORY_LIMIT:.spec.containers[*].resources.limits.memory'
-----
-
-A JVM service close to its memory limit spends more time in garbage collection and processes data more slowly.
+* `pods` reports pods that are not running or not ready, containers that restarted during the check, and containers that restarted before. `OOMKilled` as the last reason means the container needs more memory. For other reasons, check the logs of the previous container with `kubectl -n <namespace> logs <pod> -c <container> --previous`.
+* `memory` reports containers that use 95% or more of their memory limit. A JVM service close to its memory limit spends more time in garbage collection and processes data more slowly.
 
 [#check-throttling]
-==== CPU throttling
+=== CPU throttling
 
-This script reads the CPU throttling counters of all containers in the namespace from the kubelet, waits a minute, and prints the share of CPU periods in which each container was throttled. The counters are matched by container ID, because a restarted or rescheduled pod keeps its name:
+Check name: `cpu`.
 
-[,bash]
-----
-sample() {
-  for node in $(kubectl -n "$NS" get pods -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u); do
-    kubectl get --raw "/api/v1/nodes/$node/proxy/metrics/cadvisor"
-  done | awk -v ns="$NS" '
-    /^container_cpu_cfs_(throttled_)?periods_total/ && index($0, "namespace=\"" ns "\"") && !/container=""/ {
-      match($0, /pod="[^"]*"/); pod = substr($0, RSTART + 5, RLENGTH - 6)
-      match($0, /container="[^"]*"/); c = substr($0, RSTART + 11, RLENGTH - 12)
-      match($0, /id="[^"]*"/); id = substr($0, RSTART + 4, RLENGTH - 5)
-      v = substr($0, index($0, "} ") + 2); sub(/ .*/, "", v)
-      print ($1 ~ /throttled/ ? "t" : "p"), id, pod "/" c, v
-    }'
-}
-sample > /tmp/throttle-1; sleep 60; sample > /tmp/throttle-2
-awk 'NR == FNR { a[$1 FS $2] = $4; next }
-     ($1 FS $2) in a { d[$1 FS $2] = $4 - a[$1 FS $2]; name[$2] = $3 }
-     END { for (id in name) if (d["p" FS id] > 0) printf "%5.1f%%  %s\n", 100 * d["t" FS id] / d["p" FS id], name[id] }' \
-  /tmp/throttle-1 /tmp/throttle-2 | sort -nr | head -10
-----
+Reports the share of CPU periods in which each container was throttled during the check: `WARN` from 25%, `FAIL` from 50%. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them. Raise the CPU limit of the throttled containers. Containers without a CPU limit are never throttled and are not reported.
 
-A container that is throttled in more than about a quarter of its periods is short of CPU. Raise its CPU limit. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them.
+Without permission on `nodes/proxy`, the check reports containers whose CPU usage is 90% or more of their limit instead. This is an approximation: the usage is an average over a short window, so a container can be throttled while its usage is below the limit.
 
-Containers without a CPU limit are never throttled and do not appear in the output. The script needs `get` permission on `nodes/proxy`, and some managed node types, such as serverless nodes, do not serve the kubelet metrics. When you cannot read them, compare the CPU usage from `kubectl top pods --containers` with the CPU limits, see <<check-restarts>>. This is an approximation: `kubectl top` shows the average usage over the last 15 to 30 seconds, so a container can be throttled while its usage is below the limit. A container whose usage is close to its limit is throttled.
+[#check-volumes]
+=== Volumes
+
+Check name: `volumes`.
+
+Reports persistent volumes that are 80% full or more, and fails from 90%. Increase the size of the volume or reduce the retention of the data it stores.
 
 [#check-receiver]
-==== Data arriving at the Receiver
+=== Data arriving at the Receiver
 
-Check that agents send data with a valid API key. The loop covers the single Receiver on non-HA profiles and each Receiver role on HA profiles:
+Check name: `receiver`.
 
-[,bash]
-----
-for r in $(kubectl -n "$NS" get deploy -o name | grep -E '/suse-observability-receiver(-|$)'); do
-  echo "== $r"
-  metrics "$r" 9404 | awk '
-    /^receiver_agent_request_total\{/ { match($0, /valid_api_key="[^"]*"/); n[substr($0, RSTART, RLENGTH)] += $NF }
-    END { for (k in n) print k, n[k] }'
-done
-----
+Covers the single Receiver on non-HA profiles and each Receiver role on HA profiles:
 
-The `valid_api_key="true"` count must grow between two runs. If it does not, the agents do not reach the Receiver. Check the agent logs and the ingress or route in front of the Router. A growing `valid_api_key="false"` count means some agents use a wrong API key.
-
-Check the Receiver limits:
-
-[,bash]
-----
-for r in $(kubectl -n "$NS" get deploy -o name | grep -E '/suse-observability-receiver(-|$)'); do
-  echo "== $r"
-  metrics "$r" 9404 | grep -E '^stackstate_receiver_(memory_limiter_(claimed_size|limit)|unique_element_passed_(count|max)|events_rejected_size_total)'
-done
-----
-
-* `memory_limiter_claimed_size` above 80% of `memory_limiter_limit` means the Receiver is short of memory and starts rejecting requests. Add memory to the Receiver.
-* `unique_element_passed_count` close to `unique_element_passed_max` for an `element_type` means that budget is saturated. See <<_receiver_element_budget_saturated>>. On HA profiles these metrics are on the process agent role.
-* A growing `events_rejected_size_total{element_type="k8sLogs"}` means logs are rejected. See <<_logs_are_missing>>. On HA profiles this metric is on the logs role.
+* The number of agent requests with a valid API key per minute. No requests means the agents do not reach the Receiver. Check the agent logs and the ingress or route in front of the Router. Requests with an invalid API key mean some agents use a wrong API key.
+* The memory limiter above 80% means the Receiver is short of memory and starts rejecting requests. Add memory to the Receiver.
+* An element budget above 95% means the Receiver drops data for that element type. See <<_receiver_element_budget_saturated>>.
+* Rejected logs. See <<_logs_are_missing>>.
 
 [#check-kafka-lag]
-==== Kafka consumer lag
+=== Kafka consumer lag
 
-Each consumer reports its own lag. This loop prints the three topics with the highest lag for each consumer that exists in the profile:
+Check name: `kafka`.
 
-[,bash]
-----
-for d in server sync health-sync correlate e2es; do
-  kubectl -n "$NS" get deploy "suse-observability-$d" >/dev/null 2>&1 || continue
-  echo "== $d"
-  metrics "deploy/suse-observability-$d" 9404 | awk '
-    /^kafka_consumer_consumer_fetch_manager_metrics_records_lag\{/ {
-      match($0, /topic="[^"]*"/); lag[substr($0, RSTART + 7, RLENGTH - 8)] += $NF
-    }
-    END { for (t in lag) printf "%12d  %s\n", lag[t], t }' | sort -nr | head -3
-done
-----
-
-Lag that stays high or grows between runs shows which consumer cannot keep up:
+Reports topics whose consumer lag is above 1000 and growing, or above 100000, and the pod that consumes them. Lag shows which consumer cannot keep up:
 
 * `sts_topo_*` and `sts_topology_stream`: Topology sync.
 * `sts_health_sync`, `sts_intake_health` and `sts_health_sync_settings`: Health sync.
@@ -343,79 +262,44 @@ Lag that stays high or grows between runs shows which consumer cannot keep up:
 Check CPU throttling and memory of that consumer first, and add resources to it. On non-HA profiles, all of these run in the `server` pod.
 
 [#check-vmagent]
-==== vmagent
+=== vmagent
 
-[,bash]
-----
-metrics pod/suse-observability-vmagent-0 8429 | awk '
-  /^(vm_persistentqueue_bytes_(pending|dropped_total)|vmagent_remotewrite_(packets_dropped_total|samples_dropped_total|retries_count_total|requests_total))[{ ]/ {
-    name = $1; sub(/\{.*/, "", name)
-    if (match($0, /status_code="[^"]*"/)) name = name "{" substr($0, RSTART, RLENGTH) "}"
-    sum[name] += $NF
-  }
-  END { for (n in sum) print n, sum[n] }' | sort
-----
+Check name: `vmagent`.
 
-In a healthy pipeline, the pending queue stays close to zero, the dropped and retry counters stay at zero, and only `2XX` requests grow. A growing queue, retries or non-`2XX` requests mean VictoriaMetrics accepts data slower than it arrives. See <<check-victoriametrics>>. Dropped data is lost.
+In a healthy pipeline, the persistent queue stays close to zero, nothing is dropped or retried, and only successful remote write requests grow. A growing queue, retries or failed requests mean VictoriaMetrics accepts data slower than it arrives. See <<check-victoriametrics>>. Dropped data is lost.
 
 [#check-otel-collector]
-==== OpenTelemetry Collector
+=== OpenTelemetry Collector
 
-[,bash]
-----
-metrics pod/suse-observability-otel-collector-0 8888 | awk '
-  /^otelcol_(receiver_refused_|exporter_send_failed_|processor_dropped_|exporter_queue_)/ {
-    name = $1; sub(/\{.*/, "", name)
-    if (match($0, /(receiver|exporter|processor)="[^"]*"/)) name = name "{" substr($0, RSTART, RLENGTH) "}"
-    sum[name] += $NF
-  }
-  END { for (n in sum) printf "%s %.0f\n", n, sum[n] }' | sort
-----
+Check name: `otel`.
 
-* Growing `otelcol_receiver_refused_*` counters mean the collector refuses incoming data, usually because its memory limiter is reached. Add memory and CPU to the collector.
-* An `otelcol_exporter_queue_size` close to `otelcol_exporter_queue_capacity`, or growing `otelcol_exporter_send_failed_*` counters, mean the destination does not accept data fast enough. `clickhousests` writes traces to ClickHouse, `prometheusremotewrite/victoria-metrics` writes metrics and `sts_kafka_exporter` writes topology to Kafka.
-
-The failure and drop counters only appear after the first failure.
+* Refused data means the collector refuses incoming data, usually because its memory limiter is reached. Add memory and CPU to the collector.
+* Failed sends, or an export queue that is 80% full or more, mean the destination does not accept data fast enough. `clickhousests` writes traces to ClickHouse, `prometheusremotewrite/victoria-metrics` writes metrics and `sts_kafka_exporter` writes topology to Kafka.
 
 [#check-clickhouse]
-==== ClickHouse
+=== ClickHouse
 
-[,bash]
-----
-metrics svc/suse-observability-clickhouse 8001 | grep -E '^ClickHouseProfileEvents_(RejectedInserts|DelayedInserts) '
-----
+Check name: `clickhouse`.
 
-Both counters must stay at zero. Growing values mean ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse, and check its disk usage.
+Reports rejected and delayed inserts during the check. They mean ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse, and check its disk usage.
 
 [#check-victoriametrics]
-==== VictoriaMetrics
+=== VictoriaMetrics
 
-[,bash]
-----
-for v in $(kubectl -n "$NS" get pods -o name | grep -E 'victoria-metrics-[0-9]+-0$'); do
-  metrics "$v" 8428 | awk -v pod="$v" '
-    /^vm_slow_row_inserts_total / { slow = $NF }
-    /^vm_rows_inserted_total\{type="promremotewrite"\}/ { rows = $NF }
-    /^vm_rows_ignored_total\{/ { ignored += $NF }
-    END { printf "%s slow inserts %.1f%%, ignored rows %d\n", pod, 100 * slow / rows, ignored }'
-done
-----
+Check name: `victoriametrics`.
 
-The share of slow inserts is calculated since the pod started and should stay below 5%. A higher share means VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics. Ignored rows are rejected on ingestion, for example because they exceed the label limits.
+Reports the rows inserted per minute and the share of slow inserts for each VictoriaMetrics instance. More than 5% slow inserts means VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics. Ignored rows are rejected on ingestion, for example because they exceed the label limits. No inserted rows means no metrics arrive, see <<check-vmagent>>.
 
 [#check-elasticsearch]
-==== Elasticsearch disk
+=== Elasticsearch
 
-[,bash]
-----
-metrics svc/suse-observability-elasticsearch-master 9200 '/_cat/allocation?v&h=node,disk.percent,disk.used,disk.avail'
-----
+Check name: `elasticsearch`.
 
-When disk usage is high, the Receiver lowers the log budget and rejects more logs. Increase the Elasticsearch disk size or reduce the log retention.
+Reports the cluster health and the disk usage of each node from 80%. When disk usage is high, the Receiver lowers the log budget and rejects more logs. Increase the Elasticsearch disk size or reduce the log retention.
 
 == Runbooks
 
-These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, use the matching step in <<check-without-ui>> instead of the monitor.
+These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, run the matching check in <<check-without-ui>> instead.
 
 === Topology is delayed or components are missing
 
