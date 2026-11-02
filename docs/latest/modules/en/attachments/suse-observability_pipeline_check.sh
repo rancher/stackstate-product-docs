@@ -243,13 +243,13 @@ sample() {
   wants cpu memory && (kubectl -n "$NAMESPACE" get pods.metrics.k8s.io 2>/dev/null \
     -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.window}{"|"}{range .containers[*]}{.name}{"="}{.usage.cpu}{"="}{.usage.memory}{";"}{end}{"\n"}{end}' \
     | podmetrics usage > "$dir/usage.tsv") &
-  if wants cpu memory && [ "$n" = 2 ]; then
+  if [ "$n" = 2 ]; then
     (kubectl -n "$NAMESPACE" get pods --field-selector=status.phase=Running \
       -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.containers[*]}{.name}{"="}{.resources.limits.cpu}{"="}{.resources.limits.memory}{";"}{end}{"\n"}{end}' \
       | podmetrics limit > "$dir/limits.tsv") &
   fi
   if [ "$n" = 2 ] && [ -n "$ES_POD" ]; then
-    (fetch "$ES_POD" 9200 '/_cluster/health' '/_cat/allocation?h=node,disk.percent' > "$dir/elasticsearch") &
+    (fetch "$ES_POD" 9200 '/_cluster/health' '/_cat/allocation?h=node,disk.percent,disk.total&bytes=gb' > "$dir/elasticsearch") &
   fi
   wait
   cat "$dir"/*.tsv > "$WORK/$n.tsv" 2>/dev/null
@@ -284,15 +284,16 @@ podmetrics() {
 
 # Prints one section. Reads rows of: level, message, fix.
 section() {
-  awk -F'\t' -v title="$1" -v color="$COLOR" -v levels="$WORK/levels" '
+  awk -F'\t' -v title="$1" -v color="$COLOR" -v levels="$WORK/levels" -v fixlog="$WORK/fixes" '
     BEGIN {
       if (color == "true") { c["FAIL"] = "\033[31m"; c["WARN"] = "\033[33m"; c["OK"] = "\033[32m"; reset = "\033[0m" }
       printf "\n== %s\n", title
     }
     NF == 0 { next }
+    $3 != "" && !($3 in seen) { seen[$3] = 1; fixes[++nf] = $3; print $3 >> fixlog }
+    $1 == "FIX" { next }
     {
       n[$1]++; row[$1, n[$1]] = $2
-      if ($3 != "" && !($3 in seen)) { seen[$3] = 1; fixes[++nf] = $3 }
       print $1 >> levels
     }
     END {
@@ -318,6 +319,54 @@ function lbl(l, k,   v) {
 function out(level, msg, fix) { printf "%s\t%s\t%s\n", level, msg, fix }
 function permin(d) { return d * 60 / secs }
 function mib(b) { return sprintf("%.0f MiB", b / 1048576) }
+function ceil(x) { return (x == int(x)) ? x : int(x) + 1 }
+function cpufmt(c,   m) { m = int(c * 1000 + 0.5); return (m >= 1000 && m % 100 == 0) ? m / 1000 : m "m" }
+function memfmt(b,   m) { m = int(b / 1048576 + 0.5); return (m % 1024 == 0) ? m / 1024 "Gi" : m "Mi" }
+# Helm values key of the resources of a container, empty when unknown.
+function vkey(pod, c) {
+  if (c == "receiver") {
+    if (pod ~ /-receiver-base-/) return "stackstate.components.receiver.split.base"
+    if (pod ~ /-receiver-logs-/) return "stackstate.components.receiver.split.logs"
+    if (pod ~ /-receiver-process-agent-/) return "stackstate.components.receiver.split.processAgent"
+    return "stackstate.components.receiver"
+  }
+  if (c == "correlate") {
+    if (pod ~ /-correlate-connection-/) return "stackstate.components.correlate.split.connection"
+    if (pod ~ /-correlate-http-tracing-/) return "stackstate.components.correlate.split.httpTracing"
+    if (pod ~ /-correlate-aggregator-/) return "stackstate.components.correlate.split.aggregator"
+    return "stackstate.components.correlate"
+  }
+  if (c ~ /^(server|sync|e2es|vmagent|state|router|api|ui|checks|slicing|notification|initializer)$/) return "stackstate.components." c
+  if (c == "health-sync") return "stackstate.components.healthSync"
+  if (c == "authorization-sync") return "stackstate.components.authorizationSync"
+  if (c == "workload-observer") return "stackstate.components.workloadObserver"
+  if (c == "stackgraph" || c == "tephra") return "hbase." c
+  if (c == "master" || c == "regionserver") return "hbase.hbase." c
+  if (c == "datanode") return "hbase.hdfs.datanode"
+  if (c == "namenode") return (pod ~ /-hdfs-snn-/) ? "hbase.hdfs.secondarynamenode" : "hbase.hdfs.namenode"
+  if (c == "jmx-exporter") return "kafka.metrics.jmx"
+  if (c ~ /^(kafka|zookeeper|clickhouse|elasticsearch|opentelemetry-collector|s3proxy)$/) return c
+  if (c ~ /^victoria-metrics-[01]-server$/) return substr(c, 1, 18) ".server"
+  return ""
+}
+# Records a suggested limit for a container. Replicas share a key, so the largest step wins.
+function raise(pod, c, what, cur, f,   k) {
+  k = vkey(pod, c); if (k == "") k = pod "/" c
+  if (!((k, what) in SUGF) || f > SUGF[k, what]) { SUGF[k, what] = f; SUGC[k, what] = cur }
+}
+# Prints the suggested limits as fixes and returns how many.
+function suggestions(   kw, x, k, cur, nv, txt, n) {
+  for (kw in SUGF) {
+    split(kw, x, SUBSEP); k = x[1]; cur = SUGC[kw]
+    if (cur <= 0) continue
+    if (x[2] == "cpu") { nv = ceil(cur * SUGF[kw] * 10) / 10; txt = cpufmt(cur) " to " cpufmt(nv) }
+    else { nv = ceil(cur * SUGF[kw] / 134217728) * 134217728; txt = memfmt(cur) " to " memfmt(nv) }
+    if (k ~ /\//) out("FIX", "", sprintf("Raise the %s limit of %s from %s.", x[2], k, txt))
+    else out("FIX", "", sprintf("Raise %s.resources.limits.%s from %s, and the %s request with it.", k, x[2], txt, x[2]))
+    n++
+  }
+  return n
+}
 { s = (FILENAME == f1) ? 1 : 2 }
 '
 
@@ -326,7 +375,8 @@ check() {
 }
 
 check_pods() {
-  awk -F'\t' -v f1="$WORK/sample-1/pods" -v ns="$NAMESPACE" '
+  awk -F'\t' -v f1="$WORK/sample-1/pods" -v lf="$WORK/sample-2/limits.tsv" -v ns="$NAMESPACE" "$LIB"'
+    FILENAME == lf { if ($3 == "memory") ml[$2 "/" lbl($4, "container")] = $5; next }
     FILENAME == f1 {
       n = split($3, c, ";")
       for (i = 1; i <= n; i++) if (c[i] != "") { split(c[i], x, "|"); before[$1 "/" x[1]] = x[3] }
@@ -345,14 +395,18 @@ check_pods() {
         if ((k in before) && rc > before[k] + 0) {
           printf "FAIL\t%s restarted during the check, last reason %s\tCheck the logs of the previous container with kubectl -n %s logs <pod> -c <container> --previous.\n", k, x[4], ns; bad++
         } else if (x[4] == "OOMKilled") {
-          printf "FAIL\t%s: restarted %d time%s, last reason OOMKilled\tRaise the memory limit of the OOMKilled components.\n", k, rc, rc == 1 ? "" : "s"; bad++
+          printf "FAIL\t%s: restarted %d time%s, last reason OOMKilled\t\n", k, rc, rc == 1 ? "" : "s"; bad++; oom++
+          raise($1, x[1], "memory", ml[k], 1.5)
         } else if (rc > 0) {
           printf "WARN\t%s: restarted %d time%s, last reason %s\tCheck the logs of the previous container with kubectl -n %s logs <pod> -c <container> --previous.\n", k, rc, rc == 1 ? "" : "s", x[4], ns; bad++
         }
       }
     }
-    END { if (!bad) print "OK\tAll pods are running and ready, no restarts" }
-  ' "$WORK/sample-1/pods" "$WORK/sample-2/pods"
+    END {
+      if (oom && !suggestions()) out("FIX", "", "Raise the memory limit of the OOMKilled components.")
+      if (!bad) print "OK\tAll pods are running and ready, no restarts"
+    }
+  ' "$WORK/sample-2/limits.tsv" "$WORK/sample-1/pods" "$WORK/sample-2/pods"
 }
 
 # cadvisor series are keyed by the cgroup id, because a restarted or rescheduled pod keeps its name.
@@ -361,7 +415,7 @@ check_cpu() {
     $1 == "cadvisor" && $3 ~ /^container_cpu_cfs_/ {
       c = lbl($4, "container"); if (c == "" || c == "POD") next
       k = lbl($4, "pod") "/" c; id = lbl($4, "id"); if (id == "") id = k
-      name[id] = k
+      name[id] = k; ipod[id] = lbl($4, "pod"); ic[id] = c
       if ($3 ~ /throttled/) t[s, id] = $5; else p[s, id] = $5
     }
     $1 == "usage" && $3 == "cpu" { k = $2 "/" lbl($4, "container"); u[k] += $5; un[k]++ }
@@ -374,10 +428,11 @@ check_cpu() {
         dp = p[2, id] - p[1, id]; dt = t[2, id] - t[1, id]
         if (dp <= 0 || dt < 0 || dt > dp) continue
         pct = 100 * dt / dp
-        if (pct >= 50) { out("FAIL", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct), fix); bad++ }
-        else if (pct >= 25) { out("WARN", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct), fix); bad++ }
+        if (pct >= 50) { out("FAIL", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct)); bad++; raise(ipod[id], ic[id], "cpu", lim[name[id]], 2) }
+        else if (pct >= 25) { out("WARN", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct)); bad++; raise(ipod[id], ic[id], "cpu", lim[name[id]], 1.5) }
       }
       if (seen) {
+        if (bad && !suggestions()) out("FIX", "", fix)
         if (!bad) out("OK", "No container is throttled in more than 25% of CPU periods")
         exit
       }
@@ -385,8 +440,12 @@ check_cpu() {
       for (k in lim) {
         if (!(k in un) || lim[k] <= 0) continue
         useen++; avg = u[k] / un[k]
-        if (avg / lim[k] >= 0.9) { out("WARN", sprintf("%s uses %.2f of its %g CPU limit (approximation)", k, avg, lim[k]), "Raise the CPU limit of the components close to their limit."); bad++ }
+        if (avg / lim[k] >= 0.9) {
+          out("WARN", sprintf("%s uses %.2f of its %g CPU limit (approximation)", k, avg, lim[k])); bad++
+          split(k, x, "/"); raise(x[1], x[2], "cpu", lim[k], 1.5)
+        }
       }
+      if (bad && !suggestions()) out("FIX", "", "Raise the CPU limit of the components close to their limit.")
       if (!useen) out("WARN", "Could not read CPU usage either", "Reading CPU usage needs get permission on pods.metrics.k8s.io and a running metrics-server.")
       else if (!bad) out("OK", "No container uses more than 90% of its CPU limit (approximation)")
     }'
@@ -397,7 +456,7 @@ check_memory() {
     s == 2 && $1 == "cadvisor" && $3 ~ /^container_(memory_working_set_bytes|spec_memory_limit_bytes)$/ {
       c = lbl($4, "container"); if (c == "" || c == "POD") next
       k = lbl($4, "pod") "/" c; id = lbl($4, "id"); if (id == "") id = k
-      name[id] = k
+      name[id] = k; ipod[id] = lbl($4, "pod"); ic[id] = c
       if ($3 ~ /working_set/) ws[id] = $5; else lim[id] = $5
     }
     s == 2 && $1 == "usage" && $3 == "memory" { uws[$2 "/" lbl($4, "container")] = $5 }
@@ -406,15 +465,19 @@ check_memory() {
       fix = "Raise the memory limit of the components close to their limit."
       for (id in name) {
         seen++
-        if (lim[id] > 0 && ws[id] / lim[id] >= 0.95) { out("WARN", sprintf("%s uses %s of its %s limit", name[id], mib(ws[id]), mib(lim[id])), fix); bad++ }
+        if (lim[id] > 0 && ws[id] / lim[id] >= 0.95) { out("WARN", sprintf("%s uses %s of its %s limit", name[id], mib(ws[id]), mib(lim[id]))); bad++; raise(ipod[id], ic[id], "memory", lim[id], 1.5) }
       }
       if (!seen) {
         for (k in ulim) {
           if (!(k in uws) || ulim[k] <= 0) continue
           seen++
-          if (uws[k] / ulim[k] >= 0.95) { out("WARN", sprintf("%s uses %s of its %s limit", k, mib(uws[k]), mib(ulim[k])), fix); bad++ }
+          if (uws[k] / ulim[k] >= 0.95) {
+            out("WARN", sprintf("%s uses %s of its %s limit", k, mib(uws[k]), mib(ulim[k]))); bad++
+            split(k, x, "/"); raise(x[1], x[2], "memory", ulim[k], 1.5)
+          }
         }
       }
+      if (bad && !suggestions()) out("FIX", "", fix)
       if (!seen) out("WARN", "No memory metrics read", "Reading memory usage needs get permission on nodes/proxy or on pods.metrics.k8s.io.")
       else if (!bad) out("OK", "No container uses more than 95% of its memory limit")
     }'
@@ -430,8 +493,9 @@ check_volumes() {
       for (k in keys) {
         if (cap[k] <= 0) continue
         seen++; pct = 100 * u[k] / cap[k]
-        if (pct >= 90) { out("FAIL", sprintf("Volume %s is %.0f%% full", k, pct), "Increase the size of the full volumes or reduce the retention of the data they store."); bad++ }
-        else if (pct >= 80) { out("WARN", sprintf("Volume %s is %.0f%% full", k, pct), "Increase the size of the full volumes or reduce the retention of the data they store."); bad++ }
+        if (pct < 80) continue
+        out(pct >= 90 ? "FAIL" : "WARN", sprintf("Volume %s is %.0f%% full", k, pct), "Reduce the retention of the data, or resize the volume, see Resizing storage on the Data retention page."); bad++
+        out("FIX", "", sprintf("Resize %s from %.0fGi to at least %dGi, so it is at most 70%% full.", k, cap[k] / 1073741824, ceil(u[k] / 0.7 / 1073741824)))
       }
       if (!seen) out("WARN", "No volume metrics read from the nodes", "Reading node metrics needs get permission on nodes/proxy.")
       else if (!bad) out("OK", sprintf("All %d volumes are less than 80%% full", seen))
@@ -440,9 +504,11 @@ check_volumes() {
 
 check_receiver() {
   check '
-    $1 != "receiver" { next }
-    !($2 in pods) { pods[$2] = 1; np++ }
+    $1 != "receiver" && $1 != "limit" { next }
+    $1 == "receiver" && !($2 in pods) { pods[$2] = 1; np++ }
     $3 == "receiver_agent_request_total" { req[s, $2, lbl($4, "valid_api_key")] += $5; has[s, $2] = 1 }
+    $1 == "limit" && $3 == "memory" && lbl($4, "container") == "receiver" { rlim[$2] = $5 }
+    s == 2 && $3 == "stackstate_receiver_unique_element_passed_count" && lbl($4, "element_type") == "agent" { agents[$2] = $5 }
     s == 2 && $3 == "stackstate_receiver_memory_limiter_claimed_size" { claimed[$2] = $5 }
     s == 2 && $3 == "stackstate_receiver_memory_limiter_limit" { limit[$2] = $5 }
     s == 2 && $3 ~ /^stackstate_receiver_(unique_element|element_create)_passed_(count|max)$/ {
@@ -451,6 +517,9 @@ check_receiver() {
     }
     $3 == "stackstate_receiver_events_rejected_size_total" { rej[s, lbl($4, "element_type")] += $5; rt[lbl($4, "element_type")] = 1 }
     END {
+      uvar["component"] = "maxComponentsPerHost"; uvar["relation"] = "maxRelationsPerHost"; uvar["connection"] = "maxConnectionObservationsPerHost"
+      hvar["component"] = "maxNewComponentsHourlyPerHost"; hvar["relation"] = "maxNewRelationsHourlyPerHost"
+      hdef["component"] = 100; hdef["relation"] = 300
       for (p in pods) {
         if (!((1, p) in has) || !((2, p) in has)) { out("WARN", p ": could not read agent requests in both samples", "Check that you can port-forward to the Receiver pods."); continue }
         ok = req[2, p, "true"] - req[1, p, "true"]; inv = req[2, p, "false"] - req[1, p, "false"]
@@ -458,16 +527,25 @@ check_receiver() {
         if (ok <= 0) out("FAIL", p ": no agent requests with a valid API key during the check", "Check the agent logs and the ingress or route in front of the Router.")
         else out("OK", sprintf("%s: %.0f agent requests per minute", p, permin(ok)))
         if (inv > 0) out("WARN", sprintf("%s: %.0f requests per minute with an invalid API key", p, permin(inv)), "Check the API key in the configuration of the agents that send data.")
-        if (limit[p] > 0 && claimed[p] / limit[p] >= 0.8)
+        if (limit[p] > 0 && claimed[p] / limit[p] >= 0.8) {
           out("WARN", sprintf("%s: memory limiter at %.0f%%", p, 100 * claimed[p] / limit[p]), "Add memory to the Receiver.")
+          raise(p, "receiver", "memory", rlim[p], 1.5)
+        }
       }
       for (k in bk) {
         if (bm[k] <= 0) continue
         split(k, x, SUBSEP); r = bc[k] / bm[k]
-        if (r >= 0.95) out("WARN", sprintf("%s: %s %s budget at %.0f%% (%d of %d)", x[1], x[3], x[2], 100 * r, bc[k], bm[k]), "Raise the element budget, see Receiver element budget saturated on the Data ingestion pipeline page.")
-        else budgets++
+        if (r < 0.95) { budgets++; continue }
+        out("WARN", sprintf("%s: %s %s budget at %.0f%% (%d of %d)", x[1], x[3], x[2], 100 * r, bc[k], bm[k]), "Raise the element budget, see Receiver element budget saturated on the Data ingestion pipeline page.")
+        env = "CONFIG_FORCE_stackstate_receiver_processAgent_"
+        if (x[2] == "unique" && (x[3] in uvar) && agents[x[1]] > 0) {
+          per = bm[k] / agents[x[1]]
+          out("FIX", "", sprintf("Set %s%s in %s.extraEnv.open from %d to %d.", env, uvar[x[3]], vkey(x[1], "receiver"), per, ceil(1.5 * per)))
+        } else if (x[2] == "hourly" && (x[3] in hvar))
+          out("FIX", "", sprintf("Set %s%s in %s.extraEnv.open to 1.5 times its current value, %d by default.", env, hvar[x[3]], vkey(x[1], "receiver"), hdef[x[3]]))
       }
-      if (budgets) out("OK", "Element budgets are below 95%")
+      suggestions()
+      if (budgets) out("OK", (length(bk) > budgets) ? "Other element budgets are below 95%" : "Element budgets are below 95%")
       for (t in rt) {
         d = rej[2, t] - rej[1, t]
         if (d > 0) out("WARN", sprintf("%s rejected: %s per minute", t, mib(permin(d))), "Increase the Elasticsearch disk size, reduce the log retention or reduce noisy log sources.")
@@ -519,8 +597,9 @@ check_vmagent() {
 
 check_otel() {
   check '
+    $1 == "limit" && $3 == "memory" && lbl($4, "container") == "opentelemetry-collector" { olim[$2] = $5; next }
     $1 != "otel" { next }
-    { got[s] = 1; m = $3; sub(/_total$/, "", m) }
+    { got[s] = 1; pod = $2; m = $3; sub(/_total$/, "", m) }
     m ~ /^otelcol_receiver_refused_/ { sub(/^otelcol_receiver_refused_/, "", m); k = m " on receiver " lbl($4, "receiver"); ref[s, k] += $5; rk[k] = 1 }
     m ~ /^otelcol_exporter_send_failed_/ { sub(/^otelcol_exporter_send_failed_/, "", m); k = m " on exporter " lbl($4, "exporter"); fail[s, k] += $5; fk[k] = 1 }
     m ~ /^otelcol_processor_dropped_/ { sub(/^otelcol_processor_dropped_/, "", m); k = m " on processor " lbl($4, "processor"); drp[s, k] += $5; dk[k] = 1 }
@@ -529,17 +608,20 @@ check_otel() {
     END {
       if (!got[2]) { out("FAIL", "No OpenTelemetry Collector metrics read", "Check that the collector pod runs and that you can port-forward to it."); exit }
       fixdest = "Check the exporter destination: clickhousests is ClickHouse, prometheusremotewrite/victoria-metrics is vmagent and VictoriaMetrics, sts_kafka_exporter is Kafka."
-      for (k in rk) if (ref[2, k] > ref[1, k]) { out("WARN", sprintf("Refused %.0f %s per minute", permin(ref[2, k] - ref[1, k]), k), "Add memory and CPU to the OpenTelemetry Collector."); bad++ }
+      for (k in rk) if (ref[2, k] > ref[1, k]) { out("WARN", sprintf("Refused %.0f %s per minute", permin(ref[2, k] - ref[1, k]), k), "Add memory and CPU to the OpenTelemetry Collector."); bad++; refused++ }
       for (k in fk) if (fail[2, k] > fail[1, k]) { out("FAIL", sprintf("Failed to send %.0f %s per minute", permin(fail[2, k] - fail[1, k]), k), fixdest); bad++ }
-      for (k in dk) if (drp[2, k] > drp[1, k]) { out("WARN", sprintf("Dropped %.0f %s per minute", permin(drp[2, k] - drp[1, k]), k), "Add memory and CPU to the OpenTelemetry Collector."); bad++ }
+      for (k in dk) if (drp[2, k] > drp[1, k]) { out("WARN", sprintf("Dropped %.0f %s per minute", permin(drp[2, k] - drp[1, k]), k), "Add memory and CPU to the OpenTelemetry Collector."); bad++; refused++ }
       for (e in qc) if (qc[e] > 0 && qs[e] / qc[e] >= 0.8) { out("WARN", sprintf("Export queue of %s is %.0f%% full", e, 100 * qs[e] / qc[e]), fixdest); bad++ }
+      if (refused) raise(pod, "opentelemetry-collector", "memory", olim[pod], 1.5)
+      suggestions()
       if (!bad) out("OK", "No refused, failed or dropped data, export queues below 80%")
     }'
 }
 
 check_clickhouse() {
   check '
-    $1 == "clickhouse" { v[s, $3] += $5; got[s] = 1 }
+    $1 == "clickhouse" { v[s, $3] += $5; got[s] = 1; pod = $2 }
+    $1 == "limit" && lbl($4, "container") == "clickhouse" { cl[$3] = $5 }
     END {
       if (!got[2]) { out("WARN", "No ClickHouse metrics read", "Check that the ClickHouse pod runs and that you can port-forward to it."); exit }
       fix = "ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse and check its disk usage."
@@ -547,12 +629,14 @@ check_clickhouse() {
       d = v[2, "ClickHouseProfileEvents_DelayedInserts"] - v[1, "ClickHouseProfileEvents_DelayedInserts"]
       if (r > 0) out("FAIL", sprintf("%d rejected inserts", r), fix)
       if (d > 0) out("WARN", sprintf("%d delayed inserts", d), fix)
-      if (r <= 0 && d <= 0) out("OK", "No rejected or delayed inserts")
+      if (r > 0 || d > 0) { raise(pod, "clickhouse", "cpu", cl["cpu"], 1.5); raise(pod, "clickhouse", "memory", cl["memory"], 1.5); suggestions() }
+      else out("OK", "No rejected or delayed inserts")
     }'
 }
 
 check_vm() {
   check '
+    $1 == "limit" && $3 == "memory" && lbl($4, "container") ~ /^victoria-metrics-[01]-server$/ { vlim[$2] = $5; vc[$2] = lbl($4, "container"); next }
     $1 != "vm" { next }
     !($2 in pods) { pods[$2] = 1; np++ }
     { got[s, $2] = 1 }
@@ -565,11 +649,12 @@ check_vm() {
         r = rows[2, p] - rows[1, p]
         if (r <= 0) { out("FAIL", p ": no rows inserted during the check", "Check the vmagent section and the vmagent logs."); continue }
         pct = 100 * (slow[2, p] - slow[1, p]) / r
-        if (pct > 5) out("WARN", sprintf("%s: %.0f%% slow inserts", p, pct), "VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics.")
+        if (pct > 5) { out("WARN", sprintf("%s: %.0f%% slow inserts", p, pct), "VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics."); raise(p, vc[p], "memory", vlim[p], 1.5) }
         else out("OK", sprintf("%s: %.0f rows per minute, %.1f%% slow inserts", p, permin(r), pct))
         i = ign[2, p] - ign[1, p]
         if (i > 0) out("WARN", sprintf("%s: %d rows ignored on ingestion", p, i), "Check the VictoriaMetrics logs for the reason, for example too many labels.")
       }
+      suggestions()
       if (!np) out("FAIL", "No VictoriaMetrics metrics read", "Check that the VictoriaMetrics pods run and that you can port-forward to them.")
     }'
 }
@@ -588,9 +673,10 @@ check_elasticsearch() {
       else print "OK\tCluster health is " st
       next
     }
-    NF == 2 && $2 ~ /^[0-9]+$/ {
-      if ($2 >= 80) printf "WARN\t%s disk is %d%% full\tWhen disk usage is high, the Receiver rejects more logs. Increase the Elasticsearch disk size or reduce the log retention.\n", $1, $2
-      else printf "OK\t%s disk is %d%% full\n", $1, $2
+    NF >= 2 && $2 ~ /^[0-9]+$/ {
+      if ($2 < 80) { printf "OK\t%s disk is %d%% full\n", $1, $2; next }
+      printf "WARN\t%s disk is %d%% full\tWhen disk usage is high, the Receiver rejects more logs. Reduce the log retention, or resize the Elasticsearch volumes, see Resizing storage on the Data retention page.\n", $1, $2
+      if ($3 ~ /^[0-9]+$/) { n = $3 * $2 / 70; printf "FIX\t\tResize the Elasticsearch volumes from %dGi to at least %dGi, so they are at most 70%% full.\n", $3, (n == int(n)) ? n : int(n) + 1 }
     }' "$f"
 }
 
@@ -629,6 +715,14 @@ FAILS=$(grep -c '^FAIL$' "$WORK/levels")
 WARNS=$(grep -c '^WARN$' "$WORK/levels")
 echo
 echo "Summary: $FAILS failed, $WARNS warnings"
+touch "$WORK/fixes"
+SHORT=$(sed -nE 's/^Raise ([^ ]+)\.resources\.limits\..*/\1/p' "$WORK/fixes" | sort -u | wc -l)
+if [ "$SHORT" -ge 3 ]; then
+  echo "$SHORT components are short of resources. Consider the next sizing profile instead of raising their limits one by one."
+fi
+if [ "$FAILS" -gt 0 ] || [ "$WARNS" -gt 0 ]; then
+  echo "After a change, wait until the consumer lag stops growing and run the check again."
+fi
 if $KEEP; then
   echo "Samples kept in $WORK"
 fi

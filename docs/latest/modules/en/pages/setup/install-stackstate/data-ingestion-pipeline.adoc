@@ -162,6 +162,42 @@ The *How to check* column names the SUSE Observability StackPack monitors for ea
 
 Resources for each component are set in the Helm values of the `suse-observability` chart, for example `stackstate.components.receiver.resources`, `stackstate.components.vmagent.resources`, `victoria-metrics-0.server.resources`, `clickhouse.resources` and `elasticsearch.resources`. On HA profiles, Receiver resources are set per role under `stackstate.components.receiver.split`. After you change values, run `helm upgrade` with all the values files you used for the installation.
 
+[#how-much-to-add]
+=== How much to add
+
+Raise resources in steps rather than by a few percent at a time. A small step rarely moves a saturated stage, and each step costs a redeploy and a new wait for the backlog to drain.
+
+[cols="2,3"]
+|===
+| Finding | Step
+
+| CPU throttled in 25% to 50% of periods
+| Raise the CPU limit by 50%.
+
+| CPU throttled in more than 50% of periods
+| Double the CPU limit.
+
+| Container `OOMKilled`, or memory at 95% of the limit or more
+| Raise the memory limit by 50%. JVM services derive their heap from the memory limit, so you do not set the heap separately.
+
+| Receiver memory limiter above 80%, OpenTelemetry Collector refuses data, or VictoriaMetrics has more than 5% slow inserts
+| Raise the memory limit by 50%.
+
+| Element budget above 95%
+| Raise the per-agent value by 50%. See <<_receiver_element_budget_saturated>>.
+
+| Volume or Elasticsearch disk 80% full or more
+| Resize the volume so the current data uses at most 70% of it: divide the used size by 0.7. See xref:/setup/data-management/data_retention.adoc#_resizing_storage[Resizing storage]. Reducing the retention is an alternative.
+|===
+
+* Raise the request together with the limit, so the scheduler places the pod on a node that has the resources.
+* Values you set for a component override the values of the sizing profile.
+* If several components are short at the same time, move to the next sizing profile instead of raising them one by one.
+* After a change, wait until the Kafka consumer lag stops growing before you judge the result.
+* If two steps on the same stage do not help, the cause is probably not resources. Follow the matching runbook or contact {stackstate-product-name} support.
+
+The check in <<check-without-ui>> prints the suggested values and the Helm values keys for the findings it can size.
+
 == Self-monitoring
 
 {stackstate-product-name} can monitor itself with the *SUSE Observability* StackPack. The StackPack adds monitors, metric bindings and dashboards for the platform components to the Kubernetes topology of the cluster where {stackstate-product-name} runs. Each monitor links to remediation steps.
@@ -202,7 +238,7 @@ bash suse-observability_pipeline_check.sh [-i <seconds>] [-c <checks>] [-l] [-k]
 * `-k` keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.
 * The namespace defaults to `suse-observability`.
 
-The script reads the metrics endpoints of the platform components through `kubectl port-forward`, and the node metrics through the API server proxy. It reads all metrics twice with the interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. The script exits with a non-zero status when it finds a warning or a failure. It needs `kubectl`, `curl` and `awk`.
+The script reads the metrics endpoints of the platform components through `kubectl port-forward`, and the node metrics through the API server proxy. It reads all metrics twice with the interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as `OK`, `WARN` or `FAIL` together with a fix. For CPU, memory, volume and element budget findings, the fix includes the Helm values key and a suggested value, calculated with the steps in <<how-much-to-add>>. The script exits with a non-zero status when it finds a warning or a failure. It needs `kubectl`, `curl` and `awk`.
 
 [#check-permissions]
 === Required permissions
@@ -225,7 +261,7 @@ Check names: `pods`, `memory`.
 
 Check name: `cpu`.
 
-Reports the share of CPU periods in which each container was throttled during the check: `WARN` from 25%, `FAIL` from 50%. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them. Raise the CPU limit of the throttled containers. Containers without a CPU limit are never throttled and are not reported.
+Reports the share of CPU periods in which each container was throttled during the check: `WARN` from 25%, `FAIL` from 50%. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them. Raise the CPU limit of the throttled containers, see <<how-much-to-add>>. Containers without a CPU limit are never throttled and are not reported.
 
 Without permission on `nodes/proxy`, the check reports containers whose CPU usage is 90% or more of their limit instead. This is an approximation: the usage is an average over a short window, so a container can be throttled while its usage is below the limit.
 
@@ -234,7 +270,7 @@ Without permission on `nodes/proxy`, the check reports containers whose CPU usag
 
 Check name: `volumes`.
 
-Reports persistent volumes that are 80% full or more, and fails from 90%. Increase the size of the volume or reduce the retention of the data it stores.
+Reports persistent volumes that are 80% full or more, and fails from 90%. Reduce the retention of the data it stores, or resize the volume, see <<how-much-to-add>>.
 
 [#check-receiver]
 === Data arriving at the Receiver
@@ -296,7 +332,7 @@ Reports the rows inserted per minute and the share of slow inserts for each Vict
 
 Check name: `elasticsearch`.
 
-Reports the cluster health and the disk usage of each node from 80%. When disk usage is high, the Receiver lowers the log budget and rejects more logs. Increase the Elasticsearch disk size or reduce the log retention.
+Reports the cluster health and the disk usage of each node from 80%. When disk usage is high, the Receiver lowers the log budget and rejects more logs. Reduce the log retention, or resize the Elasticsearch volumes, see <<how-much-to-add>>.
 
 == Runbooks
 
@@ -312,10 +348,32 @@ These runbooks start from a symptom and point to the stage to check. The SUSE Ob
 
 === Receiver element budget saturated
 
-The Receiver limits how many unique agents, components, connections and relations it accepts. When a budget is saturated, the Receiver drops data for that element type, which shows up as missing topology or metrics.
+The Receiver limits how many components, relations and connections it accepts from process agents, and how many new components and relations it accepts per hour. Each budget is a value per agent multiplied by the number of agents, so it grows when you add agents. When a budget is saturated, the Receiver drops data for that element type, which shows up as missing topology or connections.
 
-. Find the saturated `element_type` in the *Receiver - unique element budget saturation* monitor.
-. Raise the matching limit with an environment variable on the Receiver:
+. Find the saturated `element_type` in the *Receiver - unique element budget saturation* and *Receiver - hourly element budget saturation* monitors.
+. Raise the matching per-agent value by 50% with an environment variable on the Receiver:
++
+[cols="1,2"]
+|===
+| Budget | Variable
+
+| Unique components
+| `CONFIG_FORCE_stackstate_receiver_processAgent_maxComponentsPerHost`
+
+| Unique relations
+| `CONFIG_FORCE_stackstate_receiver_processAgent_maxRelationsPerHost`
+
+| Unique connections
+| `CONFIG_FORCE_stackstate_receiver_processAgent_maxConnectionObservationsPerHost`
+
+| New components per hour
+| `CONFIG_FORCE_stackstate_receiver_processAgent_maxNewComponentsHourlyPerHost`
+
+| New relations per hour
+| `CONFIG_FORCE_stackstate_receiver_processAgent_maxNewRelationsHourlyPerHost`
+|===
++
+The current value per agent is the budget maximum divided by the number of agents. The check in <<check-without-ui>> prints it for the unique budgets. For example, on a non-HA profile:
 +
 [,yaml]
 ----
@@ -324,10 +382,10 @@ stackstate:
     receiver:
       extraEnv:
         open:
-          CONFIG_FORCE_stackstate_receiver_processAgent_maxComponents: "<new limit>"
+          CONFIG_FORCE_stackstate_receiver_processAgent_maxComponentsPerHost: "450"
 ----
 +
-The variables are `CONFIG_FORCE_stackstate_receiver_processAgent_maxAgents`, `..._maxComponents`, `..._maxConnections` and `..._maxRelations`.
+On HA profiles, set the variable under `stackstate.components.receiver.split.processAgent.extraEnv.open`.
 . Run `helm upgrade`. A higher budget increases the load on Correlate and Topology sync, so watch their latency afterwards.
 
 === Receiver rejects data or requests time out
