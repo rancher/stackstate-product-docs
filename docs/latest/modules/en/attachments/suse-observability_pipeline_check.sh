@@ -6,6 +6,22 @@ KEEP=false
 ALL_CHECKS="pods cpu memory volumes receiver kafka vmagent otel clickhouse victoriametrics elasticsearch"
 CHECKS=$ALL_CHECKS
 
+list_checks() {
+  cat <<EOF
+pods             Pods that are not running or ready, restarts and OOMKilled containers
+cpu              CPU throttling per container, or CPU usage against the limit without nodes/proxy
+memory           Containers that use 95% or more of their memory limit
+volumes          Persistent volumes that are 80% full or more
+receiver         Agent requests, API keys, memory limiter, element budgets and rejected logs
+kafka            Kafka consumer lag per topic and the pod that consumes it
+vmagent          vmagent queue, retries, drops and writes to VictoriaMetrics
+otel             OpenTelemetry Collector refused, dropped and failed data and export queues
+clickhouse       ClickHouse rejected and delayed inserts
+victoriametrics  VictoriaMetrics inserted rows, slow inserts and ignored rows
+elasticsearch    Elasticsearch cluster health and disk usage
+EOF
+}
+
 usage() {
   cat <<EOF
 SUSE Observability data ingestion pipeline check.
@@ -17,8 +33,8 @@ Usage: $0 [options] [<namespace>]
 
 options:
   -i <seconds>  Interval between the two samples, default $INTERVAL
-  -c <checks>   Comma-separated list of checks to run, default all:
-                ${ALL_CHECKS// /,}
+  -c <checks>   Comma-separated list of checks to run, default all
+  -l            List the checks
   -k            Keep the collected samples in a directory in the current directory
   -h            Print this help
 
@@ -33,9 +49,10 @@ limits instead. That CPU check is an approximation, it does not measure throttli
 EOF
 }
 
-while getopts "hki:c:" option; do
+while getopts "hlki:c:" option; do
   case $option in
     h) usage; exit 0;;
+    l) list_checks; exit 0;;
     k) KEEP=true;;
     i) INTERVAL=$OPTARG;;
     c) CHECKS=${OPTARG//,/ };;
@@ -57,7 +74,7 @@ fi
 for c in $CHECKS; do
   case " $ALL_CHECKS " in
     *" $c "*) ;;
-    *) echo "ERROR: Unknown check '$c', use one of: ${ALL_CHECKS// /,}"; exit 1;;
+    *) echo "ERROR: Unknown check '$c', run $0 -l to list the checks"; exit 1;;
   esac
 done
 
