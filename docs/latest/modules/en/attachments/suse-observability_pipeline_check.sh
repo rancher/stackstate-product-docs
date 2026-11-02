@@ -23,7 +23,9 @@ options:
   "suse-observability" when not specified
 
 Required permissions in the namespace: list pods, create pods/portforward.
-Required cluster permission for the CPU, memory and volume checks: get nodes/proxy.
+Required cluster permission for the CPU throttling and volume checks: get nodes/proxy.
+Without it, the script compares CPU and memory usage from pods.metrics.k8s.io with the
+limits instead. That CPU check is an approximation, it does not measure throttling.
 EOF
 }
 
@@ -182,11 +184,46 @@ sample() {
     (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics/cadvisor" 2>/dev/null | normalize cadvisor "$node" "$KEEP_CADVISOR" > "$dir/cadvisor-$node.tsv") &
     (kubectl get --raw "/api/v1/nodes/$node/proxy/metrics" 2>/dev/null | normalize kubelet "$node" "$KEEP_KUBELET" > "$dir/kubelet-$node.tsv") &
   done
+  (kubectl -n "$NAMESPACE" get pods.metrics.k8s.io 2>/dev/null \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.window}{"|"}{range .containers[*]}{.name}{"="}{.usage.cpu}{"="}{.usage.memory}{";"}{end}{"\n"}{end}' \
+    | podmetrics usage > "$dir/usage.tsv") &
+  if [ "$n" = 2 ]; then
+    (kubectl -n "$NAMESPACE" get pods --field-selector=status.phase=Running \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.containers[*]}{.name}{"="}{.resources.limits.cpu}{"="}{.resources.limits.memory}{";"}{end}{"\n"}{end}' \
+      | podmetrics limit > "$dir/limits.tsv") &
+  fi
   if [ "$n" = 2 ] && [ -n "$ES_POD" ]; then
     (fetch "$ES_POD" 9200 '/_cluster/health' '/_cat/allocation?h=node,disk.percent' > "$dir/elasticsearch") &
   fi
   wait
   cat "$dir"/*.tsv > "$WORK/$n.tsv" 2>/dev/null
+}
+
+# Converts pod metrics and pod limits (pod|[window|]container=cpu=memory;...) to the normalized format.
+podmetrics() {
+  awk -F'|' -v kind="$1" '
+    function cores(v) {
+      if (v ~ /n$/) return substr(v, 1, length(v) - 1) / 1e9
+      if (v ~ /u$/) return substr(v, 1, length(v) - 1) / 1e6
+      if (v ~ /m$/) return substr(v, 1, length(v) - 1) / 1e3
+      return v + 0
+    }
+    function bytes(v,   u, i) {
+      if (match(v, /[KMGTPE]i?$/)) {
+        u = substr(v, RSTART); v = substr(v, 1, RSTART - 1)
+        i = index("KMGTPE", substr(u, 1, 1))
+        return v * ((u ~ /i$/) ? 1024 : 1000) ^ i
+      }
+      return v + 0
+    }
+    NF >= 2 {
+      n = split($NF, c, ";")
+      for (j = 1; j <= n; j++) {
+        if (split(c[j], x, "=") < 3) continue
+        if (x[2] != "") printf "%s\t%s\tcpu\tcontainer=\"%s\"\t%.6f\n", kind, $1, x[1], cores(x[2])
+        if (x[3] != "") printf "%s\t%s\tmemory\tcontainer=\"%s\"\t%.0f\n", kind, $1, x[1], bytes(x[3])
+      }
+    }'
 }
 
 # Prints one section. Reads rows of: level, message, fix.
@@ -252,9 +289,9 @@ check_pods() {
         if ((k in before) && rc > before[k] + 0) {
           printf "FAIL\t%s restarted during the check, last reason %s\tCheck the logs of the previous container with kubectl -n %s logs <pod> -c <container> --previous.\n", k, x[4], ns; bad++
         } else if (x[4] == "OOMKilled") {
-          printf "FAIL\t%s: restarted %d times, last reason OOMKilled\tRaise the memory limit of the OOMKilled components.\n", k, rc; bad++
+          printf "FAIL\t%s: restarted %d time%s, last reason OOMKilled\tRaise the memory limit of the OOMKilled components.\n", k, rc, rc == 1 ? "" : "s"; bad++
         } else if (rc > 0) {
-          printf "WARN\t%s: restarted %d times, last reason %s\tCheck the logs of the previous container with kubectl -n %s logs <pod> -c <container> --previous.\n", k, rc, x[4], ns; bad++
+          printf "WARN\t%s: restarted %d time%s, last reason %s\tCheck the logs of the previous container with kubectl -n %s logs <pod> -c <container> --previous.\n", k, rc, rc == 1 ? "" : "s", x[4], ns; bad++
         }
       }
     }
@@ -262,24 +299,40 @@ check_pods() {
   ' "$WORK/sample-1/pods" "$WORK/sample-2/pods"
 }
 
+# cadvisor series are keyed by the cgroup id, because a restarted or rescheduled pod keeps its name.
 check_cpu() {
   check '
     $1 == "cadvisor" && $3 ~ /^container_cpu_cfs_/ {
       c = lbl($4, "container"); if (c == "" || c == "POD") next
-      k = lbl($4, "pod") "/" c; keys[k] = 1
-      if ($3 ~ /throttled/) t[s, k] = $5; else p[s, k] = $5
+      k = lbl($4, "pod") "/" c; id = lbl($4, "id"); if (id == "") id = k
+      name[id] = k
+      if ($3 ~ /throttled/) t[s, id] = $5; else p[s, id] = $5
     }
+    $1 == "usage" && $3 == "cpu" { k = $2 "/" lbl($4, "container"); u[k] += $5; un[k]++ }
+    s == 2 && $1 == "limit" && $3 == "cpu" { lim[$2 "/" lbl($4, "container")] = $5 }
     END {
-      for (k in keys) {
-        if (!((1, k) in p) || !((2, k) in p)) continue
+      fix = "Raise the CPU limit of the throttled components."
+      for (id in name) {
+        if (!((1, id) in p) || !((2, id) in p)) continue
         seen++
-        d = p[2, k] - p[1, k]; if (d <= 0) continue
-        pct = 100 * (t[2, k] - t[1, k]) / d
-        if (pct >= 50) { out("FAIL", sprintf("%s throttled in %.0f%% of CPU periods", k, pct), "Raise the CPU limit of the throttled components."); bad++ }
-        else if (pct >= 25) { out("WARN", sprintf("%s throttled in %.0f%% of CPU periods", k, pct), "Raise the CPU limit of the throttled components."); bad++ }
+        dp = p[2, id] - p[1, id]; dt = t[2, id] - t[1, id]
+        if (dp <= 0 || dt < 0 || dt > dp) continue
+        pct = 100 * dt / dp
+        if (pct >= 50) { out("FAIL", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct), fix); bad++ }
+        else if (pct >= 25) { out("WARN", sprintf("%s throttled in %.0f%% of CPU periods", name[id], pct), fix); bad++ }
       }
-      if (!seen) out("WARN", "No CPU metrics read from the nodes", "Reading node metrics needs get permission on nodes/proxy.")
-      else if (!bad) out("OK", "No container is throttled in more than 25% of CPU periods")
+      if (seen) {
+        if (!bad) out("OK", "No container is throttled in more than 25% of CPU periods")
+        exit
+      }
+      out("WARN", "Could not read CPU throttling from the nodes, showing CPU usage against the limit instead", "Reading CPU throttling needs get permission on nodes/proxy. Usage against the limit is an approximation: a container can be throttled while its average usage is below the limit.")
+      for (k in lim) {
+        if (!(k in un) || lim[k] <= 0) continue
+        useen++; avg = u[k] / un[k]
+        if (avg / lim[k] >= 0.9) { out("WARN", sprintf("%s uses %.2f of its %g CPU limit (approximation)", k, avg, lim[k]), "Raise the CPU limit of the components close to their limit."); bad++ }
+      }
+      if (!useen) out("WARN", "Could not read CPU usage either", "Reading CPU usage needs get permission on pods.metrics.k8s.io and a running metrics-server.")
+      else if (!bad) out("OK", "No container uses more than 90% of its CPU limit (approximation)")
     }'
 }
 
@@ -287,17 +340,26 @@ check_memory() {
   check '
     s == 2 && $1 == "cadvisor" && $3 ~ /^container_(memory_working_set_bytes|spec_memory_limit_bytes)$/ {
       c = lbl($4, "container"); if (c == "" || c == "POD") next
-      k = lbl($4, "pod") "/" c; keys[k] = 1
-      if ($3 ~ /working_set/) ws[k] = $5; else lim[k] = $5
+      k = lbl($4, "pod") "/" c; id = lbl($4, "id"); if (id == "") id = k
+      name[id] = k
+      if ($3 ~ /working_set/) ws[id] = $5; else lim[id] = $5
     }
+    s == 2 && $1 == "usage" && $3 == "memory" { uws[$2 "/" lbl($4, "container")] = $5 }
+    s == 2 && $1 == "limit" && $3 == "memory" { ulim[$2 "/" lbl($4, "container")] = $5 }
     END {
-      for (k in keys) {
+      fix = "Raise the memory limit of the components close to their limit."
+      for (id in name) {
         seen++
-        if (lim[k] > 0 && ws[k] / lim[k] >= 0.95) {
-          out("WARN", sprintf("%s uses %s of its %s limit", k, mib(ws[k]), mib(lim[k])), "Raise the memory limit of the components close to their limit."); bad++
+        if (lim[id] > 0 && ws[id] / lim[id] >= 0.95) { out("WARN", sprintf("%s uses %s of its %s limit", name[id], mib(ws[id]), mib(lim[id])), fix); bad++ }
+      }
+      if (!seen) {
+        for (k in ulim) {
+          if (!(k in uws) || ulim[k] <= 0) continue
+          seen++
+          if (uws[k] / ulim[k] >= 0.95) { out("WARN", sprintf("%s uses %s of its %s limit", k, mib(uws[k]), mib(ulim[k])), fix); bad++ }
         }
       }
-      if (!seen) out("WARN", "No memory metrics read from the nodes", "Reading node metrics needs get permission on nodes/proxy.")
+      if (!seen) out("WARN", "No memory metrics read", "Reading memory usage needs get permission on nodes/proxy or on pods.metrics.k8s.io.")
       else if (!bad) out("OK", "No container uses more than 95% of its memory limit")
     }'
 }

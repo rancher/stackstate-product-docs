@@ -204,11 +204,12 @@ bash suse-observability_pipeline_check.sh [-i <seconds>] [-k] [<namespace>]
 * `-k` keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.
 * The namespace defaults to `suse-observability`.
 
-The script needs `kubectl`, `curl` and `awk`. It exits with a non-zero status when it finds a warning or a failure. To run the checks by hand, follow the steps below.
+The script needs `kubectl`, `curl` and `awk`, and the permissions described in <<check-by-hand>>. Without permission on `nodes/proxy`, it skips the volume check and compares CPU and memory usage with the limits instead of measuring CPU throttling. It exits with a non-zero status when it finds a warning or a failure. To run the checks by hand, follow the steps below.
 
+[#check-by-hand]
 === Run the checks by hand
 
-You need permission to list pods, to port-forward to pods and services, and to read node metrics through the API server proxy, in the namespace where {stackstate-product-name} runs. Set the namespace and define a helper that reads the metrics endpoint of a pod or service:
+You need permission to list pods, to read `pods.metrics.k8s.io` and to port-forward to pods and services in the namespace where {stackstate-product-name} runs. The CPU throttling and volume checks read the kubelet metrics through the API server proxy, which needs cluster-wide `get` permission on `nodes/proxy`. The default `view`, `edit` and `admin` roles do not include it. Set the namespace and define a helper that reads the metrics endpoint of a pod or service:
 
 [,bash]
 ----
@@ -256,7 +257,7 @@ A JVM service close to its memory limit spends more time in garbage collection a
 [#check-throttling]
 ==== CPU throttling
 
-This script reads the CPU throttling counters of all containers in the namespace from the kubelet, waits a minute, and prints the share of CPU periods in which each container was throttled:
+This script reads the CPU throttling counters of all containers in the namespace from the kubelet, waits a minute, and prints the share of CPU periods in which each container was throttled. The counters are matched by container ID, because a restarted or rescheduled pod keeps its name:
 
 [,bash]
 ----
@@ -267,17 +268,21 @@ sample() {
     /^container_cpu_cfs_(throttled_)?periods_total/ && index($0, "namespace=\"" ns "\"") && !/container=""/ {
       match($0, /pod="[^"]*"/); pod = substr($0, RSTART + 5, RLENGTH - 6)
       match($0, /container="[^"]*"/); c = substr($0, RSTART + 11, RLENGTH - 12)
-      print ($1 ~ /throttled/ ? "t" : "p"), pod "/" c, $2
+      match($0, /id="[^"]*"/); id = substr($0, RSTART + 4, RLENGTH - 5)
+      v = substr($0, index($0, "} ") + 2); sub(/ .*/, "", v)
+      print ($1 ~ /throttled/ ? "t" : "p"), id, pod "/" c, v
     }'
 }
 sample > /tmp/throttle-1; sleep 60; sample > /tmp/throttle-2
-awk 'NR == FNR { a[$1 FS $2] = $3; next }
-     { d[$1 FS $2] = $3 - a[$1 FS $2] }
-     END { for (k in d) if (k ~ /^p / && d[k] > 0) { split(k, s, FS); printf "%5.1f%%  %s\n", 100 * d["t" FS s[2]] / d[k], s[2] } }' \
+awk 'NR == FNR { a[$1 FS $2] = $4; next }
+     ($1 FS $2) in a { d[$1 FS $2] = $4 - a[$1 FS $2]; name[$2] = $3 }
+     END { for (id in name) if (d["p" FS id] > 0) printf "%5.1f%%  %s\n", 100 * d["t" FS id] / d["p" FS id], name[id] }' \
   /tmp/throttle-1 /tmp/throttle-2 | sort -nr | head -10
 ----
 
 A container that is throttled in more than about a quarter of its periods is short of CPU. Raise its CPU limit. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them.
+
+Containers without a CPU limit are never throttled and do not appear in the output. The script needs `get` permission on `nodes/proxy`, and some managed node types, such as serverless nodes, do not serve the kubelet metrics. When you cannot read them, compare the CPU usage from `kubectl top pods --containers` with the CPU limits, see <<check-restarts>>. This is an approximation: `kubectl top` shows the average usage over the last 15 to 30 seconds, so a container can be throttled while its usage is below the limit. A container whose usage is close to its limit is throttled.
 
 [#check-receiver]
 ==== Data arriving at the Receiver
