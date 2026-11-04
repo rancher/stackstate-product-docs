@@ -294,6 +294,21 @@ Raise resources in steps rather than by a few percent at a time. A small step ra
 
 The check in <<_check_without_ui>> prints the suggested values and the Helm values keys for the findings it can size.
 
+[#_reduce_resources]
+=== Reduce resources
+
+If a component uses much less than it gets, you can lower its resources to free capacity in the cluster. Lower them only when all of these hold for at least a week that includes your busiest hours:
+
+* CPU usage stays below half of the request, and the container is not throttled.
+* Memory usage stays below half of the limit, and the container was not `OOMKilled`.
+* The Kafka consumer lag does not grow, and none of the monitors for the component alert.
+
+Lower one component at a time, by at most a third, and check the same signals again for a week before the next step. Start with the components you raised before, and return them to the values of the sizing profile first. If most components use much less than the profile gives them, a smaller sizing profile may fit, see xref:/setup/install-stackstate/requirements.adoc[Requirements].
+
+JVM services, such as the Receiver, Topology sync, Health sync, State and Correlate, size their heap from the memory limit and keep the memory once they have used it. Their memory usage does not show how much they need, so lower their memory only with the help of {stackstate-product-name} support.
+
+Do not shrink volumes. To use less disk space, reduce the retention, see xref:/setup/data-management/data_retention.adoc[Data retention].
+
 [#_self_monitoring]
 == Self-monitoring
 
