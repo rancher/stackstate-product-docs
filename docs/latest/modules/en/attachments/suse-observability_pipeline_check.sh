@@ -536,7 +536,7 @@ check_receiver() {
         if (bm[k] <= 0) continue
         split(k, x, SUBSEP); r = bc[k] / bm[k]
         if (r < 0.95) { budgets++; continue }
-        out("WARN", sprintf("%s: %s %s budget at %.0f%% (%d of %d)", x[1], x[3], x[2], 100 * r, bc[k], bm[k]), "Raise the element budget, see Receiver element budget saturated on the Data ingestion pipeline page.")
+        out("WARN", sprintf("%s: %s %s budget at %.0f%% (%d of %d)", x[1], x[3], x[2], 100 * r, bc[k], bm[k]), "Raise the element budget, see Receiver element budget saturated on the Tune data ingestion for your workload page.")
         env = "CONFIG_FORCE_stackstate_receiver_processAgent_"
         if (x[2] == "unique" && (x[3] in uvar) && agents[x[1]] > 0) {
           per = bm[k] / agents[x[1]]

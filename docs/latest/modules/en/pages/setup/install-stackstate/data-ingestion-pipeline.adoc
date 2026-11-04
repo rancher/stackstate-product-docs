@@ -1,10 +1,12 @@
-= Data ingestion pipeline
-:description: How telemetry flows through SUSE Observability, which signals show each stage is overloaded, and how to check the pipeline with or without the UI
+= Tune data ingestion for your workload
+:description: Find which SUSE Observability components limit data ingestion, adjust their resources and limits to your workload, and check the pipeline with or without the UI
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-10-30
+:revdate: 2026-11-03
 :page-revdate: {revdate}
 
-This page describes how data moves through {stackstate-product-name}, from the agents and OpenTelemetry sources to the storage the UI queries. Use it to find the stage that limits throughput when data is delayed, missing or rejected, and to decide what to scale.
+After installing {stackstate-product-name} and connecting your data sources, use this guide to adjust ingestion capacity to your actual workload. Check which components are under pressure, adjust their resources or ingestion limits, and verify that the deployment keeps up with incoming data. Repeat these checks as your monitored environment grows.
+
+All changes are made in the Helm values of the `suse-observability` chart, see <<_change_resources>>.
 
 The pipeline is the same for every sizing profile. Profiles differ in how many replicas run and in how components are grouped into pods.
 
@@ -163,7 +165,96 @@ The *How to check* column names the SUSE Observability StackPack monitors for ea
 | Elasticsearch disk
 |===
 
-Resources for each component are set in the Helm values of the `suse-observability` chart, for example `stackstate.components.receiver.resources`, `stackstate.components.vmagent.resources`, `victoria-metrics-0.server.resources`, `clickhouse.resources` and `elasticsearch.resources`. On HA profiles, Receiver resources are set per role under `stackstate.components.receiver.split`. After you change values, run `helm upgrade` with all the values files you used for the installation.
+[#_change_resources]
+== Change resources
+
+The sizing profile sets the resources of every component. To change them for one component:
+
+. Find the values key of the component:
++
+[cols="2,3"]
+|===
+| Component | Values key
+
+| Receiver, non-HA profiles
+| `stackstate.components.receiver`
+
+| Receiver, HA profiles
+| `stackstate.components.receiver.split.base`, `stackstate.components.receiver.split.processAgent` and `stackstate.components.receiver.split.logs`
+
+| Topology sync, Health sync, State and Checks, non-HA profiles
+| `stackstate.components.server`
+
+| Topology sync, HA profiles
+| `stackstate.components.sync`
+
+| Health sync, HA profiles
+| `stackstate.components.healthSync`
+
+| State, HA profiles
+| `stackstate.components.state`
+
+| Checks, HA profiles
+| `stackstate.components.checks`
+
+| Correlate
+| `stackstate.components.correlate`
+
+| Events to Elasticsearch
+| `stackstate.components.e2es`
+
+| vmagent
+| `stackstate.components.vmagent`
+
+| OpenTelemetry Collector
+| `opentelemetry-collector`
+
+| Kafka
+| `kafka`
+
+| VictoriaMetrics
+| `victoria-metrics-0.server`, and on HA profiles also `victoria-metrics-1.server`
+
+| ClickHouse
+| `clickhouse`
+
+| Elasticsearch
+| `elasticsearch`
+
+| StackGraph, non-HA profiles
+| `hbase.stackgraph`
+
+| StackGraph, HA profiles
+| `hbase.hbase.regionserver`
+|===
+. Add the new values under `<key>.resources` to a separate values file, for example `resources-values.yaml`. Set only the values you change. The other values keep the values of the sizing profile. For example, to raise the CPU of the Receiver on a non-HA profile:
++
+[,yaml]
+----
+stackstate:
+  components:
+    receiver:
+      resources:
+        requests:
+          cpu: "1500m"
+        limits:
+          cpu: "3"
+----
+. Run `helm upgrade` with all the values files you used for the installation, and add the new file last:
++
+[,bash]
+----
+helm upgrade \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values resources-values.yaml \
+suse-observability \
+suse-observability/suse-observability
+----
++
+Replace `values.yaml` with the values files of your installation.
+
+To resize volumes, see xref:/setup/data-management/data_retention.adoc#_resizing_storage[Resizing storage]. The element budgets of the Receiver are set with environment variables, see <<_receiver_element_budget_saturated>>.
 
 [#_how_much_to_add]
 === How much to add
@@ -180,6 +271,9 @@ Raise resources in steps rather than by a few percent at a time. A small step ra
 | CPU throttled in more than 50% of periods
 | Double the CPU limit.
 
+| *Overrunning requested CPU*: CPU usage more than twice the request for 30 minutes
+| Raise the CPU request to the current usage. If the container is also throttled, raise the limit as well.
+
 | Container `OOMKilled`, or memory at 95% of the limit or more
 | Raise the memory limit by 50%. JVM services derive their heap from the memory limit, so you do not set the heap separately.
 
@@ -194,7 +288,6 @@ Raise resources in steps rather than by a few percent at a time. A small step ra
 |===
 
 * Raise the request together with the limit, so the scheduler places the pod on a node that has the resources.
-* Values you set for a component override the values of the sizing profile.
 * If several components are short at the same time, move to the next sizing profile instead of raising them one by one.
 * After a change, wait until the Kafka consumer lag stops growing before you judge the result.
 * If two steps on the same stage do not help, the cause is probably not resources. Follow the matching runbook or contact {stackstate-product-name} support.
@@ -341,7 +434,7 @@ Reports the cluster health and the disk usage of each node from 80%. When disk u
 [#_runbooks]
 == Runbooks
 
-These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, run the matching check in <<_check_without_ui>> instead.
+These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, run the matching check in <<_check_without_ui>> instead. To add resources, follow <<_change_resources>> with the steps in <<_how_much_to_add>>.
 
 [#_topology_is_delayed_or_components_are_missing]
 === Topology is delayed or components are missing
