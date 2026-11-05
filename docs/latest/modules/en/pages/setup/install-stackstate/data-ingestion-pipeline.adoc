@@ -281,7 +281,7 @@ Raise resources in steps rather than by a few percent at a time. A small step ra
 | Raise the memory limit by 50%.
 
 | Element budget above 95%
-| Raise the per-agent value by 50%. See <<_receiver_element_budget_saturated>>.
+| If agents are limited, move to the next sizing profile. Otherwise raise the per-agent value by 50%. See <<_receiver_element_budget_saturated>>.
 
 | Volume or Elasticsearch disk 80% full or more
 | Resize the volume so the current data uses at most 70% of it: divide the used size by 0.7. See xref:/setup/data-management/data_retention.adoc#_resizing_storage[Resizing storage]. Reducing the retention is an alternative.
@@ -465,7 +465,11 @@ These runbooks start from a symptom and point to the stage to check. The SUSE Ob
 
 The Receiver limits how many components, relations and connections it accepts from process agents, and how many new components and relations it accepts per hour. Each budget is a value per agent multiplied by the number of agents, so it grows when you add agents. When a budget is saturated, the Receiver drops data for that element type, which shows up as missing topology or connections.
 
-. Find the saturated `element_type` in the *Receiver - unique element budget saturation* and *Receiver - hourly element budget saturation* monitors.
+The sizing profile also limits how many nodes you can observe, counted in Default Nodes, see xref:/setup/install-stackstate/requirements.adoc[Requirements]. Agents above that limit are marked as limited. The Receiver rejects their process, container and connection data, and they do not add to the element budgets. Check this limit first, because raising a budget does not help limited agents.
+
+. Run `sts agent list`, see xref:/setup/cli/cli-sts.adoc[CLI: sts]. The last line shows how many agents are active, limited and stale. Other signs of limited agents are the *Nodes limitation* notifications in the UI and HTTP 429 responses with `Maximum amount of active agents exceeded` in the agent logs.
+. If any agents are limited, move to the next sizing profile. Set the new profile in `global.suseObservability.sizing.profile` and run `helm upgrade`. You cannot move from a non-HA profile to an HA profile, see xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[Kubernetes installation].
+. If no agents are limited, the agents send more elements than the default budget per agent allows, for example because they run many short-lived pods or open many connections. Find the saturated `element_type` in the *Receiver - unique element budget saturation* and *Receiver - hourly element budget saturation* monitors.
 . Raise the matching per-agent value by 50% with an environment variable on the Receiver:
 +
 [cols="1,2"]
