@@ -1,0 +1,105 @@
+= Add StackPacks to the platform
+:description: Add StackPack container images through Helm or upload StackPack packages with the SUSE Observability CLI
+:page-languages: [en]
+:revdate: 2026-11-06
+:page-revdate: {revdate}
+
+You can add StackPacks through a container image or upload a `.sts` package with the CLI.
+Both methods make the StackPack available in the catalog.
+Install the StackPack separately to create an integration instance.
+
+== Add a StackPack container image
+
+The {stackstate-product-name} Helm chart accepts additional images through `stackstate.stackpacks.extraImages`.
+This list adds images after the built-in images.
+It does not replace the packages that ship with the product.
+
+Each image must contain its `.sts` packages in `/stackpacks`.
+The image must provide `/bin/sh` and `cp` so the chart can copy the packages.
+Choose an image that supports the architecture of your Kubernetes nodes.
+
+. Make sure that your chart version includes `stackstate.stackpacks.extraImages`.
+The chart's values reference lists this field.
+. Create a values file named `extra-stackpacks-values.yaml`:
++
+[source,yaml]
+----
+stackstate:
+  stackpacks:
+    extraImages:
+      - name: my-stackpack
+        registry: quay.io
+        repository: stackstate/contrib-stackpacks
+        tag: "my-stackpack-0.0.1"
+        pullPolicy: IfNotPresent
+----
++
+Community StackPack images use `quay.io/stackstate/contrib-stackpacks` with a `<name>-<version>` tag.
+Each image contains one StackPack.
+Replace the example repository and tag with the published image you want to use.
+Give each image a unique `name`, including the names of the built-in images.
++
+The `registry` field selects the registry for this image.
+An explicit value takes precedence over `global.imageRegistry`.
+Use the same fields for an image from another registry, such as `registry.example.com`.
+. Add `--values extra-stackpacks-values.yaml` to your existing Helm installation or upgrade command.
+Keep the other values files that your installation uses.
+. In the {stackstate-product-name} UI, open *StackPacks* and select the additional StackPack.
+. Follow the StackPack's installation instructions.
+
+Helm replaces lists during a values merge.
+Keep all your additional images in `extraImages` when you update the list.
+Leave `stackstate.stackpacks.images` unchanged to retain the built-in images.
+
+=== Images from a private registry
+
+The StackPack init containers use the platform pod's image pull secrets.
+
+. Create a Kubernetes image pull secret for the registry in the {stackstate-product-name} installation namespace.
+. Add its name to `global.imagePullSecrets` in your values file:
++
+[source,yaml]
+----
+global:
+  imagePullSecrets:
+    - my-stackpack-registry
+----
++
+Keep any image pull secrets that your installation already uses.
+. Use this values file with your existing Helm installation or upgrade command.
+
+=== Update or remove an additional image
+
+To make a new StackPack version available, update the image's `tag` and run your existing Helm upgrade command.
+Installed instances follow the platform's manual or automatic upgrade configuration.
+See xref:/stackpacks/about-stackpacks.adoc#_upgrade_a_stackpack[Upgrade a StackPack] for manual and automatic upgrades.
+
+Removing an image from `extraImages` does not uninstall its StackPack instances.
+Use the xref:/stackpacks/about-stackpacks.adoc#_install_or_uninstall_a_stackpack[StackPack uninstall procedure] to remove an integration.
+
+== Upload a StackPack package
+
+Use this method to add a package without an image or a Helm change.
+The CLI must point to your {stackstate-product-name} instance.
+Your account needs permission to upload and manage StackPacks.
+See xref:/setup/cli/cli-sts.adoc[Configure the SUSE Observability CLI].
+
+. Get the `.sts` package from its maintainer, or xref:/setup/custom-integrations/stackpacks.adoc#_package[package your StackPack].
+. Upload the package:
++
+[source,bash]
+----
+sts stackpack upload --file ./my-stackpack-0.0.1.sts
+----
+. Install the StackPack through the UI or CLI:
++
+[source,bash]
+----
+sts stackpack install --name my-stackpack
+----
++
+Use `sts stackpack list-parameters --name my-stackpack` to find any required installation parameters.
+Pass each parameter with `--parameter key=value`.
+
+Upload makes a package version available.
+It does not create an installed instance until you install the StackPack.
