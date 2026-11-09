@@ -1,0 +1,168 @@
+= Source Component Data Monitors
+:description: Judge the health of components from the data their source sent, such as a Kubernetes object, with CEL expressions in the source-component-data monitor function
+:page-languages: [en]
+:revdate: 2026-11-09
+:page-revdate: {revdate}
+
+== Overview
+
+The source component data monitor function decides the health of a component from the data the component was synchronized with: for a Kubernetes component, the Kubernetes object that the agent or the OpenTelemetry collector sent. You write the decision as https://cel.dev[CEL] expressions, so this kind of monitor needs no scripting.
+
+NOTE: This function requires SUSE Observability {next-release-version} or later.
+
+Use it for health that can be read from a single component's own data, such as a Pod's phase and container statuses or a Node's `spec.unschedulable` flag. For health based on metrics, use a threshold monitor instead.
+
+== How a monitor is evaluated
+
+On every run, the monitor evaluates each component that its `query` selects in four steps:
+
+. *Choose the source.* A component can be merged from several sources, for example from both the cluster agent and the OpenTelemetry collector. `sourceSelector` is evaluated for each source, and the first source that matches is used. Sources are ordered by type and then by identifier, so the choice is the same on every run. A component without a matching source reports `UNKNOWN` with reason `NoMatchingSource`.
+. *Select the items to judge.* `selector` returns a list of items, for example the containers that are in an error state. Without a `selector`, the component itself is the only item. If `selector` returns an empty list, the monitor reports the `whenEmpty` result, which is `{"health": "CLEAR"}` by default.
+. *Build one health state per item.* `health`, `title`, `reason`, `data` and `key` are evaluated for each item, with the item available as `item`. *Each of these arguments is optional and defaults to the item's own field of the same name.* A `selector` that returns complete results, such as `[{"health": "CRITICAL", "reason": "Unschedulable"}]`, therefore needs none of them.
+. *Report errors as `UNKNOWN`.* If an expression fails, for example because it reads a field the data does not contain, the component reports `UNKNOWN` with the error as reason. Missing data never results in `CLEAR`.
+
+== Arguments
+
+[cols="1,1,3"]
+|===
+|Argument |Type |Description
+
+|`query`
+|STQL query, required
+|The components to monitor, for example `type = "pod"`.
+
+|`sourceSelector`
+|CEL, boolean, required
+|Selects the source to judge, for example `has(source.configuration.metadata) && has(source.configuration.metadata.uid)` to select the Kubernetes object.
+
+|`selector`
+|CEL, list
+|The items to judge. Defaults to the component itself.
+
+|`health`
+|CEL, string
+|The health state of an item: `CLEAR`, `DEVIATING`, `CRITICAL` or `UNKNOWN`. Defaults to `item.health`.
+
+|`title`
+|CEL, string
+|The title of the health state. Defaults to `item.title`, and otherwise to the monitor's name.
+
+|`reason`
+|CEL, string
+|A short reason code, for example `CrashLoopBackOff`. Defaults to `item.reason`.
+
+|`data`
+|CEL, any
+|Data for the remediation hint. Defaults to `item.data`.
+
+|`key`
+|CEL, string
+|Identifies the health state among the component's results. Defaults to `item.key`, and otherwise to the item's position in the list.
+
+|`whenEmpty`
+|CEL, map
+|The result when `selector` returns no items. Defaults to `{"health": "CLEAR"}`.
+
+|`unknownData`
+|CEL, map
+|Remediation hint data for the `UNKNOWN` results that the function reports itself, such as `NoMatchingSource` and expression errors.
+|===
+
+== CEL context
+
+The expressions can read the following variables:
+
+[cols="1,3"]
+|===
+|Variable |Contents
+
+|`id`, `name`, `typeName`, `identifiers`, `tags`, `healthState`, `properties`
+|The component, as in component presentation expressions. `tags` maps each tag key to its list of values, for example `tags["cluster-name"][0]`.
+
+|`source.identifier`
+|The identifier of the selected source.
+
+|`source.tags`
+|The source's tags, in the same form as `tags`.
+
+|`source.configuration`
+|The source's data, for a Kubernetes object its `apiVersion`, `kind`, `metadata` and `spec`. The cluster agent does not always send `kind`.
+
+|`source.status`
+|The status of the source, for a Kubernetes object its `status`, regardless of which producer sent it.
+
+|`now`
+|The time of the evaluation, for example `timestamp(source.configuration.metadata.creationTimestamp) < now - duration("15m")`.
+
+|`item`
+|The current item, in `health`, `title`, `reason`, `data` and `key`.
+|===
+
+Besides the standard CEL functions and macros, the expressions can use `cel.bind(name, value, expression)` to name an intermediate value, and optional field selection, such as `{"Ready": "CLEAR"}[?item.reason].orValue("CRITICAL")`.
+
+TIP: `has()` only tests the last field of a selection. `has(source.configuration.metadata.uid)` fails, and reports `UNKNOWN`, when `metadata` itself is missing. Test each level that may be absent: `has(source.configuration.metadata) && has(source.configuration.metadata.uid)`.
+
+== Results
+
+Each item becomes a health state on the component:
+
+* `health` is the state, and `title` is the title shown for it.
+* `reason` is shown with the state and is available to the remediation hint.
+* The health state's identity is the component's identifier together with `key`. Set `key` when the number or order of items can change, for example to the container name, so that each health state keeps its identity.
+
+The remediation hint receives the fields of `data` at the top level (a value that is not a map is available as `data`), plus:
+
+* `componentUrnForUrl`, the component's identifier, encoded for use in a link.
+* `sourceIdentifier`, the identifier of the source that was judged.
+
+A remediation hint template fails to render when it reads a field that is missing. Give `whenEmpty` and `unknownData` the same `data` fields as the other results, with empty values.
+
+== Example
+
+This monitor reports a `CRITICAL` health state for each container of a Pod that is waiting with an error, and `UNKNOWN` for a Pod without status:
+
+----
+  - _type: "Monitor"
+    name: "Pods in Waiting State"
+    tags:
+      - pods
+      - containers
+    function: "urn:stackpack:common:monitor-function:source-component-data"
+    identifier: "urn:stackpack:my-stackpack:monitor:pods-in-waiting-state"
+    status: "ENABLED"
+    description: "Reports containers that are waiting with an error."
+    arguments:
+      query: 'type = "pod"'
+      sourceSelector: 'has(source.configuration.metadata) && has(source.configuration.metadata.uid)'
+      selector: |-
+        !has(source.status.phase)
+          ? [{"health": "UNKNOWN", "reason": "MissingPodStatus", "data": {"container": {}, "reasons": {} } }]
+          : (has(source.status.containerStatuses) ? source.status.containerStatuses : []).filter(c,
+              !has(c.state.running) && has(c.state.waiting) &&
+              c.state.waiting.reason in ["CreateContainerConfigError", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError"])
+            .map(c, {"health": "CRITICAL", "title": "Container " + c.name + " waiting", "reason": c.state.waiting.reason,
+              "data": {"container": c, "reasons": {c.state.waiting.reason: true} }, "key": c.name})
+      unknownData: '{"container": {}, "reasons": {} }'
+      whenEmpty: '{"health": "CLEAR", "reason": "NoWaitingError", "data": {"container": {}, "reasons": {} } }'
+    intervalSeconds: 30
+    remediationHint: "Inspect the events of [this Pod](/#/components/{{ componentUrnForUrl }}){{#if reasons.CrashLoopBackOff}} and the logs of its crashing container{{/if}}."
+----
+
+* `sourceSelector` selects the Kubernetes Pod object, not data that other producers merged into the component.
+* `selector` decides everything once and returns complete results, so the monitor sets no `health`, `title`, `reason`, `data` or `key`.
+* `whenEmpty` makes a Pod without waiting containers `CLEAR`. Every result, including `whenEmpty` and `unknownData`, provides `container` and `reasons`, so a remediation hint that reads them always renders.
+
+The same monitor can leave the classification to the per-item arguments instead. The `selector` then returns only the waiting containers:
+
+----
+      selector: |-
+        (has(source.status.containerStatuses) ? source.status.containerStatuses : []).filter(c,
+          has(c.state.waiting) && c.state.waiting.reason in ["CrashLoopBackOff", "ImagePullBackOff"])
+      health: '"CRITICAL"'
+      title: '"Container " + item.name + " waiting"'
+      reason: 'item.state.waiting.reason'
+      data: '{"container": item}'
+      key: 'item.name'
+----
+
+NOTE: In StackPack templates (`.sty` files), CEL expressions must not contain two adjacent closing braces, because the template engine reads them as the end of a template expression. Write `} }` instead of `}}`, as in the example above.
