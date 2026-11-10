@@ -1,7 +1,7 @@
 = Version specific upgrade instructions
 :description: Review upgrade instructions for specific versions to update configurations and avoid deployment failures in SUSE Observability
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-10-19
+:revdate: 2026-11-10
 :page-revdate: {revdate}
 
 == Overview
@@ -16,6 +16,21 @@ This page provides specific instructions and details of any required manual step
 ====
 
 == Upgrade instructions
+
+[#upgrade-to-next-release]
+=== {next-release-version}
+
+==== Affinity and tolerations
+
+All workloads now apply `global.suseObservability.tolerations` and `global.suseObservability.affinity` consistently, and a component setting overrides a global one. The new precedence rules are described in xref:/setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes affinities and tolerations]. Review your `values.yaml` before you upgrade, because the following behavior changed:
+
+* *Tolerations are no longer combined.* `stackstate.components.all.tolerations` was appended to the tolerations of each component, and `hbase.all.tolerations` to those of each HBase component. A component that sets its own `tolerations` now replaces them. Repeat the shared tolerations that the component still needs, or move them to `global.suseObservability.tolerations`.
+* *An empty list now clears tolerations.* `tolerations: []` was the default and had no effect. It now removes the tolerations that the component would inherit, for example from `stackstate.components.all`. Remove leftover `tolerations: []` entries copied from `helm show values`.
+* *An empty `elasticsearch.nodeAffinity: {}` now removes the global node affinity* from Elasticsearch. It was the previous default. Remove the entry if the Elasticsearch pods must follow the global node affinity.
+* *A partial `affinity` override keeps the other fields.* For Kafka, ClickHouse, ZooKeeper, VictoriaMetrics, HBase and the other infrastructure components, a local `affinity` used to drop the global node affinity and the anti-affinity of the sizing profile. It now replaces only the fields it sets. With an HA profile, an override that sets only `nodeAffinity` gets the required pod anti-affinity back, and pods can stay `Pending` on clusters with fewer nodes than replicas. Set `podAntiAffinity: {}` on the component to keep the previous behavior.
+* *Elasticsearch anti-affinity follows the global mode.* It was always `hard`. With an HA profile and `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` set to `false`, it is now `soft`. Set `elasticsearch.antiAffinity: hard` to keep the previous behavior.
+* *Global affinity applies without a sizing profile.* Installations that do not use a sizing profile now also get `global.suseObservability.affinity`.
+* *ClickHouse restarts once during the upgrade.*
 
 [#upgrade-to-2-12-0]
 === 2.12.0
