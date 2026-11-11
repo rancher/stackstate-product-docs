@@ -150,7 +150,7 @@ done'
 
 Each `--describe` line must show `PartitionCount: 40`. `unset JMX_PORT` stops the tools from opening the JMX port of the broker. Running the command for a topic that already has 40 partitions fails for that topic and changes nothing.
 
-WARNING: You can increase the number of partitions of a topic but never decrease it. While the correlation consumers rebalance, some connections and traces can be correlated later than usual. Stored topology, metrics, logs and traces are not affected.
+WARNING: You can increase the number of partitions of a topic but never decrease it. For a few minutes after the change, some connections and traces may not be correlated. Stored topology, metrics, logs and traces are not affected.
 
 === Replicas
 
@@ -162,7 +162,7 @@ Moving down to a profile with fewer replicas removes data nodes, region servers 
 
 The non-HA and HA profiles use different StatefulSets, replica counts and storage layouts, so there is no in-place upgrade between them. Instead, remove the installation, install it again with the target profile in the same namespace, and restore the data from a backup. This works in both directions and does not need a new namespace or cluster.
 
-WARNING: The installation is unavailable from the moment you remove it until the restore has finished, and agents cannot send data meanwhile. Data that the installation receives after the backup is not restored.
+WARNING: The installation is unavailable from the moment you remove it until the restore has finished. Data that it receives after the backup is lost, including data that the new installation receives before the restore.
 
 NOTE: This procedure requires backup CLI version 0.12.0 or newer. Download the latest version as described in xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
 
@@ -170,11 +170,12 @@ NOTE: This procedure requires backup CLI version 0.12.0 or newer. Download the l
 
 * Backups must be enabled for every data store and stored in object storage (S3 or Azure Blob Storage), as described in xref:/setup/data-management/backup_restore/backup_enable.adoc[Enable backups]. Do not use the Kubernetes persistent volume storage option: its volumes are deleted in step 2.
 * Keep your `values.yaml`. You install again with the same values and change only the profile.
-* Do the removal, installation and restore in one sitting.
+* If Argo CD or another GitOps tool manages the installation, turn off automatic sync for the whole procedure and remove and install the application through that tool. Otherwise it can recreate the old StatefulSets while you delete the volumes.
+* Do the removal, installation and restore in one sitting. Restore VictoriaMetrics within one day of the installation in step 3: after that, the hourly backup of the new installation overwrites the backup that you restore.
 
 === Step 1: Back up the installation
 
-Scheduled backups run once a day. To restore the current state, start a backup of every data store now:
+Most scheduled backups run once a day. To restore the current state, start a backup of every data store now:
 
 [,bash]
 ----
@@ -190,13 +191,15 @@ kubectl --namespace suse-observability port-forward svc/suse-observability-elast
 curl -XPOST localhost:9200/_slm/policy/auto-sts-backup/_execute
 ----
 
+Note the `snapshot_name` that the call returns.
+
 VictoriaMetrics has no on-demand backup. It backs up from a sidecar on the hourly schedule, which you can change with `victoria-metrics-0.backup.scheduled.hourly` (and `victoria-metrics-1` for HA). Wait for the next run.
 
-When the jobs have completed, list the backups of each data store with its `list` command, as described in xref:/setup/data-management/backup_restore/backup_restore.adoc[Restore backups], and note the name of the newest Elasticsearch snapshot, ClickHouse backup, VictoriaMetrics backup and StackGraph v2 archive. Check that each one was created after you started this step.
+The jobs and the snapshot call only start the backups. Wait until the jobs have completed and, for Elasticsearch, until the snapshot state is `SUCCESS`. Then list the backups of each data store with its `list` command, as described in xref:/setup/data-management/backup_restore/backup_restore.adoc[Restore backups], and note the name of the newest Elasticsearch snapshot, ClickHouse backup, VictoriaMetrics backup and StackGraph v2 archive. Check that each one was created after you started this step. For VictoriaMetrics the newest backup is `<bucket>/victoria-metrics-0-latest`, which every hourly run updates in place.
 
 === Step 2: Remove the installation
 
-Remove the Helm release and then the volumes. `helm uninstall` does not delete persistent volume claims, and the new installation would otherwise reuse the old volumes with their old sizes and data.
+Remove the Helm release and then the volumes. `helm uninstall` keeps the volume claims of the StatefulSets, and the new installation would otherwise reuse them with their old sizes and data.
 
 [,bash]
 ----
@@ -204,11 +207,11 @@ helm uninstall suse-observability --namespace suse-observability
 kubectl --namespace suse-observability get pvc
 ----
 
-Delete the volume claims of the installation by name. In a namespace that holds only SUSE Observability, that is every claim:
+Delete every volume claim of the installation. Their names all contain `suse-observability`. Check the list first if other applications share the namespace:
 
 [,bash]
 ----
-kubectl --namespace suse-observability delete pvc --all
+kubectl --namespace suse-observability get pvc -o name | grep suse-observability | xargs kubectl --namespace suse-observability delete
 ----
 
 Secrets that you created yourself, such as the license, API key and admin password secrets, are not removed and are used again by the new installation.
@@ -217,10 +220,11 @@ Secrets that you created yourself, such as the license, API key and admin passwo
 
 Install again with the same chart version and values, with `global.suseObservability.sizing.profile` set to the new profile and these backup settings:
 
-* Keep the S3 `bucketName` and `s3Prefix` values of every data store unchanged, so that the new installation reads the old backups.
+* Keep the `bucketName` (the container on Azure) and `s3Prefix` values of every data store unchanged, so that the new installation reads the old backups.
+* Remove the volume sizes that you set for an earlier Helm upgrade, unless you want to keep them. The profile then decides the sizes.
 * Set `backup.elasticsearch.enabled: false` until the restore has finished. The new installation then does not take Elasticsearch snapshots of its own, which could replace your backup under the snapshot retention rules. The snapshot repository stays registered, so the restore still works.
 * Keep `clickhouse.backup.enabled: true`. When it is disabled, the backup service that the restore needs is removed.
-* Do not set `victoria-metrics-0.backup.minHistorySeconds` (or the `victoria-metrics-1` key) to `0`. A new installation with less than one day of data then refuses to overwrite the existing backup.
+* Keep `victoria-metrics-0.backup.minHistorySeconds` (and the `victoria-metrics-1` key) at its default, not `0`. For one day after the installation it stops the hourly backup from overwriting the backup in `victoria-metrics-0-latest`.
 
 Wait until all pods are ready.
 
@@ -242,7 +246,7 @@ If a restore is interrupted, finish it with the `check-and-finalize` command of 
 
 === Step 5: Set the number of Elasticsearch replicas
 
-The restored indices keep the replica count of the installation you backed up. Set it to match the new profile, otherwise Elasticsearch stays yellow on a single node, or keeps no copy of the data on three nodes. The Elasticsearch pods are new, so open a new port-forward as in step 1.
+Skip this step if the number of Elasticsearch nodes does not change. The restored indices keep the replica count of the installation you backed up. Set it to match the new profile, otherwise Elasticsearch stays yellow on a single node, or keeps no copy of the data on three nodes. The Elasticsearch pods are new, so open a new port-forward as in step 1.
 
 For an HA profile, which has three Elasticsearch nodes:
 
@@ -261,7 +265,7 @@ For a non-HA profile use `"number_of_replicas":0`.
 . Check that Elasticsearch is green and that the `sts_k8s_logs` data stream exists: `curl localhost:9200/_data_stream/sts_k8s_logs`.
 . Check that all pods are ready.
 
-The restore brings back the settings, users, service tokens and passwords stored in the backup. These are the ones from before the reinstall.
+The StackGraph restore brings back settings, StackPacks, permissions and service tokens. The admin password and API key come from your values.
 
 == Volume sizes per profile
 
