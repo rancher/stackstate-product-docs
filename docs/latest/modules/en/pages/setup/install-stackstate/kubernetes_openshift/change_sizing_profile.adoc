@@ -1,0 +1,263 @@
+= Change the sizing profile
+:description: Move a SUSE Observability installation between sizing profiles, either with a Helm upgrade within non-HA or HA, or with a backup and restore between non-HA and HA
+:revdate: 2026-11-11
+:page-revdate: {revdate}
+
+== Overview
+
+The `global.suseObservability.sizing.profile` value selects the resources, replica counts and storage sizes of an installation. How you change it depends on the direction:
+
+[cols="2,3",options="header"]
+|===
+| Change | Method
+
+| Within non-HA (`10-nonha`, `20-nonha`, `50-nonha`, `100-nonha`)
+| xref:#_change_the_profile_with_a_helm_upgrade[Helm upgrade]
+
+| Within HA (`150-ha`, `250-ha`, `500-ha`, `4000-ha`)
+| xref:#_change_the_profile_with_a_helm_upgrade[Helm upgrade]
+
+| Between non-HA and HA, in either direction
+| xref:#_move_between_non_ha_and_ha_with_a_backup_and_restore[Backup and restore into a new installation]
+|===
+
+WARNING: Always take a backup before you change the profile, and verify that it can be restored.
+
+== Change the profile with a Helm upgrade
+
+Changing the profile in the values and running `helm upgrade` works only when no persistent volume has to change size. Kubernetes does not allow the `volumeClaimTemplates` of a StatefulSet to change, so an upgrade that changes a volume size is rejected:
+
+----
+StatefulSet.apps "suse-observability-kafka" is invalid: spec: Forbidden: updates to statefulset spec for fields other than 'replicas', 'ordinals', 'template', ... are forbidden
+----
+
+A rejected upgrade is not harmless. Helm applies part of the release before it fails, which can restart pods. Compare the volume sizes and prepare the volumes before you upgrade.
+
+=== Compare the volume sizes
+
+Render the chart with the new profile and ask the Kubernetes API server whether it accepts the result. Use the same chart version and values as for the upgrade, and replace the namespace and release name:
+
+[,bash]
+----
+helm template suse-observability suse-observability/suse-observability \
+  --namespace suse-observability \
+  --values values.yaml \
+  --set global.suseObservability.sizing.profile=<NEW_PROFILE> > new.yaml
+
+kubectl --namespace suse-observability apply --dry-run=server --server-side --force-conflicts -f new.yaml
+----
+
+Every StatefulSet that reports `Forbidden: updates to statefulset spec` has a volume size that differs from the one in the cluster. To see the current sizes:
+
+[,bash]
+----
+kubectl --namespace suse-observability get statefulset \
+  -o custom-columns='NAME:.metadata.name,SIZE:.spec.volumeClaimTemplates[*].spec.resources.requests.storage'
+----
+
+NOTE: `helm upgrade --dry-run=server` does not detect this problem and succeeds even when the real upgrade is rejected.
+
+=== Handle each volume that changes
+
+Volumes can grow but cannot shrink. For every volume that differs, choose one of the following:
+
+Volume grows::
+Resize the volume as described in xref:/setup/data-management/data_retention.adoc#_resizing_storage[Resizing storage]: patch the PVCs, then delete the StatefulSet with `--cascade=orphan` and run the upgrade. This needs a storage class with `allowVolumeExpansion: true`. Kubernetes expands volumes online on such a class, without restarting the pods.
+
+Volume would shrink::
+Keep the current size by setting it explicitly in your values. The chart then renders the same size as the cluster and the StatefulSet is unchanged. For example, to keep ClickHouse at its current 100Gi:
++
+[,yaml]
+----
+clickhouse:
+  persistence:
+    size: 100Gi
+----
++
+Use the keys in the table below.
+
+The volume sizes per profile are in the xref:#_volume_sizes_per_profile[table at the end of this page]. The sizes that differ between two profiles can differ in either direction, so check each pair. For example, `150-ha` gives ClickHouse 100Gi but `250-ha` only 50Gi, so an upgrade from `150-ha` to `250-ha` shrinks ClickHouse unless you set it explicitly. A downgrade from `250-ha` to `150-ha` is rejected for the opposite reason on Elasticsearch, because its volumes are larger in `250-ha`.
+
+[cols="2,3",options="header"]
+|===
+| Volume | Values key
+
+| Elasticsearch
+| `elasticsearch.volumeClaimTemplate.resources.requests.storage`
+
+| ClickHouse
+| `clickhouse.persistence.size`
+
+| Kafka
+| `kafka.persistence.size`
+
+| StackGraph (HBase, non-HA)
+| `hbase.stackgraph.persistence.size`
+
+| HDFS data nodes (HA)
+| `hbase.hdfs.datanode.persistence.size`
+
+| VictoriaMetrics
+| `victoria-metrics-0.server.persistentVolume.size`, and `victoria-metrics-1.server.persistentVolume.size` for HA
+
+| ZooKeeper
+| `zookeeper.persistence.size`
+|===
+
+=== Example: Kafka when moving from `10-nonha` to `20-nonha`
+
+Kafka is the only volume that differs between these two profiles: 60Gi in `10-nonha` and 100Gi in `20-nonha`.
+
+. Patch the Kafka PVC:
++
+[,bash]
+----
+kubectl --namespace suse-observability patch pvc data-suse-observability-kafka-0 \
+  -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'
+----
+. Wait until `kubectl get pvc` shows the new capacity.
+. Delete the StatefulSet and keep its pods:
++
+[,bash]
+----
+kubectl --namespace suse-observability delete statefulset suse-observability-kafka --cascade=orphan
+----
+. Set the new profile in your values and run the same `helm upgrade` command that you used for the installation.
+
+To go back from `20-nonha` to `10-nonha`, keep Kafka at 100Gi by setting `kafka.persistence.size: 100Gi` in your values. Without it the downgrade is rejected.
+
+=== Kafka partitions
+
+The `500-ha` and `4000-ha` profiles create the `sts_correlate_endpoints`, `sts_correlate_http_trace_observations` and `sts_correlated_connections` topics with 40 partitions instead of 10. The upgrade job creates a topic with these values only when the topic does not exist, and for an existing topic it updates the settings but never the number of partitions. This means:
+
+* Upgrading to `500-ha` or `4000-ha` keeps the existing topics at 10 partitions.
+* Downgrading keeps the topics at 40 partitions, which is harmless.
+
+=== Replicas
+
+Moving between HA profiles can change the number of replicas of ClickHouse, HBase and HDFS. The scale-up of replicas needs enough free capacity in the cluster. During the upgrade, the old and the new pods can exist at the same time, and some pods stay `Pending` until the cluster autoscaler adds nodes. Allow several minutes for the upgrade to settle.
+
+== Move between non-HA and HA with a backup and restore
+
+The non-HA and HA profiles use different StatefulSets, replica counts and storage layouts, so there is no in-place upgrade between them. Install a new instance with the target profile and restore a backup of the existing instance into it. This works in both directions.
+
+NOTE: This procedure requires the backup CLI version 0.12.0 or newer. Earlier versions can lose the logs data stream or fail to restore Elasticsearch into an instance that already receives data. Make sure that you are using the latest version, as described in xref:/setup/data-management/backup_restore/backup_restore.adoc#_download_the_backup_cli[Download the backup CLI].
+
+=== Before you start
+
+* The new instance must use a different namespace or a different cluster than the one you back up.
+* Use a separate backup location for each instance: a different bucket, or a different prefix in the same bucket. Two instances that write to the same location overwrite each other's backups and can corrupt the Elasticsearch snapshot repository.
+* Do not point agents at the new instance until the restore is finished.
+* On an S3 bucket in a region other than `us-east-1`, set `backup.storage.backend.s3.endpoint` to the regional endpoint, for example `https://s3.eu-west-1.amazonaws.com`. Without it, requests can be redirected and fail.
+
+=== Step 1: Back up the existing instance
+
+Scheduled backups run once a day. To restore the current state, start a backup of every data store manually. Enable backups as described in xref:/setup/data-management/backup_restore/backup_enable.adoc[Enable backups] first. The commands are:
+
+[,bash]
+----
+# StackGraph
+kubectl --namespace suse-observability create job --from=cronjob/suse-observability-backup-sg-v2 manual-backup-sg
+
+# ClickHouse
+kubectl --namespace suse-observability create job --from=cronjob/suse-observability-clickhouse-full-backup manual-backup-clickhouse
+----
+
+For Elasticsearch, run the snapshot policy. This example uses a port-forward:
+
+[,bash]
+----
+kubectl --namespace suse-observability port-forward svc/suse-observability-elasticsearch-master 9200:9200 &
+curl -XPOST localhost:9200/_slm/policy/auto-sts-backup/_execute
+----
+
+VictoriaMetrics has no on-demand backup. It backs up from a sidecar on the hourly schedule that you configure with `victoria-metrics-0.backup.scheduled.hourly` (and `victoria-metrics-1` for HA). Wait until the next run has completed.
+
+NOTE: To protect an existing backup, a VictoriaMetrics instance with less than `minHistorySeconds` of data (default 86400 seconds) refuses to back up into a location that already holds a completed backup. If you back up an instance that is younger than that, set `victoria-metrics-0.backup.minHistorySeconds: 0` (and `victoria-metrics-1` for HA) on that instance.
+
+Wait for all the jobs to complete, then list the backups with the `list` command of each data store, as described in xref:/setup/data-management/backup_restore/backup_restore.adoc[Restore backups].
+
+=== Step 2: Install the new instance
+
+Install SUSE Observability with the target profile in a new namespace, as described in the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[installation guide]. Configure backups on the new instance so that it can read the backups of the old instance:
+
+* Point the S3 `bucketName` and `s3Prefix` values of every data store at the location of the old instance. Until you change them back in step 6, the scheduled backups of the new instance write to that location too, so do not leave this configuration running longer than the restore needs.
+* Keep ClickHouse backups enabled: `clickhouse.backup.enabled: true`. When it is disabled, the backup service that the restore needs is removed. To stop it from running backups, set the schedules to a date that never occurs, for example `0 0 31 2 *` for `clickhouse.backup.scheduled.full_schedule` and `incremental_schedule`.
+
+=== Step 3: Restore every data store
+
+Restore the data stores with the backup CLI, as described in xref:/setup/data-management/backup_restore/backup_restore.adoc[Restore backups]. Restore all four: Elasticsearch, ClickHouse, VictoriaMetrics and StackGraph v2. Each command restores the latest backup of its data store; for StackGraph v2 pass the archive name from `sts-backup stackgraph-v2 list`.
+
+[,bash]
+----
+sts-backup elasticsearch restore --namespace <NEW_NAMESPACE> --latest --yes
+sts-backup clickhouse restore --namespace <NEW_NAMESPACE> --latest --yes
+sts-backup victoria-metrics restore --namespace <NEW_NAMESPACE> --latest --yes
+sts-backup stackgraph-v2 restore --namespace <NEW_NAMESPACE> --archive <ARCHIVE> --yes
+----
+
+Use `stackgraph-v2` for StackGraph. The `stackgraph` subcommand looks for v1 backups and fails when only v2 backups exist.
+
+If a restore is interrupted, finish it with the matching `check-and-finalize` command, for example `sts-backup victoria-metrics check-and-finalize --job <JOB>`. A new `restore` command is refused while the previous one holds its restore lock.
+
+=== Step 4: Set the number of Elasticsearch replicas
+
+The restored indices keep the replica count of the old instance. Set it to match the new profile, otherwise Elasticsearch stays yellow on a single node, or has no copy of the data on three nodes.
+
+For a restore into an HA instance, which has three Elasticsearch nodes:
+
+[,bash]
+----
+curl -XPUT 'localhost:9200/sts*,.ds-sts*/_settings?expand_wildcards=all' \
+  -H 'Content-Type: application/json' -d '{"index":{"number_of_replicas":1}}'
+----
+
+For a restore into a non-HA instance, use `"number_of_replicas":0`.
+
+=== Step 5: Check the result
+
+* Open the UI and compare the topology, monitors and installed StackPacks with the old instance.
+* Check that Elasticsearch is green and that the `sts_k8s_logs` data stream exists: `curl localhost:9200/_data_stream/sts_k8s_logs`.
+* Check that all pods are ready.
+
+=== Step 6: Give the new instance its own backup location
+
+Change the S3 `bucketName` or `s3Prefix` values of every data store of the new instance to a location of its own and run `helm upgrade`. Then restore the normal ClickHouse schedules if you changed them.
+
+=== What the restore replaces
+
+The StackGraph restore replaces the data of the new instance with the data of the old one. This includes API keys and the password of the admin user. After the restore, use the API keys and passwords of the old instance, not the ones you used on the new installation.
+
+When the new instance is ready, point your agents at it and uninstall the old one.
+
+== Volume sizes per profile
+
+The sizes in the table are the defaults of the chart. They can change between chart versions; check the output of `helm template` for the version you install.
+
+[cols="2,^1,^1,^1,^1,^1,^1,^1,^1",options="header"]
+|===
+| Volume | 10-nonha | 20-nonha | 50-nonha | 100-nonha | 150-ha | 250-ha | 500-ha | 4000-ha
+
+| Elasticsearch
+| 50Gi | 50Gi | 50Gi | 100Gi | 200Gi | 250Gi | 250Gi | 250Gi
+
+| ClickHouse
+| 50Gi | 50Gi | 50Gi | 50Gi | 100Gi | 50Gi | 50Gi | 50Gi
+
+| Kafka
+| 60Gi | 100Gi | 100Gi | 100Gi | 100Gi | 100Gi | 400Gi | 400Gi
+
+| StackGraph (non-HA)
+| 50Gi | 50Gi | 100Gi | 100Gi | - | - | - | -
+
+| HDFS data nodes (HA)
+| - | - | - | - | 250Gi | 250Gi | 250Gi | 1000Gi
+
+| VictoriaMetrics
+| 50Gi | 50Gi | 50Gi | 50Gi | 250Gi | 250Gi | 250Gi | 400Gi
+
+| ZooKeeper
+| 8Gi | 8Gi | 8Gi | 8Gi | 8Gi | 8Gi | 8Gi | 8Gi
+|===
+
+The number of replicas of the data services also differs: Elasticsearch and Kafka have 3 replicas in every HA profile, ClickHouse has 3 replicas in `4000-ha`, and HDFS has 5 data nodes and HBase 5 region servers in `4000-ha`.
