@@ -1,7 +1,7 @@
 = Affinity Values Configuration
 :description: Configure affinity values to control how pods are scheduled on nodes and across clusters, helping to optimize resource use and keep services running reliably
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-11-11
 :page-revdate: {revdate}
 
 Affinity configurations control pod scheduling behavior in {stackstate-product-name}. The affinity values help optimize resource utilization and ensure high availability by controlling where pods are scheduled.
@@ -51,6 +51,42 @@ affinity:
 * **When configured**: Only applied when `sizing.profile` ends with `-ha` (High Availability profiles)
 * **HA Profiles**: `150-ha`, `250-ha`, `500-ha`, `4000-ha`
 * **Components affected**: All stateful data services including Clickhouse, Kafka, Zookeeper, VictoriaMetrics, StackGraph, Elasticsearch
+
+[#_tolerations]
+== Tolerations
+
+Available from {stackstate-product-name} 2.13.0.
+
+Use `global.suseObservability.tolerations` to schedule pods on tainted nodes, such as a dedicated node pool. The tolerations apply to every {stackstate-product-name} workload: application components, infrastructure subcharts, hooks, backup and restore Jobs, and CronJobs.
+
+[,yaml]
+----
+global:
+  suseObservability:
+    tolerations:
+    - key: dedicated
+      operator: Equal
+      value: observability
+      effect: NoSchedule
+----
+
+[#_precedence]
+== Precedence
+
+Available from {stackstate-product-name} 2.13.0.
+
+You can set affinity and tolerations on several levels. The most specific level wins:
+
+* *Application components:* split type -> component -> `stackstate.components.all` -> `global.suseObservability`
+* *HBase:* `hbase.<component>` -> `hbase.all` -> `global.suseObservability`
+* *Other infrastructure subcharts:* the subchart's own value -> `global.suseObservability`
+
+The levels are merged as follows:
+
+* *Affinity* is resolved per field: `nodeAffinity`, `podAffinity` and `podAntiAffinity`. A level that sets only `nodeAffinity` still gets `podAntiAffinity` from a lower level. Set a field to `{}` to clear it.
+* *Tolerations* are resolved as a whole list. A level that sets its own tolerations replaces the lists from lower levels. Repeat any shared tolerations it still needs. Set `tolerations: []` to clear them.
+
+For the upgrade impact of this order, see the xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc#upgrade-to-2-13-0[upgrade instructions for v2.13.0].
 
 == Example configurations
 

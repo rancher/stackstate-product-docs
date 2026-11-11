@@ -24,49 +24,9 @@ Before you upgrade, review the xref:setup/upgrade-stackstate/version-specific-up
 | *SUSE Observability CLI* | `3.9.0`
 |===
 
-== Scheduling precedence (affinity and tolerations)
-
-[WARNING]
-====
-This release contains breaking changes to tolerations and affinity. Pods can stay `Pending` after the upgrade. Before upgrading, review the <<_breaking_changes,breaking changes>> and apply the <<_upgrade_checklist,upgrade checklist>>.
-====
-
-=== New
-
-* *Global tolerations:* `global.suseObservability.tolerations` applies tolerations to every {stackstate-product-name} workload: application components, infrastructure subcharts, hooks, backup and restore Jobs, and CronJobs.
-* *One precedence order:* Affinity and tolerations now follow one precedence order for every workload. The most specific layer wins:
-** Application components: split type -> component -> `stackstate.components.all` -> `global.suseObservability`
-** HBase: `hbase.<component>` -> `hbase.all` -> global
-** Other infrastructure subcharts: the subchart's own value -> global
-* *Merge rules:* Affinity is resolved per field (`nodeAffinity`, `podAffinity`, `podAntiAffinity`). Tolerations are resolved as a whole list.
-
-[#_breaking_changes]
-=== Breaking changes
-
-* *Tolerations are no longer concatenated:* `stackstate.components.all.tolerations` used to be appended to each component's list, and `hbase.all.tolerations` to each HBase component's list. A component that sets its own tolerations now replaces those lists. It must repeat any shared tolerations it still needs. Move tolerations that apply everywhere to `global.suseObservability.tolerations`.
-* *Old `[]` / `{}` defaults now clear:* The defaults changed from `[]` / `{}` to unset. Leftover empty values from `helm show values` now clear inherited settings:
-** `stackstate.components.api.tolerations: []` used to give `api` the `stackstate.components.all` tolerations. Now it gets none.
-** `elasticsearch.nodeAffinity: {}` now drops the global node affinity on Elasticsearch.
-+
-On tainted or dedicated node pools, these pods stay `Pending`.
-* *A partial affinity override keeps the other fields:* On Kafka, ClickHouse, ZooKeeper, VictoriaMetrics, HBase and the other infrastructure subcharts, a local affinity used to drop the global node affinity and the sizing profile's anti-affinity. Now it only replaces the fields it sets. On HA profiles, a `nodeAffinity`-only override gets the required pod anti-affinity back. Pods can stay `Pending` on clusters with fewer nodes than replicas. Set `podAntiAffinity: {}` to keep the old behavior.
-* *Elasticsearch anti-affinity follows the global mode:* It used to be hard in all cases. With an HA profile and `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution: false`, it is now soft. Set `elasticsearch.antiAffinity: hard` to keep the old behavior.
-* *Global affinity applies without a sizing profile:* Installations that use the legacy configuration (no sizing profile) now also get `global.suseObservability.affinity`.
-* *ClickHouse restarts once on upgrade:* Its `checksum/backup-config` annotation no longer includes backup scheduling values.
-
-[#_upgrade_checklist]
-=== Upgrade checklist
-
-. Search your values for `tolerations:` under `stackstate.components.*` and `hbase.*`. Wherever a component sets its own list, add the entries it used to inherit from `all`. Or move shared entries to `global.suseObservability.tolerations`.
-. Remove explicit `tolerations: []` and `elasticsearch.nodeAffinity: {}` entries, unless you mean to clear inherited values.
-. Check subchart affinity overrides. If one relied on dropping the global node affinity or the HA anti-affinity, set that field to `{}`. On HA clusters with fewer nodes than replicas, set `podAntiAffinity: {}` where needed.
-. If you run HA with soft global anti-affinity and need Elasticsearch to stay hard, set `elasticsearch.antiAffinity: hard`.
-. Before upgrading, compare the scheduling sections of the `helm template` output for your values on the old and new chart versions.
-
-For details, see the "Scheduling Precedence (Affinity and Tolerations)" section of the `suse-observability` chart README.
-
 == New Features & Enhancements
 
+* *Global Tolerations and Scheduling Precedence:* Added `global.suseObservability.tolerations` to apply tolerations to every {stackstate-product-name} workload. Affinity and tolerations now follow one precedence order, with the most specific setting winning. This changes existing behavior, see the xref:setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc#upgrade-to-2-13-0[upgrade instructions for v2.13.0]. For details, see xref:setup/install-stackstate/kubernetes_openshift/affinity.adoc[Configure Kubernetes affinities].
 * *Service Availability StackPack:* Added the Service Availability StackPack to monitor HTTP and HTTPS endpoints via the Prometheus Blackbox Exporter. It provides comprehensive endpoint health overviews, response performance metrics, and configurable alerts for upcoming TLS certificate expirations.
 * *Granular Pod Metadata:* Added support for custom pod labels and annotations on HBase workloads (including the integrity CronJob) and the KafkaUp operator, as well as custom pod annotations for `vmagent` and anomaly detection workloads. Component-level configurations override shared defaults while safely preserving mandatory selector labels and configuration checksums.
 * *AD FS OIDC Compatibility:* Added the `stackstate.authentication.oidc.omitClientNameParameter` Helm value to support Active Directory Federation Services (AD FS) OIDC implementations that reject the `?client_name=StsOidcClient` query parameter.
