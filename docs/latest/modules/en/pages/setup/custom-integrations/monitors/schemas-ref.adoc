@@ -152,26 +152,91 @@ arguments:
 
 == PromQL interpolation
 
-When a <<topological-threshold>> or <<dynamic-threshold>> monitor function is used, the PromQL query is interpolated.  Example:
+When a <<topological-threshold>> or <<dynamic-threshold>> monitor function is used, the PromQL query is interpolated for each component that matches the topology query.  Example:
 
 [,bash]
 ----
 the_metric{namespace="${tags.namespace}",ip="${properties.ip_address}"}
 ----
 
-For each component that matches the topology query, these variables are available:
+A `+${...}+` placeholder is resolved in one of two ways:
+
+* A placeholder that names a <<promql-parameters,parameter>>, such as `+${tags.namespace}+`, is replaced with the value of that parameter. Parameters are always tried first. A plain parameter name is never evaluated as CEL.
+* Any other placeholder is evaluated as a <<promql-cel,CEL expression>> against the component, for example `+${tags.singleValue('namespace')}+`.
+
+A parameter that the component doesn't have, or a CEL expression that fails, is left in the query unchanged, so the query matches nothing.
+
+[CAUTION]
+====
+`tags.singleValue('key')` always resolves. It returns an empty string when the component doesn't have the tag, or has more than one value for it. In PromQL, `label=""` also matches series that don't have that label, so the query can match unrelated series. Use the parameter `+${tags.key}+` when a component without the tag should match nothing.
+====
+
+[#promql-parameters]
+=== Parameters
+
+[cols="1,3"]
+|===
+|Parameter           | Description
+
+|`name`              | The name of the component
+|`tags.<key>`        | The value of the component tag `<key>`, for tags in the `key:value` format. If the tag has more than one value, one of the values is used.
+|`properties.<key>`  | The value of the component property `<key>`
+|===
+
+[#promql-cel]
+=== CEL expressions
+
+A CEL expression is only evaluated when the placeholder is the whole label value. Unlike parameters, it can't be combined with text around the placeholder. To combine text with a value, do it inside the expression:
+
+[,bash]
+----
+# Evaluated
+the_metric{instance="${'pre-' + tags.singleValue('role')}"}
+# Not evaluated, the placeholder stays in the query
+the_metric{instance="pre-${tags.singleValue('role')}"}
+----
+
+These variables are available:
 
 [cols="1,1,3"]
 |===
-|Variable               | Type                | Description
+|Variable               | Type                       | Description
 
-|name                   | string              | The name of the component
-|type                   | string              | The type of the component
-|layer                  | string              | The layer of the component
-|domain                 | string              | The domain of the component
-|tags                   | map<string,string>  | Labels of the component, in key-value pairs
-|properties             | map<string,dyn>     | Properties of the component
+|id                     | int                        | The ID of the component
+|name                   | string                     | The name of the component
+|identifiers            | list<string>               | Identifiers of the component
+|tags                   | map<string,list<string>>   | Tags of the component. A tag key can have more than one value. `tags.singleValue('key')` returns the value of a tag that has exactly one value, and an empty string otherwise.
+|properties             | map<string,dyn>            | Properties of the component
 |===
+
+Monitors don't provide the `typeName` and `healthState` variables that are available in xref:/setup/custom-integrations/presentation/interpolation.adoc#cel_context[presentation CEL expressions].
+
+Example:
+
+[,bash]
+----
+the_metric{cluster_name="${tags.singleValue('cluster-name')}", ip="${properties['ip_address']}", pod="${name}"}
+----
+
+[#promql-multi]
+=== Expand several labels with `+__multi__+`
+
+The `+__multi__+` label matcher expands into one label matcher for each matching tag or property. The prefix is removed from each key, and characters other than letters and digits are replaced with `_` to form the label name.
+
+[,bash]
+----
+# Parameter: one matcher for each property whose key starts with selector_
+the_metric{__multi__="${properties.selector_+}"}
+# CEL: one matcher for each tag whose key starts with app.kubernetes.io/
+the_metric{__multi__="${selectPrefix(tags, 'app.kubernetes.io/')}"}
+----
+
+`selectPrefix(tags, 'prefix')` and `selectPrefix(properties, 'prefix')` select the entries whose key starts with the prefix. Tags with more than one value are skipped.
+
+Both forms accept the same suffix after the prefix or expression:
+
+* No suffix or `{plus}`: at least one entry must match. Otherwise the `+__multi__+` matcher is left in the query unresolved.
+* `+*+`: zero or more entries can match. If nothing matches, the `+__multi__+` matcher is removed.
 
 [#bind-monitor-results-to-components]
 == Bind monitor results to components
