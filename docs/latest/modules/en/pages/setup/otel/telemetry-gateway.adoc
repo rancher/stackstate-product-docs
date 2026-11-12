@@ -1,7 +1,7 @@
 = Telemetry gateway
 :description: Use the telemetry gateway to collect and forward metrics and traces from instrumented applications using OTLP in SUSE Observability
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-06-30
+:revdate: 2026-10-20
 :page-revdate: {revdate}
 
 == Overview
@@ -100,9 +100,62 @@ The gateway automatically generates span metrics (request rate, error rate, dura
 
 These metrics are forwarded to {stackstate-product-name} alongside your application metrics and can be used to build golden-signal dashboards without any additional instrumentation.
 
+== Trace sampling
+
+The gateway uses the upstream OpenTelemetry tail-sampling processor. By default, it buffers spans for approximately 10 seconds after first receiving a trace, then decides whether to export the spans received so far.
+Span metrics are generated before sampling, so sampling does not bias the gateway's request rates, error rates, or duration histograms.
+The platform does not apply another tail-sampling stage to received traces.
+
+The default span budget is 500 spans per second per gateway pod, allocated in this order:
+
+[cols="1,2,1",options="header"]
+|===
+|Policy |Matches |Budget allocation
+|Errors |At least one span has OTel status `ERROR` |33%
+|Slow traces |Time from the earliest span start to the latest span end exceeds one second |33%
+|Remaining traces |All other traces |34%
+|===
+
+These percentages allocate span budgets; they are not percentages of traces retained.
+A trace is dropped if its spans exceed its matching policy's remaining budget, including error traces.
+Unused capacity is not shared between policies, and an exhausted policy does not fall through to the next policy.
+Late spans of retained traces bypass a new budget check, so this is not a strict limit on exporter throughput.
+
+Tune sampling in the agent Helm values:
+The waiting-period, capacity, and cache settings require Agent Helm chart version 1.7.27 or later.
+
+[,yaml]
+----
+otel:
+  telemetryGateway:
+    traceSampling:
+      maxTotalSpansPerSecond: 500
+      decisionWait: 10s
+      numTraces: 50000
+      decisionCache:
+        sampledCacheSize: 0
+        nonSampledCacheSize: 0
+----
+
+`decisionWait` controls the waiting period; `numTraces` controls trace-entry capacity per pod.
+The cache sizes count remembered keep and drop decisions; zero disables a cache.
+Choose cache sizes substantially larger than `numTraces` to retain decisions longer, and allow for their memory use.
+Longer waiting periods and larger buffers or caches require more memory.
+The sampling policies remain fixed.
+
+=== Limitations
+
+* *Late spans*: A span arriving after the decision cannot change it, even if it contains an error. Decision caches are disabled by default. Without caches, late spans inherit the decision while the trace entry remains in memory; after eviction, they are evaluated again and can receive a different decision, producing incomplete traces.
+* *Buffer capacity*: Each gateway pod defaults to 50,000 trace entries (`numTraces`). This counts pending traces and, when decision caches are disabled, remembered decisions, not spans or bytes; memory usage depends on span count and size. When full, the oldest entry is evicted. If its decision wait has not finished, its buffered spans are lost. Increasing the export budget does not increase buffer capacity.
+* *Restarts*: Buffered spans and remembered decisions are held in memory and are lost if a gateway pod terminates unexpectedly.
+* *SDK sampling*: Spans dropped by an application SDK never reach the gateway. SDK head sampling can therefore hide errors from the tail sampler and reduce the traffic represented by span metrics.
+* *Multiple gateways*: All spans of a trace must reach the same sampling pod, including traces spanning services or clusters. See <<_scaling,Scaling>>.
+
 == Operational monitoring
 
 The gateway exposes standard OpenTelemetry Collector self-metrics on its internal Prometheus endpoint (`:8888`). These include signals such as exporter failures, refused data, process memory, and pipeline throughput. The gateway scrapes its own endpoint with a built-in `prometheus/self` receiver and forwards those self-metrics to the platform for operational visibility.
+
+Monitor tail-sampler buffer occupancy, traces dropped before a decision, late-span age, and sampled versus rejected decisions alongside process memory.
 
 == Network policies
 
@@ -159,16 +212,15 @@ spec:
 
 == Scaling
 
-The default `replicaCount: 1` is suitable for most clusters. For high availability:
+*Horizontal scaling with correct tail sampling is currently not supported by the agent Helm chart.*
+Keep `otel.telemetryGateway.replicaCount: 1` for tail sampling.
+The gateway Service does not route by trace ID: with multiple replicas, spans of one trace can reach different samplers and receive inconsistent decisions.
 
-[,yaml]
-----
-otel:
-  telemetryGateway:
-    replicaCount: 2
-----
+Supporting multiple sampling pods requires a collector tier in front that uses the OpenTelemetry load-balancing exporter to route by trace ID. The chart does not deploy that tier.
+Each replica also has its own sampling budget.
 
-At two or more replicas, a PodDisruptionBudget is automatically created with `maxUnavailable: 1`, ensuring at least one pod remains available during voluntary disruptions.
+The chart creates a PodDisruptionBudget at two or more replicas, but this does not preserve trace buffers or sampling decisions.
+Rolling updates can also split traces between old and new pods, even with a configured replica count of one.
 
 Resource limits and requests can be tuned in the Helm values:
 
@@ -187,7 +239,7 @@ otel:
 
 == Overload protection
 
-The collector includes `memory_limiter` as the first processor in every pipeline. It protects the process from OOM by rejecting data once memory usage exceeds 80% (with a 10% spike allowance). Under sustained overload, data is dropped to preserve collector stability — this is intentional behaviour. Per-producer rate limiting, sampling, and autoscaling are separate stories.
+The gateway applies `memory_limiter` before enrichment and trace sampling. It helps protect the process from OOM by rejecting data above the soft memory limit, derived from an 80% hard limit and a 10% spike allowance. Under sustained overload, data can be lost if senders cannot retry successfully. Tail sampling limits trace export volume; it does not limit incoming traffic or guarantee that the trace buffer fits in memory.
 
 Span-metric generation also has a cardinality guard. `otel.telemetryGateway.spanMetrics.aggregationCardinalityLimit` limits the number of unique span-metric aggregation series held by the gateway. The default protects memory from high-cardinality spans, while larger clusters can tune it when needed:
 
