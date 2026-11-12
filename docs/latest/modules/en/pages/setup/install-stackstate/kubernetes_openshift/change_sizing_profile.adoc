@@ -158,7 +158,43 @@ WARNING: You can increase the number of partitions of a topic but never decrease
 
 Moving between HA profiles can change the number of replicas of ClickHouse, HBase and HDFS. The scale-up of replicas needs enough free capacity in the cluster. During the upgrade, the old and the new pods can exist at the same time, and some pods stay `Pending` until the cluster autoscaler adds nodes. Allow several minutes for the upgrade to settle.
 
-Moving down to a profile with fewer replicas removes data nodes, region servers or ClickHouse replicas, for example when you leave `4000-ha`. This page does not cover it. Use the <<_move_between_non_ha_and_ha,reinstall procedure>> instead.
+=== Downgrade from 4000-ha
+
+Moving down from `4000-ha` to another HA profile reduces the number of ClickHouse replicas from three to one, and the HDFS data nodes and HBase region servers from five to three. This page covers only ClickHouse. To leave `4000-ha` without handling the HDFS data nodes and HBase region servers yourself, use the <<_move_between_non_ha_and_ha,reinstall procedure>> instead.
+
+`4000-ha` is the only profile with more than one ClickHouse replica. Helm removes the pods `suse-observability-clickhouse-shard0-1` and `suse-observability-clickhouse-shard0-2`, but the replicas stay registered in the ClickHouse coordination service. The tables then report replicas that are never active, and statements that change data in all replicas, such as `ALTER TABLE ... DELETE`, fail with `some replicas are inactive`.
+
+When the upgrade has finished and the remaining ClickHouse pod is ready, remove the registrations of the two replicas that no longer exist. Replace the pod and replica names if your release name is not `suse-observability`:
+
+[,bash]
+----
+kubectl --namespace suse-observability exec -i suse-observability-clickhouse-shard0-0 -c clickhouse -- bash -c \
+  'clickhouse-client --user "$CLICKHOUSE_ADMIN_USER" --password "$CLICKHOUSE_ADMIN_PASSWORD" --multiquery' <<'SQL'
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-1' FROM TABLE otel.otel_migrations;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-1' FROM TABLE otel.otel_resources;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-1' FROM TABLE otel.otel_traces;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-1' FROM TABLE otel.otel_traces_field_values;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-1' FROM TABLE otel.otel_traces_trace_id_ts;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-2' FROM TABLE otel.otel_migrations;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-2' FROM TABLE otel.otel_resources;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-2' FROM TABLE otel.otel_traces;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-2' FROM TABLE otel.otel_traces_field_values;
+SYSTEM DROP REPLICA 'suse-observability-clickhouse-shard0-2' FROM TABLE otel.otel_traces_trace_id_ts;
+SQL
+----
+
+The statements are safe to run on the remaining pod: ClickHouse refuses to drop the replica of the pod that you run them on. If your version has different tables, run the statement for each table that `SELECT table FROM system.replicas WHERE database = 'otel'` returns.
+
+Check the result with the same client:
+
+[,sql]
+----
+SELECT table, total_replicas, active_replicas FROM system.replicas WHERE database = 'otel'
+----
+
+Every table must show `1` for both columns.
+
+The volume claims of the two removed replicas, `data-suse-observability-clickhouse-shard0-1` and `data-suse-observability-clickhouse-shard0-2`, remain in the cluster. Delete them when you no longer need the data to free the storage.
 
 == Move between non-HA and HA
 
