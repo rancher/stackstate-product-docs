@@ -1,13 +1,17 @@
-= Affinity Values Configuration
-:description: Configure affinity values to control how pods are scheduled on nodes and across clusters, helping to optimize resource use and keep services running reliably
+= Affinity and Tolerations Values Configuration
+:description: Configure affinity and tolerations to control how pods are scheduled on nodes and across clusters, helping to optimize resource use and keep services running reliably
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-11-11
+:revdate: 2026-11-12
 :page-revdate: {revdate}
 
-Affinity configurations control pod scheduling behavior in {stackstate-product-name}. The affinity values help optimize resource utilization and ensure high availability by controlling where pods are scheduled.
+Affinity and tolerations control pod scheduling behavior in {stackstate-product-name}. They help optimize resource utilization and ensure high availability by controlling where pods are scheduled.
 
+Global tolerations and node affinity apply to every {stackstate-product-name} workload, including infrastructure components, hooks, and backup and restore jobs. Pod affinity and pod anti-affinity have narrower scopes. You can override all global settings for individual components, see <<_precedence>>.
+
+[#_available_configuration_options]
 == Available Configuration Options
 
+[#_node_affinity]
 === Node Affinity
 
 You can use node affinity to schedule pods to specific nodes or instance groups, such as EC2 nodes deployed to the same availability zone.
@@ -26,6 +30,7 @@ affinity:
           - us-west-2a
 ----
 
+[#_pod_anti_affinity]
 === Pod Anti-Affinity
 
 You can use pod anti-affinity to schedule replicas of data services to different nodes to ensure high availability. By default, the scheduling is required (hard anti-affinity) and `topologyKey` is `kubernetes.io/hostname`.
@@ -40,24 +45,15 @@ affinity:
     topologyKey: "kubernetes.io/hostname"
 ----
 
-== Behavior
-
-=== Node Affinity
-
-* **When configured**: Applied to all components
-
-=== Pod Anti-Affinity
-
-* **When configured**: Only applied when `sizing.profile` ends with `-ha` (High Availability profiles)
-* **HA Profiles**: `150-ha`, `250-ha`, `500-ha`, `4000-ha`
-* **Components affected**: All stateful data services including Clickhouse, Kafka, Zookeeper, VictoriaMetrics, StackGraph, Elasticsearch
-
 [#_tolerations]
 == Tolerations
 
-Available from {stackstate-product-name} 2.13.0.
+Use tolerations to schedule {stackstate-product-name} pods on tainted nodes, for example a dedicated node pool.
 
-Use `global.suseObservability.tolerations` to schedule pods on tainted nodes, such as a dedicated node pool. The tolerations apply to every {stackstate-product-name} workload: application components, infrastructure subcharts, hooks, backup and restore Jobs, and CronJobs.
+[NOTE]
+====
+`global.suseObservability.tolerations` is available from {stackstate-product-name} 2.13.0.
+====
 
 [,yaml]
 ----
@@ -71,25 +67,111 @@ global:
 ----
 
 [#_precedence]
-== Precedence
+== Precedence of global and component settings
 
-Available from {stackstate-product-name} 2.13.0.
+[NOTE]
+====
+The precedence rules described here apply from {stackstate-product-name} 2.13.0. See the xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc[version-specific upgrade instructions] for the changes compared to earlier versions.
+====
 
-You can set affinity and tolerations on several levels. The most specific level wins:
+Affinity and tolerations can be set globally and for individual components. The most specific setting wins. All keys in this section are values of the `suse-observability` chart, as used in the recommended `global.suseObservability` method.
 
-* *Application components:* split type -> component -> `stackstate.components.all` -> `global.suseObservability`
-* *HBase:* `hbase.<component>` -> `hbase.all` -> `global.suseObservability`
-* *Other infrastructure subcharts:* the subchart's own value -> `global.suseObservability`
+[cols="1,3",options="header"]
+|===
+| Workload | Settings, most specific first
 
-The levels are merged as follows:
+| Application components
+| `stackstate.components.<component>.split.<type>` (only for `receiver` and `correlate`, when `split.enabled` is `true`), `stackstate.components.<component>`, `stackstate.components.all`, `global.suseObservability`
 
-* *Affinity* is resolved per field: `nodeAffinity`, `podAffinity` and `podAntiAffinity`. A level that sets only `nodeAffinity` still gets `podAntiAffinity` from a lower level. Set a field to `{}` to clear it.
-* *Tolerations* are resolved as a whole list. A level that sets its own tolerations replaces the lists from lower levels. Repeat any shared tolerations it still needs. Set `tolerations: []` to clear them.
+| Backup and restore jobs
+| `stackstate.components.backup` (`stackstate.components.configurationBackup` for configuration backups), `stackstate.components.all`, `global.suseObservability`
 
-For the upgrade impact of this order, see the xref:/setup/upgrade-stackstate/version-specific-upgrade-instructions.adoc#upgrade-to-2-13-0[upgrade instructions for v2.13.0].
+| HBase
+| `hbase.<component>`, `hbase.all`, `global.suseObservability`
 
+| Other infrastructure components
+| The component's own setting, for example `kafka.affinity`, `clickhouse.backup.tolerations` or `victoria-metrics-0.server.affinity`, then `global.suseObservability`
+|===
+
+*Tolerations* are resolved as a whole list. The first setting that defines `tolerations` replaces all less specific ones; the lists are not combined. Repeat any global tolerations that the component still needs. Set `tolerations: []` to remove all inherited tolerations from a component.
+
+[,yaml]
+----
+global:
+  suseObservability:
+    tolerations:
+    - key: dedicated
+      operator: Equal
+      value: observability
+      effect: NoSchedule
+stackstate:
+  components:
+    api:
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: observability
+        effect: NoSchedule
+      - key: api-only
+        operator: Exists
+    ui:
+      tolerations: []
+----
+
+*Affinity* is resolved separately for `nodeAffinity`, `podAffinity` and `podAntiAffinity`. A component that sets only one of them keeps the other two from less specific settings. Within a field, the most specific value replaces the less specific ones completely. For example, `kafka.affinity.nodeAffinity` replaces the global `nodeAffinity` instead of adding terms to it, so repeat any global node selector terms that Kafka still needs. On a component or subchart, set a field to `{}` to remove the inherited value. Setting `{}` in `global.suseObservability.affinity` does not remove the anti-affinity of the infrastructure components; to relax it for all of them, set `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` to `false`, see <<_soft_podantiaffinity_for_ha_deployment>>.
+
+`global.suseObservability.affinity.podAntiAffinity` is a simplified setting that controls the anti-affinity of the infrastructure components on HA profiles. At component and subchart level, `podAntiAffinity` takes the standard Kubernetes format and replaces that generated anti-affinity.
+
+[,yaml]
+----
+kafka:
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 10
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: zookeeper
+clickhouse:
+  affinity:
+    podAntiAffinity: {}
+----
+
+In this example, if `global.suseObservability.affinity.nodeAffinity` is set, Kafka keeps it. With an HA profile Kafka also keeps its pod anti-affinity, and it adds the `podAffinity`. ClickHouse keeps the global `nodeAffinity` but has no pod anti-affinity.
+
+[NOTE]
+====
+`global.suseObservability.affinity.podAffinity` applies only to application components, not to infrastructure components.
+====
+
+Elasticsearch uses `elasticsearch.nodeAffinity` for node affinity and `elasticsearch.antiAffinity` (`hard` or `soft`) for pod anti-affinity. When they are not set, Elasticsearch uses the global node affinity and, with an HA profile, hard or soft anti-affinity according to `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`.
+
+[TIP]
+====
+If pods stay in `Pending` after you set affinity or tolerations, check for leftover empty values such as `tolerations: []` or `nodeAffinity: {}` in your `values.yaml`. They remove the inherited settings. For HA profiles with fewer nodes than replicas, set `global.suseObservability.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` to `false` (see <<_soft_podantiaffinity_for_ha_deployment>>), or set `podAntiAffinity: {}` on the component, for example `kafka.affinity.podAntiAffinity: {}`.
+====
+
+[#_behavior]
+== Behavior
+
+[#_behavior_node_affinity]
+=== Node Affinity
+
+* **When configured**: Applied to all components, with or without a sizing profile
+
+[#_behavior_pod_anti_affinity]
+=== Pod Anti-Affinity
+
+* **When configured**: The required pod anti-affinity of the sizing profile is applied only when `sizing.profile` ends with `-ha` (High Availability profiles)
+* **HA Profiles**: `150-ha`, `250-ha`, `500-ha`, `4000-ha`
+* **Components affected**: All stateful data services including Clickhouse, Kafka, Zookeeper, VictoriaMetrics, StackGraph, Elasticsearch
+
+[#_example_configurations]
 == Example configurations
 
+[#_basic_node_affinity_and_hard_podantiaffinity]
 === Basic Node Affinity (same Availability Zone) + hard PodAntiAffinity for HA Deployment
 
 Assume you set `sizing.profile` to one of the HA profiles. The values below configure nodeAffinity to schedule components of {stackstate-product-name} to the `us-west-2a` zone and enforce scheduling the replicas of the same data services to different hosts (`affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`=`true` by default).
@@ -107,6 +189,7 @@ affinity:
           - us-west-2a
 ----
 
+[#_soft_podantiaffinity_for_ha_deployment]
 === Soft PodAntiAffinity for HA Deployment
 If enforcing scheduling of data services to different nodes is not desirable, yo can configure podAntiAffinity in "soft" mode:
 [,yaml]
@@ -116,6 +199,7 @@ affinity:
     requiredDuringSchedulingIgnoredDuringExecution: false
 ----
 
+[#_usage]
 == Usage
 
 [tabs]
@@ -184,6 +268,7 @@ Legacy method (Deprecated)::
 This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
 =====
 
+[#_step_1_create_your_affinity_values_file]
 ==== Step 1: Create Your Affinity Values file
 
 Create a separate values file with your desired affinity configuration. For example, save the following as `suse-observability-values-values.yaml`:
@@ -203,6 +288,7 @@ affinity:
     requiredDuringSchedulingIgnoredDuringExecution: true
 ----
 
+[#_step_2_generate_affinity_template_values]
 ==== Step 2: Generate Affinity template values
 
 Run the following command to generate the affinity values template:
@@ -219,6 +305,7 @@ helm template \
   suse-observability/suse-observability-values --output-dir $VALUES_DIR
 ----
 
+[#_step_3_use_generated_values_in_helm_installation]
 ==== Step 3: Use generated values in Helm installation
 
 Include the generated affinity values in your Helm installation:
