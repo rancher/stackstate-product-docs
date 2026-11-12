@@ -281,14 +281,14 @@ Raise resources in steps rather than by a few percent at a time. A small step ra
 | Raise the memory limit by 50%.
 
 | Element budget above 95%
-| If agents are limited, move to the next sizing profile, see [HOW TO MIGRATE BETWEEN PROFILES]. Otherwise raise the per-agent value by 50%. See <<_receiver_element_budget_saturated>>.
+| If agents are limited, move to the next sizing profile, see xref:/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.adoc[Change the sizing profile]. Otherwise raise the per-agent value by 50%. See <<_receiver_element_budget_saturated>>.
 
 | Volume or Elasticsearch disk 80% full or more
 | Resize the volume so the current data uses at most 70% of it: divide the used size by 0.7. See xref:/setup/data-management/data_retention.adoc#_resizing_storage[Resizing storage]. Reducing the retention is an alternative.
 |===
 
 * Raise the request together with the limit, so the scheduler places the pod on a node that has the resources.
-* If several components are short at the same time, move to the next sizing profile instead of raising them one by one. A profile change can change volume sizes and the Kafka partition count, so it takes more than a `helm upgrade`, see [HOW TO MIGRATE BETWEEN PROFILES].
+* If several components are short at the same time, move to the next sizing profile instead of raising them one by one. A profile change can change volume sizes and the Kafka partition count, so it takes more than a `helm upgrade`, see xref:/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.adoc[Change the sizing profile].
 * After a change, wait until the Kafka consumer lag stops growing before you judge the result.
 * If two steps on the same stage do not help, the cause is probably not resources. Follow the matching runbook or contact {stackstate-product-name} support.
 
@@ -303,7 +303,7 @@ If a component uses much less than it gets, you can lower its resources to free 
 * Memory usage stays below half of the limit, and the container was not `OOMKilled`.
 * The Kafka consumer lag does not grow, and none of the monitors for the component alert.
 
-Lower one component at a time, by at most a third, and check the same signals again for a week before the next step. Start with the components you raised before, and return them to the values of the sizing profile first. If most components use much less than the profile gives them, a smaller sizing profile may fit, see xref:/setup/install-stackstate/requirements.adoc[Requirements]. To move to it, see [HOW TO MIGRATE BETWEEN PROFILES].
+Lower one component at a time, by at most a third, and check the same signals again for a week before the next step. Start with the components you raised before, and return them to the values of the sizing profile first. If most components use much less than the profile gives them, a smaller sizing profile may fit, see xref:/setup/install-stackstate/requirements.adoc[Requirements]. To move to it, see xref:/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.adoc[Change the sizing profile].
 
 JVM services, such as the Receiver, Topology sync, Health sync, State and Correlate, size their heap from the memory limit and keep the memory once they have used it. Their memory usage does not show how much they need, so lower their memory only with the help of {stackstate-product-name} support.
 
@@ -468,7 +468,7 @@ The Receiver limits how many components, relations and connections it accepts fr
 The sizing profile also limits how many nodes you can observe, counted in Default Nodes, see xref:/setup/install-stackstate/requirements.adoc[Requirements]. Agents above that limit are marked as limited. The Receiver rejects their process, container and connection data, and they do not add to the element budgets. Check this limit first, because raising a budget does not help limited agents.
 
 . Run `sts agent list`, see xref:/setup/cli/cli-sts.adoc[CLI: sts]. The last line shows how many agents are active, limited and stale. Other signs of limited agents are the *Nodes limitation* notifications in the UI and HTTP 429 responses with `Maximum amount of active agents exceeded` in the agent logs.
-. If any agents are limited, move to the next sizing profile. A profile change can change volume sizes and the Kafka partition count, so it takes more than a `helm upgrade`, see [HOW TO MIGRATE BETWEEN PROFILES]. You cannot move from a non-HA profile to an HA profile.
+. If any agents are limited, move to the next sizing profile. A profile change can change volume sizes and the Kafka partition count, so it takes more than a `helm upgrade`, see xref:/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.adoc[Change the sizing profile].
 . If no agents are limited, the agents send more elements than the default budget per agent allows, for example because they run many short-lived pods or open many connections. Find the saturated `element_type` in the *Receiver - unique element budget saturation* and *Receiver - hourly element budget saturation* monitors.
 . Raise the matching per-agent value by 50% with an environment variable on the Receiver:
 +

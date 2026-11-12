@@ -718,7 +718,7 @@ echo "Summary: $FAILS failed, $WARNS warnings"
 touch "$WORK/fixes"
 SHORT=$(sed -nE 's/^Raise ([^ ]+)\.resources\.limits\..*/\1/p' "$WORK/fixes" | sort -u | wc -l)
 if [ "$SHORT" -ge 3 ]; then
-  echo "$SHORT components are short of resources. Consider the next sizing profile instead of raising their limits one by one. A profile change takes more than a helm upgrade, see [HOW TO MIGRATE BETWEEN PROFILES]."
+  echo "$SHORT components are short of resources. Consider the next sizing profile instead of raising their limits one by one. A profile change takes more than a helm upgrade, see the Change the sizing profile page in the SUSE Observability documentation."
 fi
 if [ "$FAILS" -gt 0 ] || [ "$WARNS" -gt 0 ]; then
   echo "After a change, wait until the consumer lag stops growing and run the check again."
