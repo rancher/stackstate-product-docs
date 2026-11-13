@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tune data ingestion for your workload | SUSE Observability  Latest</title>
+    <link rel="prev" href="kubernetes_openshift/affinity.html">
+    <link rel="next" href="kubernetes_openshift/ingress.html">
+    <meta name="description" content="Find which SUSE Observability components limit data ingestion, adjust their resources and limits to your workload, and check the pipeline with or without the UI">
+    <meta name="generator" content="Antora 3.1.10">
+    <link rel="stylesheet" href="../../../../../_/css/site.css">
+<meta http-equiv="last-modified" content="2026-11-03"/>
+<link rel="stylesheet" href="../../../../../_/css/search.css">
+<link rel="icon" href="../../../../../_/img/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../../../../_/css/font-styles.css">
+<link rel="stylesheet" href="../../../../../_/fonts/css/all.css">
+<link rel="stylesheet" href="../../../../../_/css/site-extra.css">
+<link rel="stylesheet" href="../../../../../_/css/vendor/tabs.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=SUSE:wght@100..800&display=swap&family=SUSE+Mono:ital,wght@0,100..800;1,100..800" rel="stylesheet">
+<link rel="stylesheet" href="../../../../../_/css/vendor/light.css">
+<script src="/docserv/res/lightheaded/analytics.js" type="text/javascript"></script>
+<script type="module">
+  import { defineCustomElements, setAssetPath } from 'https://static.scc.suse.com/shared-header/1.19/shared-header.esm.js';
+  defineCustomElements();
+  setAssetPath("https://static.scc.suse.com/shared-header/1.19/assets");
+</script>
+<!-- Default English link -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="x-default" rel="alternate"/>
+<!-- Link for the currently processed page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/data-ingestion-pipeline.html" hrefLang="en-US" rel="alternate" />
+<!-- Link for the Japanese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/ja/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="ja-JP" rel="alternate" />
+<!-- Link for the Chinese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/zh/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="zh-CN" rel="alternate" />
+<!-- Link for the German page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/de/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="de-DE" rel="alternate" />
+<!-- Link for the French page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/fr/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="fr-FR" rel="alternate" />
+<!-- Link for the Spanish page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/es/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="es-ES" rel="alternate" />
+<!-- Link for the Brazilian Portuguese page -->
+<link href="https://documentation.suse.com/cloudnative/suse-observability/latest/pt/setup/install-stackstate/data-ingestion-pipeline.html" hreflang="pt-BR" rel="alternate" />
+
+<!-- JSON-LD for doc metadata -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "Tune data ingestion for your workload | SUSE Observability latest",
+  "headline": "Tune data ingestion for your workload",
+  "description": "Find which SUSE Observability components limit data ingestion, adjust their resources and limits to your workload, and check the pipeline with or without the UI",
+  "inLanguage": "en",
+  "dateModified": "2026-11-03T00:00:00Z",
+  "author": {
+    "@type": "Organization",
+    "name": "SUSE Product & Solution Documentation Team",
+    "url": "https://documentation.suse.com"
+  },
+  "mentions": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "SUSE Observability",
+      "softwareVersion": "latest",
+      "applicationCategory": "Cloud Infrastructure",
+      "operatingSystem": "Linux"
+    }
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "SUSE",
+    "url": "https://documentation.suse.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.suse.com/assets/img/suse-white-logo-green.svg"
+    }
+  }
+}
+</script>
+<!-- end JSON-LD for doc metadata -->
+
+<!-- SUVA - Begin Ask Geeko-->
+<!--
+searchUnifyChatbot ("Ask Geeko") Copyright ©2024 Grazitti Interactive - All Rights Reserved. NOTICE: All information contained herein is, and remains the property of Grazitti Interactive and its suppliers, if any. The intellectual and technical concepts contained herein are proprietary to Grazitti Interactive and its suppliers and may be covered by India, U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained from Grazitti Interactive.
+-->
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/Allow/an.js?c485cb3c-93d4-4942-99e8-91f3b8ca5636"></script>
+<script type="text/javascript" src="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/js/index.js?q=gAAAAABp3JBN9VuEJTi5tFafLIMwgMkCPdJS3Qm56lSYx93ir3Twt9hgSvd3OHEt6-nYfSbY3yHq0Zv8PRPsSy4nbqZiaJ4cZvRc6ItVZdvwz9Urf35cH6OUyPOwdA0phlS-zVIznQ2rWW438p-91NlTHuxJuOFpnA=="></script>
+<link rel="stylesheet" href="https://suse.searchunify.com/suva-resources/suva_clients_custom/c485cb3c-93d4-4942-99e8-91f3b8ca5636/css/index.css">
+<div id="searchUnifyChatbot"></div>
+<!-- SUVA - End Ask Geeko-->
+<!--BEGIN QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+<script type='text/javascript' src="../../../../../_/js/qualtrics.js" defer></script>
+<!--END QUALTRICS WEBSITE FEEDBACK SNIPPET-->
+    <script>var uiRootPath = '../../../../../_'</script>
+  </head>
+  <body class="article">
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs'; mermaid.initialize({"startOnLoad":true});</script><shared-header
+    language="en"
+    application="documentation-portal"
+    enable-search='false'
+    languages='{
+        "en": { "label": "English", "url": "https://documentation.suse.com/en-us/" },
+        "de": { "label": "Deutsch", "url": "https://documentation.suse.com/de-de/" },
+        "fr": { "label": "Français", "url": "https://documentation.suse.com/fr-fr/" },
+        "es": { "label": "Español", "url": "https://documentation.suse.com/es-es/" },
+        "zh_CN": { "label": "中文", "url": "https://documentation.suse.com/zh-cn/" },
+        "pt_BR": { "label": "Português Brasileiro", "url": "https://documentation.suse.com/pt-br/" }
+    }'>
+</shared-header>
+<div class="body">
+<div class="nav-container" data-component="suse-observability" data-version="latest">
+  <aside class="nav">
+    <div class="panels">
+<div class="nav-panel-menu is-active" data-panel="menu">
+  <nav class="nav-menu">
+    <button type="button" class="nav-menu-toggle" aria-label="Expand all navigation sections" title="Expand all navigation sections" style="display: none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2"/>
+        <path class="nav-unfold-icon" d="m15 19-3 3-3-3m6-14-3-3-3 3"/>
+        <path class="nav-fold-icon" d="m15 19-3-3-3 3m6-14-3 3-3-3"/>
+      </svg>
+    </button>
+    <h3 class="title">SUSE Observability</h3>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="0">
+<ul class="nav-list">
+  <li class="nav-item" data-depth="1">
+    <a class="nav-link" href="../../classic.html">SUSE Observability documentation</a>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Release</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Release Notes</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.13.0.html">v2.13.0 - 12/Nov/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.12.0.html">v2.12.0 - 14/Oct/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.11.2.html">v2.11.2 - 23/Sep/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.11.1.html">v2.11.1 - 15/Sep/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.11.0.html">v2.11.0 - 07/Sep/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.10.3.html">v2.10.3 - 04/Aug/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.10.2.html">v2.10.2 - 30/Jun/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.10.1.html">v2.10.1 - 28/May/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.10.0.html">v2.10.0 - 12/May/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.9.0.html">v2.9.0 - 25/Mar/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.8.1.html">v2.8.1 - 17/Mar/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.8.0.html">v2.8.0 - 03/Mar/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.7.0.html">v2.7.0 - 14/Jan/2026</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.6.3.html">v2.6.3 - 25/Nov/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.6.2.html">v2.6.2 - 03/Nov/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.6.1.html">v2.6.1 - 13/Oct/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.6.0.html">v2.6.0 - 29/Sep/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.5.0.html">v2.5.0 - 08/Sep/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.4.0.html">v2.4.0 - 25/Aug/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.7.html">v2.3.7 - 28/Jul/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.6.html">v2.3.6 - 23/Jul/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.5.html">v2.3.5 - 19/Jun/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.4.html">v2.3.4 - 04/Jun/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.3.html">v2.3.3 - 07/May/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.2.html">v2.3.2 - 22/Apr/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.1.html">v2.3.1 - 17/Mar/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.3.0.html">v2.3.0 - 30/Jan/2025</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.2.1.html">v2.2.1 - 10/Dec/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.2.0.html">v2.2.0 - 09/Dec/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.1.0.html">v2.1.0 - 29/Oct/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.0.2.html">v2.0.2 - 01/Oct/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.0.1.html">v2.0.1 - 18/Sep/2024</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../release-notes/v2.0.0.html">v2.0.0 - 11/Sep/2024</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../release-notes/Release%20Strategy.html">Release Strategy</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="Compatibility%20Self%20Hosted.html">Compatibility matrix</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Installation</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime.html">SUSE Rancher Prime Installation</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Platform: Self-hosted</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../installing-suse-obs.html">Installing SUSE Observability</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Getting Started and Requirements</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="requirements.html">System requirements and sizing</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="ha-maintenance-windows.html">HA setup for clusters with regular maintenance windows</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="initial_run_guide.html">Initial run guide</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Installation Guides</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="kubernetes_openshift/kubernetes_install.html">Kubernetes install</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="kubernetes_openshift/openshift_install.html">OpenShift install</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="kubernetes_openshift/ack.html">Alibaba Cloud ACK install</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-air-gapped.html">Air-gapped platform installation</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Advanced Configuration</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Authentication</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/authentication_options.html">Authentication options</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/oidc.html">Open ID Connect (OIDC)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/keycloak.html">KeyCloak</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/oidc/microsoft-entra-id.html">Microsoft Entra ID</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/ldap.html">LDAP</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/file.html">File-based</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/single_password.html">Single password</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/k8s-service-tokens.html">Service Tokens</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/k8s-ingestion-api-keys.html">API Keys</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/troubleshooting.html">Troubleshooting authentication and authorization</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Role Based Access Control (RBAC)</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/rbac/README.html">What is RBAC?</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/rbac/rbac_permissions.html">Permissions</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/rbac/rbac_roles.html">Roles</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/rbac/rbac_rancher.html">Rancher</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/rbac/rbac_scopes.html">Scopes</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Storage &amp; Resources</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/storage.html">Storage classes and customization</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/longhorn.html">Run SUSE Observability on Longhorn</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/data_retention.html">Data retention periods and resizing</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/change_sizing_profile.html">Change the sizing profile</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/affinity.html">Configure Kubernetes affinities and tolerations</a>
+  </li>
+  <li class="nav-item is-current-page" data-depth="5">
+    <a class="nav-link" href="data-ingestion-pipeline.html">Tune data ingestion for your workload</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Network &amp; Security</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/ingress.html">Expose SUSE Observability outside of the cluster</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/self-signed-certificates.html">Self-signed certificates</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../use/security/disabling-tls-verification.html">Disabling TLS verification</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/external-secrets.html">Managing secrets externally</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/verify-image-signatures.html">Verify container image signatures</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/required_permissions.html">Required permissions and Pod security</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/customize_config.html">Override default Helm value</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../security/authentication/troubleshooting.html">Troubleshooting authentication and authorization</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../advanced/ai-assistant.html">AI Assistant &amp; MCP Server</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../advanced/analytics.html">Analytics</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Notifications</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../configure-stackstate/slack-notifications.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../configure-stackstate/email-notifications.html">E-mail</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Backup &amp; Restore</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/backup_enable.html">Enable backups</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/backup_restore.html">Restore backups</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/migration_to_s3proxy.html">Migration to S3Proxy</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Legacy Backup</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/kubernetes_backup.html">Kubernetes backup (Legacy)</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/backup_restore/configuration_backup.html">Configuration backup (Legacy)</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Troubleshooting</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="troubleshooting.html">Quick troubleshooting guide</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="advanced-troubleshooting.html">Advanced troubleshooting</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="extension-troubleshooting.html">UI extension troubleshooting</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="support-package-logs.html">Support Package (Logs)</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="support-package-performance.html">Support Package (Performance)</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Upgrade &amp; Uninstallation</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Upgrading</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../upgrade-stackstate/migrate-from-6.html">Migration from StackState</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../upgrade-stackstate/steps-to-upgrade.html">Steps to upgrade</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../upgrade-stackstate/version-specific-upgrade-instructions.html">Version-specific upgrade instructions</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Uninstallation</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="kubernetes_openshift/uninstall.html">Removing Helm charts and resources</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../data-management/clear_stored_data.html">Wiping data</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Platform: Hosted by SUSE</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">SUSE Cloud Observability</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../suse-cloud-observability-quick-start-guide.html">Quick Start guide</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <a class="nav-link" href="../../suse-cloud-observability/user-management.html">Managing users via Keycloak</a>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../suse-cloud-observability/keycloak-sso/microsoft-entra-id.html">Microsoft Entra ID</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../suse-cloud-observability/keycloak-sso/google.html">Google</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../../suse-cloud-observability/keycloak-sso/generic-oidc.html">Generic OIDC Provider</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Agent</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../k8s-quick-start-guide.html">Quick start guide</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Rancher UI extension</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../rancher-ui-extensions-install.html">Installing UI extensions</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Data Ingestion &amp; Integrations</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Agent and OpenTelemetry</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../otel/overview.html">Overview and architecture</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Get Started</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/agent.html">Enabling OpenTelemetry in the Agent</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/getting-started/getting-started-k8s.html">Send application telemetry through the Agent gateway</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Collect data</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/metrics/k8s-otel-prometheus-scraping.html">Scraping OpenMetrics with ServiceMonitor</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/k8s-resource-collector.html">Kubernetes resource collector</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Component reference</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/telemetry-gateway.html">Telemetry gateway</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetry Instrumentation Guides</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../otel/instrumentation/node.js/auto-instrumentation-of-lambdas.html">Node.js Lambda details</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../otel/instrumentation/dot-net.html">.NET</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../otel/instrumentation/java.html">Java</a>
+  </li>
+  <li class="nav-item" data-depth="5">
+    <a class="nav-link" href="../otel/instrumentation/node.js.html">Node.js SDK setup</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Deployment &amp; Configuration</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/supported-architectures.html">Hardware architecture support</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/requirements.html">Resource requirements</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../k8s-suse-rancher-prime-agent-air-gapped.html">Air-gapped installation using Helm charts</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../k8s-network-configuration-saas.html">Network configuration for SaaS</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/k8s-network-configuration-proxy.html">Configuration for Proxy connections</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/k8s-custom-secrets-setup.html">Custom Secret Management</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/k8sTs-agent-request-tracing.html">Request tracing management</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/k8sTs-agent-request-tracing-certificates.html">Request-tracing sidecar certificates</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Advanced: separately managed collectors</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/getting-started/README.html">OpenTelemetry deployment options</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/getting-started/getting-started-k8s-operator.html">Using OTel Operator</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/getting-started/getting-started-linux.html">Linux host</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/getting-started/getting-started-lambda.html">AWS Lambda</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/collector.html">Collector configuration</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/sampling.html">Collector sampling</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Reference</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/concepts.html">Open Telemetry concepts</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/otlp-apis.html">OTLP API endpoints</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Troubleshooting</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../agent/troubleshooting.html">Agent troubleshooting</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../otel/troubleshooting.html">OpenTelemetry troubleshooting</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Legacy</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../../use/metrics/open-metrics.html">Scraping OpenMetrics</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Integrations</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-prometheus-remote-write.html">Sending Prometheus metrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8s-stackstate-grafana-datasource.html">Grafana Datasource</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/logs/k8sTs-log-shipping.html">Configuring Promtail</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/suse/suse-virtualization.html">SUSE Virtualization</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">External Health</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/health-synchronization.html">External health synchronization</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/send-health-data.html">Send health data over HTTP</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/repeat_snapshots.html">Repeat Snapshots JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/send-health-data/transactional_increments.html">Transactional Increments JSON</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../configure/health/debug-health-sync.html">Debug health synchronization</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Migration</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../upgrade-stackstate/migrate-from-6.html">Migration from StackState</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../upgrade-stackstate/v2.10.0-helm.html">Helm chart migration guide for v2.10.0</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../upgrade-stackstate/migrate-from-6-new.html">Migrating from StackState 6.x to SUSE Observability</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../upgrade-stackstate/migrate-to-global-mode.html">Migrate to global configuration mode</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Usage</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../k8s-getting-started.html">SUSE Observability walk-through</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Guided Troubleshooting</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-guided-troubleshooting.html">What is guided troubleshooting?</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-configuration.html">Configuring YAML</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-changes.html">Diffing changes</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/troubleshooting/k8s-logs.html">Viewing pod logs</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Features and UI</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-views.html">Kubernetes views</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-view-structure.html">Understanding Filters and Perspectives</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-custom-views.html">Creating and saving custom views</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-explore-views.html">Explore views</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-overview-perspective.html">Table views</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-highlights-perspective.html">Resource summary page</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-topology-perspective.html">Using the Topology graph</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-events-perspective.html">Events timeline</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/metrics/k8sTs-explore-metrics.html">Exploring metrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-metrics-perspective.html">Component metrics</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/traces/k8sTs-explore-traces.html">Explore Traces</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-traces-perspective.html">Traces perspective</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/logs/k8sTs-explore-logs.html">Log browser</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/views/k8s-filters.html">Using Topology and Event filters</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/stackstate-ui/k8sTs-keyboard-shortcuts.html">Keyboard shortcuts</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/stackstate-ui/k8sTs-timeline-time-travel.html">Using the Timeline and Time Travel</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Dashboard</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboards.html">Creating and managing dashboards</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-widgets.html">Configuring widgets</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-variables.html">Using variables</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/dashboards/dashboard-organize.html">Layout and organization</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Monitors</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-monitors.html">Monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/kubernetes-monitors.html">Out-of-the-box K8s monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-override-monitor-arguments.html">Customizing standard monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/k8s-add-monitors-ui.html">Adding monitors to components using UI</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/silencing.html">Silencing</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">AI Sessions</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/ai-assistant/use-ai-assistant.html">Use AI Assistant in the UI</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/ai-assistant/mcp-server.html">Use external AI tools with MCP</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Notifications</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/configure.html">Configuring notifications</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/slack.html">Slack</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/teams.html">Teams</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/webhook.html">Webhook</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/opsgenie.html">Opsgenie</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/channels/email.html">E-mail</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../use/alerting/notifications/troubleshooting.html">Notifications troubleshooting</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Stackpacks</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../../stackpacks/about-stackpacks.html">Installing StackPacks</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Customize</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../custom-integrations/create.html">Creating a Custom Integration</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../custom-integrations/demo-environment.html">Demo environment</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../custom-integrations/stackpacks.html">StackPack reference</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../custom-integrations/add-stackpacks.html">Adding StackPacks to the platform</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">OpenTelemetry mappings</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/getting-started.html">Getting started</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/concepts.html">Concepts</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/schemas-ref.html">Schema</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/otelmappings/troubleshooting.html">Troubleshooting</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Monitors</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/derived-state-monitors.html">Derived state monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/dynamic-threshold-monitors.html">Dynamic threshold monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/remediation-guide.html">Remediation guide</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/schemas-ref.html">Monitor schema Reference</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/cli.html">CLI Support for monitors</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/monitors/troubleshooting.html">Troubleshooting monitors</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Presentations</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/concepts.html">Concepts</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/overview.html">Presentation Overview</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/highlight.html">Presentation Highlight</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Presentation Metrics</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/README.html">Overview</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/summary.html">Summary Metrics</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/highlight.html">Highlight Metrics</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/perspective.html">Metrics Perspective</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/schemas-ref.html">Metrics Schema</a>
+  </li>
+  <li class="nav-item" data-depth="4">
+    <a class="nav-link" href="../custom-integrations/presentation/metrics/troubleshooting.html">Metrics Troubleshooting</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/projections.html">Presentation Projections</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/interpolation.html">Presentation Interpolation</a>
+  </li>
+  <li class="nav-item" data-depth="3">
+    <a class="nav-link" href="../custom-integrations/presentation/schemas-ref.html">Presentation Schema</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">CLI</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../cli/cli-sts.html">Installation and usage</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../security/authentication/service_tokens.html">Service tokens</a>
+  </li>
+</ul>
+  </li>
+  <li class="nav-item" data-depth="1">
+    <button class="nav-item-toggle" aria-label="Toggle expand/collapse"></button>
+    <span class="nav-text">Reference</span>
+<ul class="nav-list">
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-stql_reference.html">SUSE Observability Query Language (STQL)</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/writing-promql.html">Writing PromQL</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../develop/reference/k8sTs-chart-units.html">Chart units</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../use/metrics/k8sTs-metric-reference.html">Metrics references</a>
+  </li>
+  <li class="nav-item" data-depth="2">
+    <a class="nav-link" href="../../configure/topology/identifiers.html">Topology Identifiers</a>
+  </li>
+</ul>
+  </li>
+</ul>
+  </li>
+</ul>
+  </nav>
+</div>
+<div class="nav-panel-explore" data-panel="explore">
+  <div class="context">
+    <span class="title">SUSE Observability</span>
+    <span class="version">Latest</span>
+  </div>
+  <ul class="components">
+    <li class="component is-current">
+      <div class="title"><a href="../../classic.html">SUSE Observability</a></div>
+      <ul class="versions">
+        <li class="version is-current is-latest">
+          <a href="../../classic.html">Latest</a>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</div>
+    </div>
+  </aside>
+</div>
+<main class="article">
+<div class="toolbar" role="navigation">
+<button class="nav-toggle"></button>
+<nav class="breadcrumbs" aria-label="breadcrumbs">
+<ul>
+    <li>
+  <a class="home-link-dsc" href="https://documentation.suse.com" title="SUSE Documentation Home" aria-label="SUSE Documentation Home"></a>
+    </li>
+    <li>
+      <a href="https://documentation.suse.com/cloudnative/suse-observability" title="SUSE Observability" aria-label="SUSE Documentation - SUSE Observability">
+        SUSE Observability
+      </a>
+    </li>
+      <li>
+          Installation
+      </li>
+  </ul>
+</nav>
+  <div class="edit-this-page"><a href="https://github.com/rancher/stackstate-product-docs/edit/main/docs/latest/modules/en/pages/setup/install-stackstate/data-ingestion-pipeline.adoc"><strong>Edit</strong></a></div>
+        <div class="navbar-item search hide-for-print">
+        <div id="search-field" class="field">
+          <label class="visual-search-label-bc" for="search-input">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+          <input label="Search" aria-label="Search" id="search-input" type="text" placeholder="Search the docs" >
+          <label class="filter checkbox" style="display: none">
+            <input type="checkbox" data-facet-filter="component:suse-observability" checked> Only this project
+          </label>
+        </div>
+      </div>
+</div>
+  <div class="content">
+<aside
+  class="toc sidebar"
+  data-title="On this page" data-levels="2">
+  <div class="toc-menu">
+        <!-- start qualtrics -->
+    <div id='ZN_8qZUmklKYbBqAYe'><!--DO NOT REMOVE-CONTENTS PLACED HERE--></div>
+    <div id="qualtrics_container"></div>
+    <!-- end qualtrics -->
+  </div>
+</aside>
+
+<aside class="toc sidebar docsurvey-sidebar">
+  <div class="toc-menu">
+      </div>
+</aside>
+<article class="doc">
+<h1 class="page">Tune data ingestion for your workload</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>After installing SUSE® Observability and connecting your data sources, use this guide to adjust ingestion capacity to your actual workload. Check which components are under pressure, adjust their resources or ingestion limits, and verify that the deployment keeps up with incoming data. Repeat these checks as your monitored environment grows.</p>
+</div>
+<div class="paragraph">
+<p>All changes are made in the Helm values of the <code>suse-observability</code> chart, see <a href="#_change_resources">Change resources</a>.</p>
+</div>
+<div class="paragraph">
+<p>The pipeline is the same for every sizing profile. Profiles differ in how many replicas run and in how components are grouped into pods.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_overview"><a class="anchor" href="#_overview"></a>Overview</h2>
+<div class="sectionbody">
+<div class="imageblock">
+<div class="content">
+<img src="../../_images/data-ingestion-pipeline.svg" alt="SUSE® Observability data ingestion pipeline">
+</div>
+</div>
+<div class="paragraph">
+<p>Data passes through five stages:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Entry</strong>: the Router receives all agent and OpenTelemetry traffic and routes it by path.</p>
+</li>
+<li>
+<p><strong>Intake</strong>: the OpenTelemetry Collector and the Receiver authorize and validate data, then write it to a buffer or directly to storage.</p>
+</li>
+<li>
+<p><strong>Buffer</strong>: Kafka holds topology, health, events and connections until they are processed. vmagent queues metrics before writing them to VictoriaMetrics.</p>
+</li>
+<li>
+<p><strong>Processing</strong>: services consume Kafka topics and turn the data into topology, health states and stored events.</p>
+</li>
+<li>
+<p><strong>Storage</strong>: StackGraph holds topology and health, VictoriaMetrics holds metrics, ClickHouse holds traces, and Elasticsearch holds events and logs.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Each stage absorbs short bursts. When a stage cannot keep up for longer, the stage before it fills up: Kafka consumer lag grows, the vmagent queue grows, or the Receiver starts rejecting data.</p>
+</div>
+<div class="sect2">
+<h3 id="_differences_between_profiles"><a class="anchor" href="#_differences_between_profiles"></a>Differences between profiles</h3>
+<div class="paragraph">
+<p>Non-HA profiles run a single Receiver that handles all agent data. HA profiles split the Receiver into three deployments:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>receiver-base</code> for topology, health, events and metrics.</p>
+</li>
+<li>
+<p><code>receiver-process-agent</code> for process and network connection data.</p>
+</li>
+<li>
+<p><code>receiver-logs</code> for container logs.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>On non-HA profiles, Topology sync, Health sync, State, Checks and the API run inside the <code>server</code> pod. On HA profiles each runs as its own deployment. The diagram marks these components with a dashed border.</p>
+</div>
+<div class="paragraph">
+<p>For a description of each pod, see <a href="advanced-troubleshooting.html" class="xref page">Advanced troubleshooting</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_data_paths"><a class="anchor" href="#_data_paths"></a>Data paths</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 16.6666%;">
+<col style="width: 50%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Data</th>
+<th class="tableblock halign-left valign-top">Path</th>
+<th class="tableblock halign-left valign-top">Stored in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Topology</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Agent → Receiver → Kafka → Topology sync → StackGraph. OpenTelemetry topology derived from traces and metrics goes through the Receiver. Topology derived from logs goes from the collector to Kafka.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Health</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Agent → Receiver → Kafka → Health sync → StackGraph. Monitors run in Checks and publish health to Kafka.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Events</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Agent → Receiver → Kafka → Events to Elasticsearch (<code>e2es</code>) → Elasticsearch</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Connections</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Process agent → Receiver → Kafka → Correlate → Kafka (topology) and vmagent (metrics)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph, VictoriaMetrics</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Metrics</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Agent, Receiver, Correlate and OpenTelemetry Collector → vmagent → VictoriaMetrics</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VictoriaMetrics</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Logs</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Logs agent → Receiver → Elasticsearch. Logs do not pass through Kafka.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Traces</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">OpenTelemetry → OpenTelemetry Collector → ClickHouse</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ClickHouse</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_signals_per_stage"><a class="anchor" href="#_signals_per_stage"></a>Signals per stage</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>For every component, also check CPU throttling and memory usage with the <strong>Overrunning requested CPU</strong> and <strong>Long GCs</strong> monitors. A component that is throttled or close to its memory limit is the first candidate to scale.</p>
+</div>
+<div class="paragraph">
+<p>The <strong>How to check</strong> column names the SUSE Observability StackPack monitors for each signal, and the check in <a href="#_check_without_ui">Check the pipeline without the UI</a> that covers it when the UI is not available. With <a href="#_self_monitoring">Self-monitoring</a> set up, these monitors alert by changing the health state of the affected component to Deviating or Critical.</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 18.1818%;">
+<col style="width: 27.2727%;">
+<col style="width: 27.2727%;">
+<col style="width: 27.2728%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Component</th>
+<th class="tableblock halign-left valign-top">Overload signal</th>
+<th class="tableblock halign-left valign-top">How to check</th>
+<th class="tableblock halign-left valign-top">What to scale or change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">OpenTelemetry Collector</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Refused spans or metric points, export failures, processor drops</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>OTel Collector - spans refused by a receiver</strong>, <strong>OTel Collector - metric points refused by a receiver</strong> and the export failure and processor drop monitors. Without the UI: <a href="#_check_otel_collector">OpenTelemetry Collector</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Collector CPU and memory. If exports fail, check the destination: ClickHouse, vmagent or the Receiver.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Memory limiter saturation, element budget saturation, a growing number of open HTTP requests</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Receiver - Memory Limiter saturation</strong>, <strong>Receiver - unique element budget saturation</strong>, <strong>Receiver - hourly element budget saturation</strong>, <strong>Receiver - Active number of http requests growing</strong>. Without the UI: <a href="#_check_receiver">Data arriving at the Receiver</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver memory. Element budgets through environment variables, see <a href="#_receiver_element_budget_saturated">Receiver element budget saturated</a>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver (process agent)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">CPU throttling</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Overrunning requested CPU</strong>. Without the UI: <a href="#_check_throttling">CPU throttling</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver CPU</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver (logs)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rejected logs</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Receiver - Logs rejected</strong>. Without the UI: <a href="#_check_receiver">Data arriving at the Receiver</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch disk or log retention. Reduce noisy log sources.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">vmagent</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Growing persistent queue, dropped samples, saturated remote write</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Vmagent - Persistent queue is droppingData</strong>, <strong>Vmagent - RemoteWrite packets dropped</strong>, <strong>Vmagent - Remote write connection is saturated</strong>. Without the UI: <a href="#_check_vmagent">vmagent</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VictoriaMetrics resources, then vmagent resources</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Kafka</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Consumer lag per topic</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The Kafka lag metric on the Server component, or on Topology sync and Health sync on HA profiles. Without the UI: <a href="#_check_kafka_lag">Kafka consumer lag</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The consumer of the lagging topic, not Kafka itself, unless Kafka shows disk or CPU pressure</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Topology sync</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Sync latency, blocked sync workers</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Topology Sync - latency too high</strong>, <strong>Topology Sync - high processing time</strong>, <strong>Topology Sync - Sync Workers blocked</strong>. Without the UI: lag on the topology topics in <a href="#_check_kafka_lag">Kafka consumer lag</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Topology sync CPU, or a lower topology update frequency on the source</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Health sync</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Processing latency</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Health sync data processing latency</strong>. Without the UI: lag on the health topics in <a href="#_check_kafka_lag">Kafka consumer lag</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Health sync CPU and memory</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">State</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">CPU usage. State runs as a single instance and does not scale out.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Overrunning requested CPU</strong>. Without the UI: <a href="#_check_throttling">CPU throttling</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">State CPU</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Correlate</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Processing latency</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Correlate - Processing latency</strong>. Without the UI: lag on the correlate topics in <a href="#_check_kafka_lag">Kafka consumer lag</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Correlate CPU and memory</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Events to Elasticsearch</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Ingestion latency</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Elasticsearch data ingestion latency</strong>, <strong>Elasticsearch data processing latency</strong>. Without the UI: lag on <code>sts_topology_events</code> in <a href="#_check_kafka_lag">Kafka consumer lag</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>e2es</code> CPU and memory, then Elasticsearch</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Checks</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Monitor execution time, failure percentage</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Failure percentage</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Checks CPU and memory</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ClickHouse</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Delayed or rejected inserts</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>ClickHouse - rejected insert</strong>, <strong>ClickHouse - delayed insert</strong>. Without the UI: <a href="#_check_clickhouse">ClickHouse</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ClickHouse CPU, memory and disk</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VictoriaMetrics</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Slow inserts, rejected rows, high churn rate</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>VictoriaMetrics - Too high slow insert rate</strong>, <strong>VictoriaMetrics - Rows rejected on ingestion</strong>, <strong>VictoriaMetrics - Too high churn rate</strong>. Without the UI: <a href="#_check_victoriametrics">VictoriaMetrics</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VictoriaMetrics memory</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">HBase slow gets</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>HBase slow gets</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">HBase region server memory and CPU</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Volume usage</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The volume usage view on the Elasticsearch pods. Without the UI: <a href="#_check_elasticsearch">Elasticsearch</a>.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch disk</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_change_resources"><a class="anchor" href="#_change_resources"></a>Change resources</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The sizing profile sets the resources of every component. To change them for one component:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Find the values key of the component:</p>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 40%;">
+<col style="width: 60%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Component</th>
+<th class="tableblock halign-left valign-top">Values key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver, non-HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.receiver</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.receiver.split.base</code>, <code>stackstate.components.receiver.split.processAgent</code> and <code>stackstate.components.receiver.split.logs</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Topology sync, Health sync, State and Checks, non-HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.server</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Topology sync, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.sync</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Health sync, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.healthSync</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">State, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.state</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Checks, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.checks</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Correlate</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.correlate</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Events to Elasticsearch</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.e2es</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">vmagent</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>stackstate.components.vmagent</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">OpenTelemetry Collector</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>opentelemetry-collector</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Kafka</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>kafka</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VictoriaMetrics</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>victoria-metrics-0.server</code>, and on HA profiles also <code>victoria-metrics-1.server</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ClickHouse</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>clickhouse</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Elasticsearch</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>elasticsearch</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph, non-HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>hbase.stackgraph</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">StackGraph, HA profiles</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>hbase.hbase.regionserver</code></p></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>Add the new values under <code>&lt;key&gt;.resources</code> to a separate values file, for example <code>resources-values.yaml</code>. Set only the values you change. The other values keep the values of the sizing profile. For example, to raise the CPU of the Receiver on a non-HA profile:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">stackstate:
+  components:
+    receiver:
+      resources:
+        requests:
+          cpu: "1500m"
+        limits:
+          cpu: "3"</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>Run <code>helm upgrade</code> with all the values files you used for the installation, and add the new file last:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">helm upgrade \
+  --namespace suse-observability \
+  --values values.yaml \
+  --values resources-values.yaml \
+suse-observability \
+suse-observability/suse-observability</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Replace <code>values.yaml</code> with the values files of your installation.</p>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>To resize volumes, see <a href="../data-management/data_retention.html#_resizing_storage" class="xref page">Resizing storage</a>. The element budgets of the Receiver are set with environment variables, see <a href="#_receiver_element_budget_saturated">Receiver element budget saturated</a>.</p>
+</div>
+<div class="sect2">
+<h3 id="_how_much_to_add"><a class="anchor" href="#_how_much_to_add"></a>How much to add</h3>
+<div class="paragraph">
+<p>Raise resources in steps rather than by a few percent at a time. A small step rarely moves a saturated stage, and each step costs a redeploy and a new wait for the backlog to drain.</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 40%;">
+<col style="width: 60%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Finding</th>
+<th class="tableblock halign-left valign-top">Step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">CPU throttled in 25% to 50% of periods</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Raise the CPU limit by 50%.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">CPU throttled in more than 50% of periods</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Double the CPU limit.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Overrunning requested CPU</strong>: CPU usage more than twice the request for 30 minutes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Raise the CPU request to the current usage. If the container is also throttled, raise the limit as well.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Container <code>OOMKilled</code>, or memory at 95% of the limit or more</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Raise the memory limit by 50%. JVM services derive their heap from the memory limit, so you do not set the heap separately.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Receiver memory limiter above 80%, OpenTelemetry Collector refuses data, or VictoriaMetrics has more than 5% slow inserts</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Raise the memory limit by 50%.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Element budget above 95%</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">If agents are limited, move to the next sizing profile, see <a href="kubernetes_openshift/change_sizing_profile.html" class="xref page">Change the sizing profile</a>. Otherwise raise the per-agent value by 50%. See <a href="#_receiver_element_budget_saturated">Receiver element budget saturated</a>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Volume or Elasticsearch disk 80% full or more</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Resize the volume so the current data uses at most 70% of it: divide the used size by 0.7. See <a href="../data-management/data_retention.html#_resizing_storage" class="xref page">Resizing storage</a>. Reducing the retention is an alternative.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="ulist">
+<ul>
+<li>
+<p>Raise the request together with the limit, so the scheduler places the pod on a node that has the resources.</p>
+</li>
+<li>
+<p>If several components are short at the same time, move to the next sizing profile instead of raising them one by one. A profile change can change volume sizes and the Kafka partition count, so it takes more than a <code>helm upgrade</code>, see <a href="kubernetes_openshift/change_sizing_profile.html" class="xref page">Change the sizing profile</a>.</p>
+</li>
+<li>
+<p>After a change, wait until the Kafka consumer lag stops growing before you judge the result.</p>
+</li>
+<li>
+<p>If two steps on the same stage do not help, the cause is probably not resources. Follow the matching runbook or contact SUSE® Observability support.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The check in <a href="#_check_without_ui">Check the pipeline without the UI</a> prints the suggested values and the Helm values keys for the findings it can size.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_reduce_resources"><a class="anchor" href="#_reduce_resources"></a>Reduce resources</h3>
+<div class="paragraph">
+<p>If a component uses much less than it gets, you can lower its resources to free capacity in the cluster. Lower them only when all of these hold for at least a week that includes your busiest hours:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>CPU usage stays below half of the request, and the container is not throttled.</p>
+</li>
+<li>
+<p>Memory usage stays below half of the limit, and the container was not <code>OOMKilled</code>.</p>
+</li>
+<li>
+<p>The Kafka consumer lag does not grow, and none of the monitors for the component alert.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Lower one component at a time, by at most a third, and check the same signals again for a week before the next step. Start with the components you raised before, and return them to the values of the sizing profile first. If most components use much less than the profile gives them, a smaller sizing profile may fit, see <a href="requirements.html" class="xref page">Requirements</a>. To move to it, see <a href="kubernetes_openshift/change_sizing_profile.html" class="xref page">Change the sizing profile</a>.</p>
+</div>
+<div class="paragraph">
+<p>JVM services, such as the Receiver, Topology sync, Health sync, State and Correlate, size their heap from the memory limit and keep the memory once they have used it. Their memory usage does not show how much they need, so lower their memory only with the help of SUSE® Observability support.</p>
+</div>
+<div class="paragraph">
+<p>Do not shrink volumes. To use less disk space, reduce the retention, see <a href="../data-management/data_retention.html" class="xref page">Data retention</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_self_monitoring"><a class="anchor" href="#_self_monitoring"></a>Self-monitoring</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>SUSE® Observability can monitor itself with the <strong>SUSE Observability</strong> StackPack. The StackPack adds monitors, metric bindings and dashboards for the platform components to the Kubernetes topology of the cluster where SUSE® Observability runs. When a signal crosses its threshold, the monitor changes the health state of the affected component to Deviating or Critical. Each monitor links to remediation steps. To get notified, for example in Slack or by e-mail, see <a href="../../use/alerting/notifications/configure.html" class="xref page">Configure notifications</a>.</p>
+</div>
+<div class="paragraph">
+<p>Prerequisites:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The Kubernetes StackPack is installed for the cluster that runs SUSE® Observability.</p>
+</li>
+<li>
+<p>The SUSE Observability Agent is installed on that cluster and reports to the same instance, or to a second instance used for monitoring.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The agent scrapes platform metrics through pod annotations, which the chart sets by default with <code>stackstate.components.all.metrics.agentAnnotationsEnabled</code>. Scraped metric names get a <code>stackstate_</code> prefix.</p>
+</div>
+<div class="paragraph">
+<p>The StackPack provides these dashboards:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>SUSE Observability - Data ingestion</p>
+</li>
+<li>
+<p>SUSE Observability - Topology processing</p>
+</li>
+<li>
+<p>SUSE Observability - Metrics processing</p>
+</li>
+<li>
+<p>SUSE Observability - Logs processing</p>
+</li>
+<li>
+<p>SUSE Observability - Traces processing</p>
+</li>
+</ul>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>When the platform is overloaded, it also processes its own monitoring data late. For production installations, consider sending the platform&#8217;s agent data to a separate SUSE® Observability instance.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_check_without_ui"><a class="anchor" href="#_check_without_ui"></a>Check the pipeline without the UI</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>When the UI is not available or too slow to use, the <a href="../../_attachments/suse-observability_pipeline_check.sh" class="xref attachment">suse-observability_pipeline_check.sh</a> script finds the most common problems with <code>kubectl</code> and <code>curl</code>: crashing or throttled pods, rejected data and data that does not arrive. It is a first check, not a replacement for the SUSE Observability StackPack. The script does not change anything in the cluster.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">bash suse-observability_pipeline_check.sh [-i &lt;seconds&gt;] [-c &lt;checks&gt;] [-l] [-k] [&lt;namespace&gt;]</code></pre>
+</div>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>-i</code> sets the interval between the two samples, 60 seconds by default.</p>
+</li>
+<li>
+<p><code>-c</code> runs only the given checks, for example <code>-c cpu,kafka</code>. All checks run by default.</p>
+</li>
+<li>
+<p><code>-l</code> lists the checks. Each check is described in the sections below.</p>
+</li>
+<li>
+<p><code>-k</code> keeps the collected metrics in a directory in the current directory, so you can attach them to a support request.</p>
+</li>
+<li>
+<p>The namespace defaults to <code>suse-observability</code>.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The script reads the metrics endpoints of the platform components through <code>kubectl port-forward</code>, and the node metrics through the API server proxy. It reads all metrics twice with the interval in between, so counters are compared over that interval instead of since the pod started. Each finding is reported as <code>OK</code>, <code>WARN</code> or <code>FAIL</code> together with a fix. For CPU, memory, volume and element budget findings, the fix includes the Helm values key and a suggested value, calculated with the steps in <a href="#_how_much_to_add">How much to add</a>. The script exits with a non-zero status when it finds a warning or a failure. It needs <code>kubectl</code>, <code>curl</code> and <code>awk</code>.</p>
+</div>
+<div class="sect2">
+<h3 id="_check_permissions"><a class="anchor" href="#_check_permissions"></a>Required permissions</h3>
+<div class="ulist">
+<ul>
+<li>
+<p>In the namespace where SUSE® Observability runs: list pods, get <code>pods.metrics.k8s.io</code>, and create <code>pods/portforward</code>.</p>
+</li>
+<li>
+<p>For the CPU throttling and volume checks: cluster-wide <code>get</code> on <code>nodes/proxy</code>. The default <code>view</code>, <code>edit</code> and <code>admin</code> roles do not include it, and some managed node types, such as serverless nodes, do not serve the kubelet metrics. Without it, the script skips the volume check and compares CPU and memory usage with the limits instead of measuring throttling.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The metrics on these endpoints do not have the <code>stackstate_</code> prefix that the agent adds, unless the name already starts with it.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_restarts"><a class="anchor" href="#_check_restarts"></a>Pods and memory</h3>
+<div class="paragraph">
+<p>Check names: <code>pods</code>, <code>memory</code>.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>pods</code> reports pods that are not running or not ready, containers that restarted during the check, and containers that restarted before. <code>OOMKilled</code> as the last reason means the container needs more memory. For other reasons, check the logs of the previous container with <code>kubectl -n &lt;namespace&gt; logs &lt;pod&gt; -c &lt;container&gt; --previous</code>.</p>
+</li>
+<li>
+<p><code>memory</code> reports containers that use 95% or more of their memory limit. A JVM service close to its memory limit spends more time in garbage collection and processes data more slowly.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_throttling"><a class="anchor" href="#_check_throttling"></a>CPU throttling</h3>
+<div class="paragraph">
+<p>Check name: <code>cpu</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports the share of CPU periods in which each container was throttled during the check: <code>WARN</code> from 25%, <code>FAIL</code> from 50%. Throttling on the Receiver, Topology sync, Health sync or Correlate delays all data that passes through them. Raise the CPU limit of the throttled containers, see <a href="#_how_much_to_add">How much to add</a>. Containers without a CPU limit are never throttled and are not reported.</p>
+</div>
+<div class="paragraph">
+<p>Without permission on <code>nodes/proxy</code>, the check reports containers whose CPU usage is 90% or more of their limit instead. This is an approximation: the usage is an average over a short window, so a container can be throttled while its usage is below the limit.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_volumes"><a class="anchor" href="#_check_volumes"></a>Volumes</h3>
+<div class="paragraph">
+<p>Check name: <code>volumes</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports persistent volumes that are 80% full or more, and fails from 90%. Reduce the retention of the data it stores, or resize the volume, see <a href="#_how_much_to_add">How much to add</a>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_receiver"><a class="anchor" href="#_check_receiver"></a>Data arriving at the Receiver</h3>
+<div class="paragraph">
+<p>Check name: <code>receiver</code>.</p>
+</div>
+<div class="paragraph">
+<p>Covers the single Receiver on non-HA profiles and each Receiver role on HA profiles:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The number of agent requests with a valid API key per minute. No requests means the agents do not reach the Receiver. Check the agent logs and the ingress or route in front of the Router. Requests with an invalid API key mean some agents use a wrong API key.</p>
+</li>
+<li>
+<p>The memory limiter above 80% means the Receiver is short of memory and starts rejecting requests. Add memory to the Receiver.</p>
+</li>
+<li>
+<p>An element budget above 95% means the Receiver drops data for that element type. See <a href="#_receiver_element_budget_saturated">Receiver element budget saturated</a>.</p>
+</li>
+<li>
+<p>Rejected logs. See <a href="#_logs_are_missing">Logs are missing</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_kafka_lag"><a class="anchor" href="#_check_kafka_lag"></a>Kafka consumer lag</h3>
+<div class="paragraph">
+<p>Check name: <code>kafka</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports topics whose consumer lag is above 1000 and growing, or above 100000, and the pod that consumes them. Lag shows which consumer cannot keep up:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>sts_topo_*</code> and <code>sts_topology_stream</code>: Topology sync.</p>
+</li>
+<li>
+<p><code>sts_health_sync</code>, <code>sts_intake_health</code> and <code>sts_health_sync_settings</code>: Health sync.</p>
+</li>
+<li>
+<p><code>sts_correlate_*</code> and <code>sts_correlated_connections</code>: Correlate.</p>
+</li>
+<li>
+<p><code>sts_topology_events</code>: Events to Elasticsearch.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Check CPU throttling and memory of that consumer first, and add resources to it. On non-HA profiles, all of these run in the <code>server</code> pod.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_vmagent"><a class="anchor" href="#_check_vmagent"></a>vmagent</h3>
+<div class="paragraph">
+<p>Check name: <code>vmagent</code>.</p>
+</div>
+<div class="paragraph">
+<p>In a healthy pipeline, the persistent queue stays close to zero, nothing is dropped or retried, and only successful remote write requests grow. A growing queue, retries or failed requests mean VictoriaMetrics accepts data slower than it arrives. See <a href="#_check_victoriametrics">VictoriaMetrics</a>. Dropped data is lost.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_otel_collector"><a class="anchor" href="#_check_otel_collector"></a>OpenTelemetry Collector</h3>
+<div class="paragraph">
+<p>Check name: <code>otel</code>.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Refused data means the collector refuses incoming data, usually because its memory limiter is reached. Add memory and CPU to the collector.</p>
+</li>
+<li>
+<p>Failed sends, or an export queue that is 80% full or more, mean the destination does not accept data fast enough. <code>clickhousests</code> writes traces to ClickHouse, <code>prometheusremotewrite/victoria-metrics</code> writes metrics and <code>sts_kafka_exporter</code> writes topology to Kafka.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_clickhouse"><a class="anchor" href="#_check_clickhouse"></a>ClickHouse</h3>
+<div class="paragraph">
+<p>Check name: <code>clickhouse</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports rejected and delayed inserts during the check. They mean ClickHouse cannot merge data as fast as it arrives. Add CPU and memory to ClickHouse, and check its disk usage.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_victoriametrics"><a class="anchor" href="#_check_victoriametrics"></a>VictoriaMetrics</h3>
+<div class="paragraph">
+<p>Check name: <code>victoriametrics</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports the rows inserted per minute and the share of slow inserts for each VictoriaMetrics instance. More than 5% slow inserts means VictoriaMetrics does not have enough memory to cache the active series. Add memory to VictoriaMetrics. Ignored rows are rejected on ingestion, for example because they exceed the label limits. No inserted rows means no metrics arrive, see <a href="#_check_vmagent">vmagent</a>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_check_elasticsearch"><a class="anchor" href="#_check_elasticsearch"></a>Elasticsearch</h3>
+<div class="paragraph">
+<p>Check name: <code>elasticsearch</code>.</p>
+</div>
+<div class="paragraph">
+<p>Reports the cluster health and the disk usage of each node from 80%. When disk usage is high, the Receiver lowers the log budget and rejects more logs. Reduce the log retention, or resize the Elasticsearch volumes, see <a href="#_how_much_to_add">How much to add</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_runbooks"><a class="anchor" href="#_runbooks"></a>Runbooks</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>These runbooks start from a symptom and point to the stage to check. The SUSE Observability StackPack monitors with the same name include more detailed remediation steps. If the UI is not available, run the matching check in <a href="#_check_without_ui">Check the pipeline without the UI</a> instead. To add resources, follow <a href="#_change_resources">Change resources</a> with the steps in <a href="#_how_much_to_add">How much to add</a>.</p>
+</div>
+<div class="sect2">
+<h3 id="_topology_is_delayed_or_components_are_missing"><a class="anchor" href="#_topology_is_delayed_or_components_are_missing"></a>Topology is delayed or components are missing</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the Kafka consumer lag for the topology topics. If lag grows, Topology sync cannot keep up.</p>
+</li>
+<li>
+<p>Check the Topology sync latency and the <strong>Topology Sync - Sync Workers blocked</strong> monitor.</p>
+</li>
+<li>
+<p>If a sync worker is blocked, restart the pod that runs Topology sync, <code>sync</code> on HA profiles or <code>server</code> on non-HA profiles. Check its logs for the cause after the restart.</p>
+</li>
+<li>
+<p>If latency is high but no worker is blocked, check CPU throttling and add CPU to Topology sync. More CPU allows more parallel processing.</p>
+</li>
+<li>
+<p>If one integration causes most of the load, reduce how often that source sends topology.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_receiver_element_budget_saturated"><a class="anchor" href="#_receiver_element_budget_saturated"></a>Receiver element budget saturated</h3>
+<div class="paragraph">
+<p>The Receiver limits how many components, relations and connections it accepts from process agents, and how many new components and relations it accepts per hour. Each budget is a value per agent multiplied by the number of agents, so it grows when you add agents. When a budget is saturated, the Receiver drops data for that element type, which shows up as missing topology or connections.</p>
+</div>
+<div class="paragraph">
+<p>The sizing profile also limits how many nodes you can observe, counted in Default Nodes, see <a href="requirements.html" class="xref page">Requirements</a>. Agents above that limit are marked as limited. The Receiver rejects their process, container and connection data, and they do not add to the element budgets. Check this limit first, because raising a budget does not help limited agents.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Run <code>sts agent list</code>, see <a href="../cli/cli-sts.html" class="xref page">CLI: sts</a>. The last line shows how many agents are active, limited and stale. Other signs of limited agents are the <strong>Nodes limitation</strong> notifications in the UI and HTTP 429 responses with <code>Maximum amount of active agents exceeded</code> in the agent logs.</p>
+</li>
+<li>
+<p>If any agents are limited, move to the next sizing profile. A profile change can change volume sizes and the Kafka partition count, so it takes more than a <code>helm upgrade</code>, see <a href="kubernetes_openshift/change_sizing_profile.html" class="xref page">Change the sizing profile</a>.</p>
+</li>
+<li>
+<p>If no agents are limited, the agents send more elements than the default budget per agent allows, for example because they run many short-lived pods or open many connections. Find the saturated <code>element_type</code> in the <strong>Receiver - unique element budget saturation</strong> and <strong>Receiver - hourly element budget saturation</strong> monitors.</p>
+</li>
+<li>
+<p>Raise the matching per-agent value by 50% with an environment variable on the Receiver:</p>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 66.6667%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Budget</th>
+<th class="tableblock halign-left valign-top">Variable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Unique components</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>CONFIG_FORCE_stackstate_receiver_processAgent_maxComponentsPerHost</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Unique relations</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>CONFIG_FORCE_stackstate_receiver_processAgent_maxRelationsPerHost</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Unique connections</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>CONFIG_FORCE_stackstate_receiver_processAgent_maxConnectionObservationsPerHost</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">New components per hour</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>CONFIG_FORCE_stackstate_receiver_processAgent_maxNewComponentsHourlyPerHost</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">New relations per hour</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>CONFIG_FORCE_stackstate_receiver_processAgent_maxNewRelationsHourlyPerHost</code></p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>The current value per agent is the budget maximum divided by the number of agents. The check in <a href="#_check_without_ui">Check the pipeline without the UI</a> prints it for the unique budgets. For example, on a non-HA profile:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">stackstate:
+  components:
+    receiver:
+      extraEnv:
+        open:
+          CONFIG_FORCE_stackstate_receiver_processAgent_maxComponentsPerHost: "450"</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>On HA profiles, set the variable under <code>stackstate.components.receiver.split.processAgent.extraEnv.open</code>.</p>
+</div>
+</li>
+<li>
+<p>Run <code>helm upgrade</code>. A higher budget increases the load on Correlate and Topology sync, so watch their latency afterwards.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_receiver_rejects_data_or_requests_time_out"><a class="anchor" href="#_receiver_rejects_data_or_requests_time_out"></a>Receiver rejects data or requests time out</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check <strong>Receiver - Memory Limiter saturation</strong>. If it stays high, add memory to the Receiver.</p>
+</li>
+<li>
+<p>Check <strong>Receiver - Active number of http requests growing</strong>. A steady increase usually means the Receiver cannot write to Kafka. Check Kafka health, then restart the Receiver.</p>
+</li>
+<li>
+<p>Check CPU throttling on the Receiver pods. On HA profiles, check each Receiver role separately.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_health_states_are_delayed"><a class="anchor" href="#_health_states_are_delayed"></a>Health states are delayed</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the Kafka consumer lag for the health topics and the <strong>Health sync data processing latency</strong> monitor.</p>
+</li>
+<li>
+<p>Add CPU to Health sync. Check JVM heap usage and garbage collection time with the <strong>Long GCs</strong> monitor.</p>
+</li>
+<li>
+<p>If State shows high CPU usage, add CPU to State. State runs as a single instance and cannot be scaled out.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_metrics_are_delayed_or_missing"><a class="anchor" href="#_metrics_are_delayed_or_missing"></a>Metrics are delayed or missing</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the vmagent monitors. A growing persistent queue or dropped samples means VictoriaMetrics accepts data slower than it arrives.</p>
+</li>
+<li>
+<p>Check the vmagent logs for write errors to VictoriaMetrics.</p>
+</li>
+<li>
+<p>Check <strong>VictoriaMetrics - Too high slow insert rate</strong> and the churn rate monitors. Add memory to VictoriaMetrics if slow inserts are high.</p>
+</li>
+<li>
+<p>If the problem is only in OpenTelemetry metrics, check the collector&#8217;s export failure monitors.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_logs_are_missing"><a class="anchor" href="#_logs_are_missing"></a>Logs are missing</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check <strong>Receiver - Logs rejected</strong>. Each log source gets a budget based on Elasticsearch disk space and log retention.</p>
+</li>
+<li>
+<p>If a single source sends much more than usual, for example after debug logging was enabled, reduce its log volume.</p>
+</li>
+<li>
+<p>If the volume is expected, increase Elasticsearch disk space or reduce the log retention.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_events_are_delayed"><a class="anchor" href="#_events_are_delayed"></a>Events are delayed</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the <strong>Elasticsearch data ingestion latency</strong> and <strong>Elasticsearch data processing latency</strong> monitors.</p>
+</li>
+<li>
+<p>Add CPU to <code>e2es</code>. Check Elasticsearch volume usage and CPU.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_traces_are_missing"><a class="anchor" href="#_traces_are_missing"></a>Traces are missing</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the OpenTelemetry Collector monitors for refused spans, export failures and processor drops.</p>
+</li>
+<li>
+<p>Refused spans with a busy collector mean the collector needs more CPU or memory.</p>
+</li>
+<li>
+<p>Export failures mean the destination does not accept data. Check the ClickHouse delayed and rejected insert monitors.</p>
+</li>
+</ol>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_process_and_connection_data_is_delayed"><a class="anchor" href="#_process_and_connection_data_is_delayed"></a>Process and connection data is delayed</h3>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Check the Kafka consumer lag for the connection topics and the Correlate processing latency.</p>
+</li>
+<li>
+<p>Check CPU throttling on Correlate and on the Receiver process agent role.</p>
+</li>
+<li>
+<p>If latency stays high after you add resources, contact SUSE® Observability support.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>If none of these steps help, collect a <a href="support-package-logs.html" class="xref page">Support Package (Logs)</a> and a <a href="support-package-performance.html" class="xref page">Support Package (Performance)</a>, and contact support.</p>
+</div>
+</div>
+</div>
+</div>
+<nav class="pagination">
+  <span class="prev"><a href="kubernetes_openshift/affinity.html">Configure Kubernetes affinities and tolerations</a></span>
+  <span class="next"><a href="kubernetes_openshift/ingress.html">Expose SUSE Observability outside of the cluster</a></span>
+</nav>
+</article>
+  </div>
+</main>
+</div>
+<script src="../../../../../_/js/site.js"></script>
+<script src="../../../../../_/js/nav-menu-toggle.js"></script>
+<script src="../../../../../_/js/product-release.js"></script>
+<script async src="../../../../../_/js/vendor/highlight.js"></script>
+<script src="../../../../../_/js/vendor/lunr.js"></script>
+<script src="../../../../../_/js/search-ui.js" id="search-ui-script" data-site-root-path="../../../../.." data-snippet-length="100" data-stylesheet="../../../../../_/css/search.css"></script>
+<script async src="../../../../../search-index.js"></script>
+<script src="../../../../../_/js/vendor/langSelection.js"></script>
+<script async src="../../../../../_/js/vendor/tabs.js"></script>
+
+
+<script src="../../../../../_/js/CNLanguageSwitcher.js"></script>
+  </body>
+</html>
