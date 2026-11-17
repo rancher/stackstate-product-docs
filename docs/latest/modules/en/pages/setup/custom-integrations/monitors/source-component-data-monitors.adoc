@@ -1,7 +1,7 @@
 = Source Component Data Monitors
 :description: Judge the health of components from the data their source sent, such as a Kubernetes object, with CEL expressions in the source-component-data monitor function
 :page-languages: [en]
-:revdate: 2026-11-13
+:revdate: 2026-11-17
 :page-revdate: {revdate}
 
 == Overview
@@ -17,9 +17,9 @@ Use it for health that can be read from a single component's own data, such as a
 On every run, the monitor evaluates each component that its `query` selects:
 
 . *Choose the source.* A component can be merged from several sources, for example from both the cluster agent and the OpenTelemetry collector. `sourceSelector` is evaluated for each source, and the first source that matches is used. Sources are ordered by type and then by identifier, so the choice is the same on every run. A component without a matching source reports `UNKNOWN` with reason `NoMatchingSource`.
-. *Split into items, optionally.* Without `items`, the component gets one health state. With `items`, it gets one health state per element of the list that `items` returns, for example one per container. The steps below then run once per element, which they read as `item`. If `items` returns an empty list, the monitor reports the `whenEmpty` fields, which default to `CLEAR`.
-. *Evaluate the bindings.* Each binding in `vars` names a value that the result fields read as `vars.<name>`. A binding can use other bindings, which are evaluated first, and `item`.
-. *Evaluate the result fields.* `health`, `title`, `reason`, `data` and `key` describe the health state.
+. *List the items.* `items` reads the selected source as `sourceData` and returns the list to judge, for example its containers, giving one health state per element. Without `items`, the selected source is the only item, so the component gets one health state. If `items` returns an empty list, the monitor reports the `whenEmpty` fields, which default to `CLEAR`.
+. *Evaluate the bindings.* For each item, which they read as `item`, each binding in `vars` names a value that the result fields read as `vars.<name>`. A binding can use other bindings, which are evaluated first.
+. *Evaluate the result fields.* `health`, `title`, `reason`, `data` and `key` read `item` and `vars`, and describe the item's health state.
 . *Report errors as `UNKNOWN`.* If an expression fails, for example because it reads a field the data does not contain, the component reports `UNKNOWN` with the error as reason. Missing data never results in `CLEAR`.
 
 == Arguments
@@ -34,15 +34,15 @@ On every run, the monitor evaluates each component that its `query` selects:
 
 |`sourceSelector`
 |CEL, boolean, required
-|Selects the source to judge, for example `source.topologySync.identifier.startsWith("urn:stackpack:kubernetes-v2:")` for the data of the Kubernetes StackPack's Sync. It cannot use `vars` or `item`.
+|Selects the source to judge, reading each candidate as `source`, for example `source.topologySync.identifier.startsWith("urn:stackpack:kubernetes-v2:")` for the data of the Kubernetes StackPack's Sync.
 
 |`items`
 |CEL, list
-|Gives one health state per element of the returned list, for example `source.status.?containerStatuses.orValue([])` for one per container. The bindings and result fields read the element as `item`. It cannot use `vars`.
+|Gives one health state per element of the returned list, reading the selected source as `sourceData`, for example `sourceData.status.?containerStatuses.orValue([])` for one per container. Defaults to the selected source alone.
 
 |`vars`
 |Map of names to CEL expressions
-|Named values that the result fields read as `vars.<name>`, for example `phase: source.status.?phase.orValue("")`. With `items`, they are evaluated per element and can use `item`.
+|Named values that the result fields read as `vars.<name>`, evaluated per item, for example `phase: item.status.?phase.orValue("")`.
 
 |`health`
 |CEL, string, required
@@ -77,42 +77,50 @@ In the monitor editor, select a component in the topology preview to see its sou
 
 The expressions can read the following variables:
 
+Each field reads the data of its own step, so the same data never appears under two names:
+
 [cols="1,3"]
 |===
-|Variable |Contents
+|Field |Reads
 
-|`name`
-|The component's name.
+|`sourceSelector`
+|`source`, each candidate source.
 
-|`source.identifier`
-|The identifier of the source.
+|`items`
+|`sourceData`, the selected source.
 
-|`source.tags`
-|The source's tags, mapping each tag key to its list of values, for example `source.tags["cluster-name"][0]`.
-
-|`source.configuration`
-|The source's data, for a Kubernetes object its `apiVersion`, `kind`, `metadata` and `spec`. The cluster agent does not always send `kind`.
-
-|`source.status`
-|The status of the source, for a Kubernetes object its `status`, regardless of which producer sent it.
-
-|`source.topologySync.identifier`, `source.topologySync.name`
-|The identifier and name of the Sync that synchronized the source, empty for other sources.
-
-|`source.mapping.identifier`, `source.mapping.name`
-|The identifier and name of the OpenTelemetry component mapping that created the source, empty for other sources.
-
-|`now`
-|The time of the evaluation, for example `timestamp(source.configuration.metadata.creationTimestamp) < now - duration("15m")`.
-
-|`vars`
-|The bindings, as `vars.<name>`, in the bindings and result fields.
-
-|`item`
-|The current element of `items`, in the bindings and result fields.
+|`vars` and the result fields
+|`item`, an element of `items`, or the selected source when `items` is not set; and `vars`.
 |===
 
-Besides the standard CEL functions and macros, the expressions can use the string functions and optional field selection, such as `source.status.?phase.orValue("")`. Use `vars` to name intermediate values.
+All fields can also read `name`, the component's name, and `now`, the time of the evaluation, for example `timestamp(item.configuration.metadata.creationTimestamp) < now - duration("15m")`.
+
+A source, as `source`, `sourceData` or an `item` without `items`, holds:
+
+[cols="1,3"]
+|===
+|Field |Contents
+
+|`identifier`
+|The identifier of the source.
+
+|`tags`
+|The source's tags, mapping each tag key to its list of values, for example `item.tags["cluster-name"][0]`.
+
+|`configuration`
+|The source's data, for a Kubernetes object its `apiVersion`, `kind`, `metadata` and `spec`. The cluster agent does not always send `kind`.
+
+|`status`
+|The status of the source, for a Kubernetes object its `status`, regardless of which producer sent it.
+
+|`topologySync.identifier`, `topologySync.name`
+|The identifier and name of the Sync that synchronized the source, empty for other sources.
+
+|`mapping.identifier`, `mapping.name`
+|The identifier and name of the OpenTelemetry component mapping that created the source, empty for other sources.
+|===
+
+Besides the standard CEL functions and macros, the expressions can use the string functions and optional field selection, such as `item.status.?phase.orValue("")`. Use `vars` to name intermediate values.
 
 TIP: To select through several fields that may be missing, unwrap each level: `c.?state.orValue({}).?waiting.orValue({}).?reason.orValue("")`. A chained `c.?state.?waiting` does not give the expected result.
 
@@ -145,7 +153,7 @@ This monitor reports a `CRITICAL` health state for each container of a Pod that 
     arguments:
       query: 'type = "pod"'
       sourceSelector: 'source.topologySync.identifier.startsWith("urn:stackpack:kubernetes-v2:")'
-      items: 'source.status.?containerStatuses.orValue([]).filter(c, c.state.?waiting.orValue({}).?reason.orValue("") in ["CrashLoopBackOff", "ImagePullBackOff"])'
+      items: 'sourceData.status.?containerStatuses.orValue([]).filter(c, c.state.?waiting.orValue({}).?reason.orValue("") in ["CrashLoopBackOff", "ImagePullBackOff"])'
       vars:
         waiting: 'item.state.waiting'
       health: '"CRITICAL"'
