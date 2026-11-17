@@ -1,7 +1,7 @@
 = Version specific upgrade instructions
 :description: Review upgrade instructions for specific versions to update configurations and avoid deployment failures in SUSE Observability
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-11-12
+:revdate: 2026-11-17
 :page-revdate: {revdate}
 
 == Overview
@@ -32,6 +32,38 @@ All workloads now apply `global.suseObservability.tolerations` and `global.suseO
 * *Global affinity applies without a sizing profile.* Installations that do not use a sizing profile now also get `global.suseObservability.affinity`. If those workloads must not get it, remove `global.suseObservability.affinity` or override the field per component.
 
 Before you upgrade, render your values with the current and the new chart version (`helm template`) and compare the `tolerations` and `affinity` of each workload.
+
+==== Sizing profiles
+
+The CPU requests and limits of the sizing profiles were recalculated from measured usage in steady state and during full restarts. All profiles change except `4000-ha`. The `trial` profile follows `10-nonha`.
+
+[cols="1,1,1",options="header"]
+|===
+| Profile | CPU requests (cores) | CPU limits (cores)
+
+| `10-nonha`, `trial` | 7.4 → 5.4 (-28%) | 17.2 → 14.1 (-18%)
+| `20-nonha` | 9.7 → 7.6 (-22%) | 21.5 → 16.9 (-21%)
+| `50-nonha` | 14.4 → 9.7 (-33%) | 30.9 → 24.3 (-21%)
+| `100-nonha` | 24.3 → 15.9 (-35%) | 50.5 → 36.8 (-27%)
+| `150-ha` | 50.0 → 31.5 (-37%) | 107.8 → 76.8 (-29%)
+| `250-ha` | 62.0 → 39.5 (-36%) | 130.9 → 93.3 (-29%)
+| `500-ha` | 85.5 → 58.4 (-32%) | 178.8 → 147.0 (-18%)
+|===
+
+The totals cover all pods of a profile. The following values go up:
+
+* *VictoriaMetrics memory* at `250-ha` (12Gi) and `500-ha` (20Gi). A 20Gi VictoriaMetrics pod does not fit on a node with 16GiB of memory, so check your node sizes before you upgrade.
+* *Router* at `500-ha`: 500m CPU request, 1 CPU limit and 512Mi memory.
+* *Tephra CPU limit* at `20-nonha`, `50-nonha` and `100-nonha`: 500m.
+
+No replicas, storage or environment variables change, so the upgrade only restarts pods.
+
+CPU limits stay higher than requests to absorb startup and restart bursts. Size your cluster from the sum of the requests plus headroom for upgrades and bursts, not from the sum of the limits.
+
+To support the new profiles, two guides were added:
+
+* https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.html[Change the sizing profile]
+* https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/data-ingestion-pipeline.html[Tune data ingestion for your workload]
 
 [#upgrade-to-2-12-0]
 === 2.12.0
