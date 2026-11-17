@@ -1,0 +1,175 @@
+= Source Component Data Monitors
+:description: Judge the health of components from the data their source sent, such as a Kubernetes object, with CEL expressions in the source-component-data monitor function
+:page-languages: [en]
+:revdate: 2026-11-17
+:page-revdate: {revdate}
+
+== Overview
+
+The source component data monitor function decides the health of a component from the data the component was synchronized with: for a Kubernetes component, the Kubernetes object that the agent or the OpenTelemetry collector sent. You write the decision as https://cel.dev[CEL] expressions, so this kind of monitor needs no scripting.
+
+NOTE: This function requires SUSE Observability {next-release-version} or later.
+
+Use it for health that can be read from a single component's own data, such as a Pod's phase and container statuses or a Node's `spec.unschedulable` flag. For health based on metrics, use a threshold monitor instead.
+
+== How a monitor is evaluated
+
+On every run, the monitor evaluates each component that its `query` selects:
+
+. *Choose the source.* A component can be merged from several sources, for example from both the cluster agent and the OpenTelemetry collector. `sourceSelector` is evaluated for each source, and the first source that matches is used. Sources are ordered by type and then by identifier, so the choice is the same on every run. A component without a matching source reports `UNKNOWN` with reason `NoMatchingSource`.
+. *List the items.* `items` reads the selected source as `sourceData` and returns the list to judge, for example its containers, giving one health state per element. Without `items`, the selected source is the only item, so the component gets one health state. If `items` returns an empty list, the monitor reports the `whenEmpty` fields, which default to `CLEAR`.
+. *Evaluate the bindings.* For each item, which they read as `item`, each binding in `vars` names a value that the result fields read as `vars.<name>`. A binding can use other bindings, which are evaluated first.
+. *Evaluate the result fields.* `health`, `title`, `reason`, `data` and `key` read `item` and `vars`, and describe the item's health state.
+. *Report errors as `UNKNOWN`.* If an expression fails, for example because it reads a field the data does not contain, the component reports `UNKNOWN` with the error as reason. Missing data never results in `CLEAR`.
+
+== Arguments
+
+[cols="1,1,3"]
+|===
+|Argument |Type |Description
+
+|`query`
+|STQL query, required
+|The components to monitor, for example `type = "pod"`.
+
+|`sourceSelector`
+|CEL, boolean, required
+|Selects the source to judge, reading each candidate as `source`, for example `source.topologySync.identifier.startsWith("urn:stackpack:kubernetes-v2:")` for the data of the Kubernetes StackPack's Sync.
+
+|`items`
+|CEL, list
+|Gives one health state per element of the returned list, reading the selected source as `sourceData`, for example `sourceData.status.?containerStatuses.orValue([])` for one per container. Defaults to the selected source alone.
+
+|`vars`
+|Map of names to CEL expressions
+|Named values that the result fields read as `vars.<name>`, evaluated per item, for example `phase: item.status.?phase.orValue("")`.
+
+|`health`
+|CEL, string, required
+|`CLEAR`, `DEVIATING`, `CRITICAL` or `UNKNOWN`.
+
+|`title`
+|CEL, string
+|The title of the health state. Defaults to the monitor's name.
+
+|`reason`
+|CEL, string
+|A short explanation of the health state.
+
+|`data`
+|CEL, map
+|Data for the remediation hint.
+
+|`key`
+|CEL, string
+|Identifies the health state among the component's results. Set it with `items` when the list can change in length or order, for example to the container name, so that each health state keeps its identity.
+
+|`whenEmptyHealth`, `whenEmptyTitle`, `whenEmptyReason`
+|Text
+|The health state when `items` returns an empty list. The health defaults to `CLEAR`.
+|===
+
+The CEL arguments are compiled when the monitor is saved or its StackPack is installed, so a mistake in an expression, such as an unknown variable, a binding that is not defined, or a result of the wrong type, is reported then rather than when the monitor runs.
+
+In the monitor editor, select a component in the topology preview to see its source data next to the query. The *Selector* section then shows, for that component, which source matched and the value or error of every binding and result field.
+
+== CEL context
+
+The expressions can read the following variables:
+
+Each field reads the data of its own step, so the same data never appears under two names:
+
+[cols="1,3"]
+|===
+|Field |Reads
+
+|`sourceSelector`
+|`source`, each candidate source.
+
+|`items`
+|`sourceData`, the selected source.
+
+|`vars` and the result fields
+|`item`, an element of `items`, or the selected source when `items` is not set; and `vars`.
+|===
+
+All fields can also read `name`, the component's name, and `now`, the time of the evaluation, for example `timestamp(item.configuration.metadata.creationTimestamp) < now - duration("15m")`.
+
+A source, as `source`, `sourceData` or an `item` without `items`, holds:
+
+[cols="1,3"]
+|===
+|Field |Contents
+
+|`identifier`
+|The identifier of the source.
+
+|`tags`
+|The source's tags, mapping each tag key to its list of values, for example `item.tags["cluster-name"][0]`.
+
+|`configuration`
+|The source's data, for a Kubernetes object its `apiVersion`, `kind`, `metadata` and `spec`. The cluster agent does not always send `kind`.
+
+|`status`
+|The status of the source, for a Kubernetes object its `status`, regardless of which producer sent it.
+
+|`topologySync.identifier`, `topologySync.name`
+|The identifier and name of the Sync that synchronized the source, empty for other sources.
+
+|`mapping.identifier`, `mapping.name`
+|The identifier and name of the OpenTelemetry component mapping that created the source, empty for other sources.
+|===
+
+Besides the standard CEL functions and macros, the expressions can use the string functions and optional field selection, such as `item.status.?phase.orValue("")`. Use `vars` to name intermediate values.
+
+TIP: To select through several fields that may be missing, unwrap each level: `c.?state.orValue({}).?waiting.orValue({}).?reason.orValue("")`. A chained `c.?state.?waiting` does not give the expected result.
+
+== Remediation hint data
+
+The remediation hint of every health state receives the same fields:
+
+* `componentName`, the component's name.
+* `componentUrnForUrl`, the component's identifier, encoded for use in a link.
+* `sourceIdentifier`, the identifier of the source that was judged, empty when no source matched.
+* `reason`, the result's reason, empty when it has none.
+* `data`, the result's data, empty when it has none.
+
+A remediation hint template fails to render when it reads a top-level field that is missing, but fields inside `data` may be missing. Use `{{#if data.containers}}` to show a section only for some results, and `{{#each data.containers}}` to list the elements of a list.
+
+== Example
+
+This monitor reports a `CRITICAL` health state for each container of a Pod that is waiting with an error:
+
+----
+  - _type: "Monitor"
+    name: "Pods in Waiting State"
+    tags:
+      - pods
+      - containers
+    function: "urn:stackpack:common:monitor-function:source-component-data"
+    identifier: "urn:stackpack:my-stackpack:monitor:pods-in-waiting-state"
+    status: "ENABLED"
+    description: "Reports containers that are waiting with an error."
+    arguments:
+      query: 'type = "pod"'
+      sourceSelector: 'source.topologySync.identifier.startsWith("urn:stackpack:kubernetes-v2:")'
+      items: 'sourceData.status.?containerStatuses.orValue([]).filter(c, c.state.?waiting.orValue({}).?reason.orValue("") in ["CrashLoopBackOff", "ImagePullBackOff"])'
+      vars:
+        waiting: 'item.state.waiting'
+      health: '"CRITICAL"'
+      title: '"Pod Waiting State (" + item.name + ": " + vars.waiting.reason + ")"'
+      reason: 'vars.waiting.?message.orValue(vars.waiting.reason)'
+      data: '{"container": item.name, "reason": vars.waiting.reason}'
+      key: 'item.name'
+      whenEmptyHealth: 'CLEAR'
+      whenEmptyTitle: 'Pod Waiting State'
+    intervalSeconds: 30
+    remediationHint: "Inspect the events of [this Pod](/#/components/{{ componentUrnForUrl }}) and the logs of container `{{ data.container }}`."
+----
+
+* `sourceSelector` selects the data the Kubernetes StackPack's Sync sent, not data that other producers merged into the component.
+* `items` returns the containers waiting with one of the errors, and the result fields describe one health state per container, keyed on its name.
+* The binding `waiting` is evaluated per container, so the result fields read `vars.waiting` instead of repeating `item.state.waiting`.
+* `whenEmptyHealth` and `whenEmptyTitle` make a Pod without such containers `CLEAR`.
+
+The https://github.com/StackVista/stackpack-templates[StackPack templates] include a monitor that judges a component created by an OpenTelemetry component mapping from its source data.
