@@ -1,14 +1,14 @@
 = K8s resource collector
 :description: Collect Kubernetes resource data by watching CRDs, CR instances, and optional resources then forward logs to SUSE Observability
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-07-09
+:revdate: 2026-11-16
 :page-revdate: {revdate}
 
 == Overview
 
 The *k8s resource collector* is an OpenTelemetry Collector component in the SUSE Observability Agent. It watches Kubernetes Custom Resource Definitions (CRDs), selected Custom Resource (CR) instances, and optional additional Kubernetes resources, then forwards topology logs to SUSE Observability.
 
-CRDs are always collected. CR instances are filtered by API group so you can control ingest volume and avoid forwarding large or sensitive resource payloads.
+CRDs are collected independently of CR instance filters. CR instances can be selected through the agent configuration or collection declarations. Administrator restrictions and read permissions apply to collection.
 
 == Enable
 
@@ -58,12 +58,27 @@ Set `discoveryMode: all` to collect CR instances for every CRD API group. In thi
 
 [NOTE]
 ====
-The Kubernetes Custom Resources StackPack shows all collected CRDs. It marks whether CR instances for that CRD API group are collected. If CR instances are not collected, add the API group to `crDiscovery.apiGroups.include` and upgrade the agent.
+The Kubernetes Custom Resources StackPack shows all collected CRDs. It marks whether CR instances for that CRD API group are collected. If CR instances are not collected, add the API group to `crDiscovery.apiGroups.include` and upgrade the agent, or use a CollectionDeclaration resource with a compatible agent release.
 ====
+
+== Collection declarations
+
+CollectionDeclaration is part of an upcoming agent release and requires a supporting agent chart and collector image.
+Declarations select CRD-backed custom resources by exact API group and resource, with optional namespace, label and field filters.
+They add to existing agent selections and take effect without restarting collector Pods.
+Standard Kubernetes resource collection stays in the agent configuration.
+
+The chart installs the declaration API by default when the OTel resource collector is enabled.
+Use `otel.k8sResourceCollector.collectionDeclarations.enabled: false` to skip CRD installation and explicit declaration/status permissions.
+The same collector runtime handles agent configuration and any existing declaration API it can access.
+The chart retains the CRD and declarations on uninstall by default.
+See the CollectionDeclaration guide for the `keep` setting and existing CRD ownership.
+
+See xref:setup/otel/collection-declarations.adoc[Collect custom resources with CollectionDeclaration] for configuration, read permissions, status, administrator denies and migration.
 
 == Restricted RBAC
 
-By default the collector uses wildcard read permissions for custom resources. For restricted RBAC, set `rbac.useWildcard: false`. The chart uses the truthy `crDiscovery.apiGroups.include` entries to render API-group RBAC rules:
+By default the collector has wildcard `get`, `list`, and `watch` permissions on all API groups and resources. For restricted RBAC, set `rbac.useWildcard: false`. The chart uses the truthy `crDiscovery.apiGroups.include` entries to render API-group RBAC rules:
 
 [,yaml]
 ----
@@ -81,9 +96,11 @@ otel:
 
 Kubernetes RBAC only supports exact API groups or `"*"`. Wildcard filter patterns such as `"*.example.com"` require `rbac.useWildcard: true`.
 
+A declaration does not grant read permissions. For exact administrator-managed reads and namespace-limited bindings, see xref:setup/otel/collection-declarations.adoc#collection-declaration-rbac[CollectionDeclaration with restricted RBAC]. API-group includes also enable baseline collection; they are not permissions-only settings.
+
 == Payload budgets
 
-The collector uses total payload budgets to limit how much CR and object data is forwarded per collection cycle. CRDs themselves are always forwarded and do not count against these budgets. CRs and configured Kubernetes objects are considered smallest-first, then by stable identity. Objects that do not fit are dropped for that cycle.
+The collector uses total payload budgets to limit how much CR and object data is forwarded per collection cycle. CRDs themselves do not count against these budgets. CRs and configured Kubernetes objects are considered smallest-first, then by stable identity. Objects that do not fit are dropped for that cycle.
 
 [,yaml]
 ----
@@ -113,7 +130,9 @@ otel:
         labelSelector: "app=foo"
 ----
 
-Entries that overlap a CRD covered by `crDiscovery.apiGroups` are rejected at collector startup. With `rbac.useWildcard: false`, the chart derives resource-scoped RBAC for each `objects` entry automatically.
+Overlapping `objects`, CR discovery and declarations combine by union. An object selected more than once at the same API version is reported once. This behavior also applies when the chart does not install the declaration API.
+
+With `rbac.useWildcard: false`, the chart derives resource-scoped RBAC for each `objects` entry automatically.
 
 == Operational monitoring
 
@@ -125,6 +144,8 @@ The collector exposes OpenTelemetry Collector self-metrics on `:8888` and forwar
 
 == See also
 
+* xref:setup/otel/collection-declarations.adoc[Collect custom resources with CollectionDeclaration]
+* xref:setup/otel/troubleshooting.adoc#collection-declaration-troubleshooting[Troubleshoot CollectionDeclaration]
 * xref:/setup/otel/agent.adoc[OpenTelemetry pipeline overview]
 * xref:/setup/otel/telemetry-gateway.adoc[Telemetry gateway]
 * xref:/use/metrics/k8s-otel-prometheus-scraping.adoc[Scraping OpenMetrics with ServiceMonitor and PodMonitor]
