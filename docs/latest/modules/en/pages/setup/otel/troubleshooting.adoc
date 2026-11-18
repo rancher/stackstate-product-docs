@@ -107,7 +107,7 @@ To fix this re-install the collector with the Helm chart and make sure you have 
 [[collection-declaration-troubleshooting]]
 == Troubleshoot CollectionDeclaration
 
-CollectionDeclaration requires the upcoming compatible agent chart and collector image.
+CollectionDeclaration requires agent chart version 1.7.69 or later.
 See xref:setup/otel/collection-declarations.adoc[the CollectionDeclaration guide] for enablement and read permissions.
 
 Inspect the current declaration and its status:
@@ -125,11 +125,14 @@ The entry's `selectionIndex` identifies the corresponding entry in that generati
 |===
 |Result |Action
 
-|`Pending`, API unavailable
+|`Pending`, `APINotAvailable`
 |Check that the target CRD exists and has a served storage version. The collector retries after an API becomes available.
 
-|`Pending`, awaiting observation
+|`Pending`, `AwaitingObservation`
 |Check API reachability and collector logs. A successful initial observation, including an empty list, makes the selection active.
+
+|`Pending`, `ObservationFailed`
+|Read the status message and collector logs for the failed API request. Check API reachability and server errors. The collector retries automatically.
 
 |`Blocked`, `AccessDenied`
 |Check `get`, `list`, and `watch` permissions using the collector's ServiceAccount. For a namespace RoleBinding, name that namespace in every selection. The collector retries after reads are granted.
@@ -146,6 +149,9 @@ The entry's `selectionIndex` identifies the corresponding entry in that generati
 |`Blocked`, `NotCustomResource`
 |Use a CRD-backed custom-resource type. Built-in resources and aggregated APIs without a CRD are outside this API.
 
+|`Blocked`, `WatchBudgetExceeded`
+|Reduce distinct namespace and filter combinations, remove unnecessary declarations, or increase `otel.k8sResourceCollector.maxDeclarationWatches`. The default is 256 additional watches. Collection resumes when capacity becomes available.
+
 |No current status
 |Check that a compatible collector is running. Verify that its ServiceAccount can read declarations and write `collectiondeclarations/status`. Status-write failures appear in collector logs.
 |===
@@ -156,6 +162,6 @@ An empty successful result is active.
 Unchanged status is normal during healthy collection.
 
 An older collector or missing declaration permissions can leave previously written status behind.
-Compare the running chart/image with the supported release requirements.
+Check that the installed agent chart is version 1.7.69 or later.
 A Ready condition confirms local collection readiness; verify backend delivery separately.
 Permission-denied watches retry after a 30-minute backoff, so granting access may not produce immediate recovery.

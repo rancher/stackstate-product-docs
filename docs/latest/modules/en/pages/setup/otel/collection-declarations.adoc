@@ -4,36 +4,26 @@
 :revdate: 2026-11-18
 :page-revdate: {revdate}
 
-A `CollectionDeclaration` declares which custom resources an integration needs.
-The collector applies declaration changes without restarting its Pods.
-Keep standard Kubernetes resource collection in the agent configuration.
-Declarations select resources backed by a Kubernetes CRD.
+Use a `CollectionDeclaration` Kubernetes custom resource to tell the {stackstate-product-name} Agent which custom resources to collect for your integration.
+The collector reads the declaration and updates collection without restarting its Pods.
+You can select resources backed by a Kubernetes CRD; standard Kubernetes resources remain configured through the agent.
 
-CollectionDeclaration is part of an upcoming agent release.
-Use an agent chart and collector image that support `observability.suse.com/v1alpha1`.
-Install or upgrade the agent before installing the integration's declarations.
-The agent chart installs the CollectionDeclaration CRD and grants its collector permission to read declarations and write their status.
-An administrator separately grants permission to read the selected custom resources.
+CollectionDeclaration requires agent chart version 1.7.69 or later.
+Install or upgrade the agent before applying declarations, and ask your administrator to grant reads on the selected resources.
 
 == Install the declaration API
 
-Merge this override into your existing agent values:
+The resource collector and declaration API are enabled by default when OTel is enabled.
+To enable OTel, merge this override into your existing agent values:
 
 [source,yaml]
 ----
 otel:
   enabled: true
-  k8sResourceCollector:
-    enabled: true
-    collectionDeclarations:
-      enabled: true
 ----
 
-The chart installs the declaration API by default when the OTel resource collector is enabled.
-Setting `collectionDeclarations.enabled: false` skips CRD installation and explicit declaration/status grants.
-The collector always uses the same runtime for agent configuration and declarations.
-It can consume an existing declaration API when its ServiceAccount has the required permissions.
-This flag does not disable consumption.
+If you previously disabled `otel.k8sResourceCollector.enabled` or `otel.k8sResourceCollector.collectionDeclarations.enabled`, set them to `true`.
+The chart installs the CRD and grants permission to read declarations and write their status.
 
 CollectionDeclaration is cluster-scoped.
 Limit permission to create or change declarations to trusted administrators and integration installers.
@@ -89,12 +79,8 @@ Namespace, label and field filters within an entry must all match.
 Separate entries and declarations add their results together.
 Declarations also add to collection already enabled in the agent configuration.
 A narrow declaration cannot remove objects selected by a broader declaration or the agent baseline.
-Overlapping matches are reported once per API version.
-
-Declarations have no `version` selection field.
-Their `apiVersion` identifies CollectionDeclaration itself.
-The collector reads each selected type through its served storage version.
-Existing version selections in the agent YAML keep their behavior.
+Objects selected more than once are reported once.
+The collector reads each selected type at its storage version.
 
 Namespace-label selectors are unavailable in this API.
 Custom field names must be exposed as selectable fields by the target CRD.
@@ -104,7 +90,7 @@ Built-in resources and aggregated APIs without a CRD cannot be selected through 
 == Limit declaration watches
 
 The collector limits the additional watches created by declarations.
-The provisional default is 256.
+The default is 256.
 Administrators can change it through the agent chart:
 
 [source,yaml]
@@ -114,28 +100,20 @@ otel:
     maxDeclarationWatches: 256
 ----
 
-One watch corresponds to an API version, resource, namespace, label selector and field selector.
+Each distinct resource, namespace, label selector and field selector combination needs a watch.
 Several namespace names need separate watches.
-Identical watches share one slot, including with an existing baseline watch.
-YAML baseline collection and the control watches do not consume this budget.
-This limits watch count, not memory or the number of collected objects.
-Zero uses the collector default; negative values are rejected.
+Identical selections share watches, and watches already used by agent configuration do not consume this additional budget.
+Wildcard selections can need watches for several resource types.
 
-Declarations are considered by name, then selection index and resolved resource name.
-Adding an earlier declaration can displace a later one.
-Every namespace for a resolved resource type must fit together.
-If it cannot fit, that type reports `Blocked` with reason `WatchBudgetExceeded`.
-Other permitted types in a wildcard selection continue collecting.
+If a selected type needs more watches than the available budget, it reports `Blocked` with reason `WatchBudgetExceeded`.
 Reduce the number of distinct namespace and filter combinations, remove unnecessary declarations, or increase the budget.
-Blocked selections are retried automatically when capacity becomes available.
-
-During a storage-version change, superseded declaration watches use spare capacity.
-At capacity, the collector retires those watches while retaining their last observed objects until the replacement synchronizes.
+Collection resumes automatically when capacity becomes available.
 
 == Check collection status
 
 In SUSE Observability, open *Agent > Collection Declarations* to inspect declarations and their current collection feedback.
 This overview includes collection declarations; selections from the agent YAML configuration are outside its scope.
+Declarations also appear under *Kubernetes > Custom Resources*.
 
 [source,shell]
 ----
@@ -162,18 +140,13 @@ Index `0` is the first entry in that generation's `spec.resources`.
 |===
 
 A wildcard selection can be blocked while other types it resolves continue collecting.
-Its message summarizes the counts and names a bounded number of failures.
-Healthy status remains compact.
-The collector writes status when the generation or feedback changes.
 Status describes collection in the agent; it does not confirm delivery to SUSE Observability.
 See xref:setup/otel/troubleshooting.adoc#collection-declaration-troubleshooting[Troubleshoot CollectionDeclaration] for recovery steps.
 
-If an unchanged selection becomes blocked, the collector retains its last observed objects until access or observation recovers.
-Budget-blocked contributions are withdrawn so their watches and prior objects cannot exceed the allocation.
-Editing a selection's resource or namespace, label or field filters withdraws its previous contribution, even when the replacement is pending or blocked.
-Other declarations and agent settings can continue collecting the same objects.
-There is no retention timeout because an unavailable API cannot establish which objects were deleted.
-An administrator deny stops further export of the denied type, including retained object bodies.
+During a temporary API or permission failure, the collector keeps the last observed objects for an unchanged selection.
+Changing a selection or deleting its declaration stops reporting its previous objects unless another declaration or agent setting still selects them.
+An administrator deny or exceeded watch budget also stops reporting the affected objects.
+Previously reported data follows {stackstate-product-name} retention.
 
 [[collection-declaration-rbac]]
 == Read custom resources with restricted RBAC
@@ -188,27 +161,17 @@ The agent chart supplies CRD discovery, declaration reads and declaration status
 The following example uses Helm release `observability-agent` in namespace `observability`.
 Its collector ServiceAccount is `observability-agent-k8s-resource-collector`.
 Replace the release name, namespace and identity with those from your installation.
+It assumes your cluster has `widgets` and `reports` custom resources in API group `example.com`, with no existing integration preset.
 
 Merge this override into an installation with the OTel resource collector and declaration consumption enabled:
 
 [source,yaml]
 ----
 otel:
-  integrations:
-    suseVirtualization: false
   k8sResourceCollector:
     rbac:
       useWildcard: false
-    crDiscovery:
-      apiGroups:
-        include:
-          kubevirt.io: false
 ----
-
-This disables the legacy KubeVirt overlay and group include for the example.
-Before using it to migrate an existing integration, verify that standard Kubernetes collection covers the old overlay's Pod selection.
-Other group includes and existing bindings can still grant broader access.
-Group includes also enable baseline collection; they are not permissions-only settings.
 
 An administrator adds these read grants through the installation's Helm or GitOps configuration:
 
@@ -217,20 +180,20 @@ An administrator adds these read grants through the installation's Helm or GitOp
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: observability-agent-kubevirt-read
+  name: observability-agent-example-read
 rules:
-  - apiGroups: ["kubevirt.io"]
-    resources: ["virtualmachines", "virtualmachineinstances"]
+  - apiGroups: ["example.com"]
+    resources: ["widgets", "reports"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: observability-agent-kubevirt-read
+  name: observability-agent-example-read
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: observability-agent-kubevirt-read
+  name: observability-agent-example-read
 subjects:
   - kind: ServiceAccount
     name: observability-agent-k8s-resource-collector
@@ -244,22 +207,22 @@ The integration can then request those types across namespaces:
 apiVersion: observability.suse.com/v1alpha1
 kind: CollectionDeclaration
 metadata:
-  name: kubevirt-payments-release-a
+  name: example-payments-release-a
 spec:
   resources:
-    - group: kubevirt.io
-      resource: virtualmachines
-    - group: kubevirt.io
-      resource: virtualmachineinstances
+    - group: example.com
+      resource: widgets
+    - group: example.com
+      resource: reports
 ----
 
 An identity permitted to impersonate the collector can check each required verb:
 
 [source,shell]
 ----
-for resource in virtualmachines virtualmachineinstances; do
+for resource in widgets reports; do
   for verb in get list watch; do
-    kubectl auth can-i "$verb" "$resource.kubevirt.io" --all-namespaces \
+    kubectl auth can-i "$verb" "$resource.example.com" --all-namespaces \
       --as=system:serviceaccount:observability:observability-agent-k8s-resource-collector
   done
 done
@@ -268,9 +231,7 @@ done
 Each result should be `yes`.
 These checks verify authorization, not successful API observation or backend delivery.
 Use declaration status to check collection.
-Missing reads report `Blocked` with an access reason.
-The collector retries and can recover after an administrator grants access without changing the declaration.
-Permission-denied watches use a 30-minute retry backoff, so recovery after granting access may take that long.
+For missing permissions or delayed recovery, see xref:setup/otel/troubleshooting.adoc#collection-declaration-troubleshooting[Troubleshoot CollectionDeclaration].
 
 === Limit reads to a namespace
 
@@ -281,12 +242,12 @@ To limit access to `payments`, retain the ClusterRole and use this RoleBinding i
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: observability-agent-kubevirt-read
+  name: observability-agent-example-read
   namespace: payments
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: observability-agent-kubevirt-read
+  name: observability-agent-example-read
 subjects:
   - kind: ServiceAccount
     name: observability-agent-k8s-resource-collector
@@ -323,7 +284,6 @@ It blocks that type across namespaces and API versions, including baseline custo
 Matching explicit `objects` entries fail configuration validation.
 A deny does not revoke Kubernetes read permissions.
 
-The collector also suppresses denied object bodies retained in its peer cache.
 Adding a deny stops further collection and export.
 Previously exported data follows downstream retention.
 
@@ -333,11 +293,9 @@ Install the agent before the integration.
 An integration chart that checks for the CollectionDeclaration API may omit its declarations when the API is absent.
 Installing the agent later does not rerender that integration.
 Upgrade the integration release after the API becomes available.
-For offline Helm or GitOps rendering, follow the integration's documented API-capability or explicit enable override.
-
 Existing integration flags and declarations can coexist.
-Before disabling a flag, verify that the declaration covers its custom resources and that standard Kubernetes collection covers any native resources in the old overlay.
-Integration owners must verify parity before retiring a flag.
+Keep existing integration flags enabled when adding declarations.
+Declarations cannot replace the Pod or other standard Kubernetes resource selections an integration flag may provide.
 
 Deleting a declaration removes its contribution; other declarations and agent settings may continue collecting the same resources.
 The chart retains the CollectionDeclaration CRD and declarations on uninstall by default.
@@ -346,8 +304,7 @@ Use `collectionDeclarations.enabled: false` for an externally managed CRD or an 
 Manage declaration reads and status writes separately in that case.
 One release should own the cluster-wide CRD.
 
-An older collector may ignore declarations, and their status can remain stale.
-Use the qualified chart and image combination when upgrading.
+Upgrade to agent chart version 1.7.69 or later before using declarations.
 
 === Adopt an existing CRD
 
