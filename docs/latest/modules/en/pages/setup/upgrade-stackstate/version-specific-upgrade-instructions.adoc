@@ -1,7 +1,7 @@
 = Version specific upgrade instructions
 :description: Review upgrade instructions for specific versions to update configurations and avoid deployment failures in SUSE Observability
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2026-11-12
+:revdate: 2026-11-17
 :page-revdate: {revdate}
 
 == Overview
@@ -16,6 +16,41 @@ This page provides specific instructions and details of any required manual step
 ====
 
 == Upgrade instructions
+
+[#upgrade-to-next-release]
+=== {next-release-version}
+
+==== Sizing profiles
+
+The CPU requests and limits of the sizing profiles were recalculated from measured usage in steady state and during full restarts. All profiles change except `4000-ha`. The `trial` profile follows `10-nonha`.
+
+[cols="1,1,1",options="header"]
+|===
+| Profile | CPU requests (cores) | CPU limits (cores)
+
+| `10-nonha`, `trial` | 7.2 → 5.2 (-28%) | 16.2 → 13.1 (-19%)
+| `20-nonha` | 9.5 → 7.4 (-22%) | 20.5 → 15.9 (-22%)
+| `50-nonha` | 14.2 → 9.5 (-33%) | 29.9 → 23.3 (-22%)
+| `100-nonha` | 24.1 → 15.7 (-35%) | 49.5 → 35.8 (-28%)
+| `150-ha` | 49.8 → 31.3 (-37%) | 106.8 → 75.8 (-29%)
+| `250-ha` | 61.8 → 39.3 (-36%) | 129.9 → 92.3 (-29%)
+| `500-ha` | 85.3 → 58.2 (-32%) | 177.8 → 146.0 (-18%)
+|===
+
+The totals cover all pods of a profile with the default configuration. The updated totals per profile are in xref:/setup/install-stackstate/requirements.adoc[Requirements]. The following values go up:
+
+* *VictoriaMetrics memory* at `250-ha` (12Gi) and `500-ha` (20Gi). A 20Gi VictoriaMetrics pod does not fit on a node with 16GB of memory, so `500-ha` now needs nodes with at least 32GB. Check your node sizes before you upgrade.
+* *Router* at `500-ha`: 500m CPU request, 1 CPU limit and 512Mi memory.
+* *Tephra CPU limit* at `20-nonha`, `50-nonha` and `100-nonha`: 500m.
+
+No replicas, storage or environment variables change, so the upgrade only restarts pods.
+
+CPU limits stay higher than requests to absorb startup and restart bursts. Size your cluster from the sum of the requests plus headroom for upgrades and bursts, not from the sum of the limits.
+
+To support the new profiles, two guides were added:
+
+* https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/kubernetes_openshift/change_sizing_profile.html[Change the sizing profile]
+* https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/install-stackstate/data-ingestion-pipeline.html[Tune data ingestion for your workload]
 
 [#upgrade-to-2-13-0]
 === 2.13.0
