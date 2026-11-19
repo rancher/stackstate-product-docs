@@ -301,6 +301,20 @@ Declarations cannot replace the Pod or other standard Kubernetes resource select
 
 Upgrade to agent chart version 1.7.69 or later before using declarations.
 
+=== Install without CRD permissions
+
+If the installer cannot create cluster-scoped CRDs, set this top-level agent value before installing or upgrading:
+
+[source,yaml]
+----
+installObservabilityCrds: false
+----
+
+Ask a cluster administrator to install a compatible CollectionDeclaration CRD separately.
+The collector keeps permission to read declarations and write status.
+Helm's `--skip-crds` option does not skip this CRD because it is installed as a chart template.
+See xref:setup/otel/troubleshooting.adoc#collection-declaration-install-forbidden[CRD installation troubleshooting] for permission errors and recovery.
+
 === CRD lifecycle
 
 The agent chart installs and upgrades the CollectionDeclaration CRD when OTel is enabled and top-level `installObservabilityCrds` is `true`.
@@ -327,7 +341,6 @@ If an existing release used `keep: false`, first upgrade it with `keep: true`, t
 Changing both values together does not protect the CRD because Helm uses the previous release's keep annotation when removing it.
 
 `otel.k8sResourceCollector.enabled: false` stops the collector without disabling CRD installation.
-Helm's `--skip-crds` option does not skip this CRD because it is installed as a template.
 Prometheus Operator CRDs retain their separate installation and keep flags.
 One release should own the cluster-wide CollectionDeclaration CRD.
 
