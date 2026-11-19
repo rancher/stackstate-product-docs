@@ -179,17 +179,12 @@ To get data from a Kubernetes cluster into {stackstate-product-name}, follow the
 [#openshift-optional-components]
 === Security context for optional components on OpenShift
 
-The components installed above need no security context changes. Two optional components do, because they run images that declare no `USER`: the chart gives them an explicit `runAsUser` so that they can run as a non-root user on plain Kubernetes. OpenShift instead assigns a UID from the project's own range through the `restricted-v2` SCC, and rejects a pod that asks for a UID outside it. Neither component is covered by the node agent's SCC.
+The components installed above need no security context changes. The optional HTTP header injector does, because it runs images that declare no `USER`: the chart gives it an explicit `runAsUser` so that it can run as a non-root user on plain Kubernetes. OpenShift instead assigns a UID from the project's own range through the `restricted-v2` SCC, and rejects a pod that asks for a UID outside it. The injector is not covered by the node agent's SCC.
 
-If you enable either of them on OpenShift, clear the UID so that OpenShift can assign one:
+If you enable it on OpenShift, clear the UID so that OpenShift can assign one:
 
 [,yaml]
 ----
-# Only needed if you enable the process agent's remote pod correlation cache
-remoteKubeCache:
-  containerSecurityContext:
-    runAsUser: null
-
 # Only needed if you enable httpHeaderInjectorWebhook
 httpHeaderInjectorWebhook:
   containerSecurityContext:
