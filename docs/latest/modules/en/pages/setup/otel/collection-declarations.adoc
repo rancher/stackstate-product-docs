@@ -1,7 +1,7 @@
 = Collect custom resources with CollectionDeclaration
 :description: Select custom resources with namespace, label and field filters, grant read permissions, and check collection status
 :page-languages: [en]
-:revdate: 2026-11-18
+:revdate: 2026-11-19
 :page-revdate: {revdate}
 
 Use a `CollectionDeclaration` Kubernetes custom resource to tell the {stackstate-product-name} Agent which custom resources to collect for your integration.
@@ -22,8 +22,10 @@ otel:
   enabled: true
 ----
 
-If you previously disabled `otel.k8sResourceCollector.enabled` or `otel.k8sResourceCollector.collectionDeclarations.enabled`, set them to `true`.
-The chart installs the CRD and grants permission to read declarations and write their status.
+If you previously disabled `otel.k8sResourceCollector.enabled` or top-level `installObservabilityCrds`, set them to `true`.
+The chart installs and upgrades the CRD as a Helm template and grants permission to read declarations and write their status.
+Prometheus Operator CRDs keep their separate `otel.prometheusScraping.monitorCrds.enabled` opt-in.
+For upgrade permissions and the installation opt-out, see xref:setup/otel/troubleshooting.adoc#collection-declaration-install-forbidden[CRD installation troubleshooting].
 
 CollectionDeclaration is cluster-scoped.
 Limit permission to create or change declarations to trusted administrators and integration installers.
@@ -297,14 +299,39 @@ Existing integration flags and declarations can coexist.
 Keep existing integration flags enabled when adding declarations.
 Declarations cannot replace the Pod or other standard Kubernetes resource selections an integration flag may provide.
 
-Deleting a declaration removes its contribution; other declarations and agent settings may continue collecting the same resources.
-The chart retains the CollectionDeclaration CRD and declarations on uninstall by default.
-Set `collectionDeclarations.keep: false` to allow uninstall to remove the CRD and all its declarations.
-Use `collectionDeclarations.enabled: false` for an externally managed CRD or an additional agent release.
-Manage declaration reads and status writes separately in that case.
-One release should own the cluster-wide CRD.
-
 Upgrade to agent chart version 1.7.69 or later before using declarations.
+
+=== CRD lifecycle
+
+The agent chart installs and upgrades the CollectionDeclaration CRD when OTel is enabled and top-level `installObservabilityCrds` is `true`.
+These are the default lifecycle settings:
+
+[source,yaml]
+----
+installObservabilityCrds: true
+
+otel:
+  k8sResourceCollector:
+    collectionDeclarations:
+      keep: true
+----
+
+`keep: true` preserves the CRD and declarations on uninstall or when disabling CRD installation.
+It does not prevent CRD schema upgrades.
+With `keep: false`, Helm can delete the CRD and all its declarations, including those created by integration charts.
+
+Use `installObservabilityCrds: false` for an externally managed CRD or an additional agent release.
+The chart stops installing and upgrading Observability CRDs.
+The collector retains permission to read declarations and write status, and existing YAML collection continues.
+If an existing release used `keep: false`, first upgrade it with `keep: true`, then disable installation in a second upgrade.
+Changing both values together does not protect the CRD because Helm uses the previous release's keep annotation when removing it.
+
+`otel.k8sResourceCollector.enabled: false` stops the collector without disabling CRD installation.
+Helm's `--skip-crds` option does not skip this CRD because it is installed as a template.
+Prometheus Operator CRDs retain their separate installation and keep flags.
+One release should own the cluster-wide CollectionDeclaration CRD.
+
+Deleting a declaration removes its contribution; other declarations and agent settings may continue collecting the same resources.
 
 === Adopt an existing CRD
 

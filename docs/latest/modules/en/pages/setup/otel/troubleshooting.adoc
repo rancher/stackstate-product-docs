@@ -104,6 +104,33 @@ During the installation of the collector, a cluster role and cluster role bindin
 
 To fix this re-install the collector with the Helm chart and make sure you have the required permissions to create the cluster role and cluster role binding. Alternatively, ask your cluster administrator to do the collector installation with the required permissions.
 
+[[collection-declaration-install-forbidden]]
+== Agent upgrade cannot install the CollectionDeclaration CRD
+
+Agent chart version 1.7.69 or later installs the CollectionDeclaration CRD by default when OTel is enabled.
+An upgrade can fail when the installer lacks cluster-scoped CRD permissions.
+Helm first checks whether the CRD already exists.
+An installer without CRD read permissions receives this error, with its own identity in place of `<installer>`:
+
+[source,text]
+----
+Error: UPGRADE FAILED: Unable to continue with update: could not get information about the resource CustomResourceDefinition "collectiondeclarations.observability.suse.com" in namespace "": customresourcedefinitions.apiextensions.k8s.io "collectiondeclarations.observability.suse.com" is forbidden: User "<installer>" cannot get resource "customresourcedefinitions" in API group "apiextensions.k8s.io" at the cluster scope
+----
+
+Ask a cluster administrator to grant the installer CRD permissions, or merge this top-level override into your agent values and retry the upgrade:
+
+[source,yaml]
+----
+installObservabilityCrds: false
+----
+
+With installation disabled, the collector keeps its declaration read and status-write permissions.
+Existing YAML collection continues.
+To use declarations, ask a cluster administrator to install a compatible CollectionDeclaration CRD separately.
+The collector can also use a compatible CRD that is already installed.
+If the API is absent, the chart's NOTES warn that declarations will not be collected.
+Prometheus Operator CRDs remain controlled separately by `otel.prometheusScraping.monitorCrds.enabled`.
+
 [[collection-declaration-troubleshooting]]
 == Troubleshoot CollectionDeclaration
 
