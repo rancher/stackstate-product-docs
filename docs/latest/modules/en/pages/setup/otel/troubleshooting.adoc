@@ -1,7 +1,7 @@
 = Troubleshooting Open Telemetry
 :description: Troubleshoot Open Telemetry issues by checking logs for errors, verifying configuration, and ensuring correct setup of the collector and Kubernetes cluster
 :page-languages: [en, de, es, fr, ja, pt, zh]
-:revdate: 2025-07-10
+:revdate: 2026-11-16
 :page-revdate: {revdate}
 
 There are a lot of configuration options but more importantly, every (Kubernetes) environment is slightly different. To find out where the problem is, the quickest approach is to pick a pod from which telemetry data is expected using the following steps:
@@ -103,3 +103,100 @@ The auto instrumentation for Node.js, configured via environment variables, only
 During the installation of the collector, a cluster role and cluster role binding are created in Kubernetes that allows the collector to read metadata from Kubernetes resources. If this fails or they get removed, then the collector cannot query the Kubernetes API anymore. This appears as errors in the collector log, the errors include the resource types for which the metadata could not be retrieved.
 
 To fix this re-install the collector with the Helm chart and make sure you have the required permissions to create the cluster role and cluster role binding. Alternatively, ask your cluster administrator to do the collector installation with the required permissions.
+
+[[collection-declaration-install-forbidden]]
+== Agent install or upgrade cannot install the CollectionDeclaration CRD
+
+Agent chart version 1.7.71 or later installs the CollectionDeclaration CRD by default when OTel is enabled.
+An install or upgrade can fail when the installer lacks cluster-scoped CRD permissions.
+If the installer can read CRDs but cannot create them, the error includes:
+
+[source,text]
+----
+customresourcedefinitions.apiextensions.k8s.io is forbidden: User "<installer>" cannot create resource "customresourcedefinitions" in API group "apiextensions.k8s.io" at the cluster scope
+----
+
+Helm first checks whether the CRD already exists.
+An installer without CRD read permissions receives this error, with its own identity in place of `<installer>`:
+
+[source,text]
+----
+Error: UPGRADE FAILED: Unable to continue with update: could not get information about the resource CustomResourceDefinition "collectiondeclarations.observability.suse.com" in namespace "": customresourcedefinitions.apiextensions.k8s.io "collectiondeclarations.observability.suse.com" is forbidden: User "<installer>" cannot get resource "customresourcedefinitions" in API group "apiextensions.k8s.io" at the cluster scope
+----
+
+Ask a cluster administrator to run the installation or grant the installer CRD permissions, or merge this top-level override into your agent values and retry:
+
+[source,yaml]
+----
+installCrds: false
+----
+
+With installation disabled, the collector keeps its declaration read and status-write permissions.
+Existing YAML collection continues.
+Helm's `--skip-crds` option does not apply because this CRD is a chart template.
+To use declarations, ask a cluster administrator to install a compatible CollectionDeclaration CRD separately.
+The collector can also use a compatible CRD that is already installed.
+If the API is absent, the chart's NOTES warn that declarations will not be collected.
+Prometheus Operator CRDs remain controlled separately by `otel.prometheusScraping.monitorCrds.enabled`.
+
+[[collection-declaration-troubleshooting]]
+== Troubleshoot CollectionDeclaration
+
+CollectionDeclaration requires agent chart version 1.7.71 or later.
+See xref:setup/otel/collection-declarations.adoc[the CollectionDeclaration guide] for enablement and read permissions.
+
+Inspect the current declaration and its status:
+
+[source,shell]
+----
+kubectl get collectiondeclarations example-monitoring-payments-release-a -o yaml
+----
+
+Compare `metadata.generation` and `status.observedGeneration`.
+A result for an older generation does not describe the latest configuration.
+The entry's `selectionIndex` identifies the corresponding entry in that generation's `spec.resources`.
+
+[cols="1,3",options="header"]
+|===
+|Result |Action
+
+|`Pending`, `APINotAvailable`
+|Check that the target CRD exists and has a served storage version. The collector retries after an API becomes available.
+
+|`Pending`, `AwaitingObservation`
+|Check API reachability and collector logs. A successful initial observation, including an empty list, makes the selection active.
+
+|`Pending`, `ObservationFailed`
+|Read the status message and collector logs for the failed API request. Check API reachability and server errors. The collector retries automatically.
+
+|`Blocked`, `AccessDenied`
+|Check `get`, `list`, and `watch` permissions using the collector's ServiceAccount. For a namespace RoleBinding, name that namespace in every selection. The collector retries after reads are granted.
+
+|`Blocked`, `PolicyDenied`
+|Check administrator `deniedObjects` settings. Changing a declaration cannot override a deny.
+
+|`Blocked`, `InvalidSelection`
+|Read the API error in the message. Remove the unsupported field or use a field exposed by that CRD as selectable. Valid selector syntax alone does not make a custom field selectable.
+
+|`Blocked`, `IncompatibleScope`
+|Omit namespace filters for a cluster-scoped custom-resource type.
+
+|`Blocked`, `NotCustomResource`
+|Use a CRD-backed custom-resource type. Built-in resources and aggregated APIs without a CRD are outside this API.
+
+|`Blocked`, `WatchBudgetExceeded`
+|Reduce distinct namespace and filter combinations, remove unnecessary declarations, or increase `otel.k8sResourceCollector.maxDeclarationWatches`. The default is 256 additional watches. Collection resumes when capacity becomes available.
+
+|No current status
+|Check that a compatible collector is running. Verify that its ServiceAccount can read declarations and write `collectiondeclarations/status`. Status-write failures appear in collector logs.
+|===
+
+Permitted selections continue collecting when another selection is pending or blocked.
+For wildcards, read the active, blocked and pending counts and the named failures.
+An empty successful result is active.
+Unchanged status is normal during healthy collection.
+
+An older collector or missing declaration permissions can leave previously written status behind.
+Check that the installed agent chart is version 1.7.71 or later.
+A Ready condition confirms local collection readiness; verify backend delivery separately.
+Permission-denied watches retry after a 30-minute backoff, so granting access may not produce immediate recovery.
