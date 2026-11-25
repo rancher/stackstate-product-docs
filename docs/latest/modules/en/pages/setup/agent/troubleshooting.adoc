@@ -20,3 +20,63 @@ If the process-agent is not supported in your environment, disable it via the He
 ----
 --set nodeAgent.containers.processAgent.enabled=false
 ----
+
+== Troubleshoot eBPF network tracer startup on SLES 16
+
+SLES 16 does not mount `debugfs` at boot, by default. The affected tracer requires the tracing interface exposed through the host's `/sys/kernel/debug`. The agent chart exposes this directory to the process-agent container, but does not mount `debugfs` on the host. A `tracefs` mount on the host does not necessarily mean it is visible inside the container.
+
+To diagnose and work around this issue:
+
+. On the affected host, check whether `/sys/kernel/debug` is mounted:
++
+[source,bash]
+----
+findmnt /sys/kernel/debug
+----
++
+If there is no output, the path is not a mount point.
+
+. Inside the agent, check for `tracefs` or `debugfs` mounts:
++
+[source,bash]
+----
+kubectl exec <node-agent-pod> -c process-agent -- grep -E 'kernel/(tracing|debug)' /proc/self/mounts
+----
++
+If neither `tracefs` nor `debugfs` is visible, the command prints no matching entries.
+
+. Mount `debugfs` on the host:
++
+[source,bash]
+----
+mount -t debugfs none /sys/kernel/debug
+----
+
+. Make the mount persistent with an `/etc/fstab` entry:
++
+----
+debugfs /sys/kernel/debug debugfs defaults 0 0
+----
+
+. Restart the node-agent pod. 
++
+[NOTE]
+====
+A restart is required because the agent checks for the tracing filesystem only once per process, and the chart mount does not pick up host mounts made after the pod started.
+====
+
+*Verification*
+
+* Verify the mount:
++
+[source,bash]
+----
+findmnt /sys/kernel/debug
+----
++
+The output should show `debugfs` as the filesystem type.
+
+[IMPORTANT]
+====
+Mounting `debugfs` exposes kernel information that can help monitoring tools but can also aid attackers. For example, by revealing memory-layout information. Consider this security tradeoff and limit access only to trusted software that requires it.
+====
