@@ -20,6 +20,16 @@ This page provides specific instructions and details of any required manual step
 [#upgrade-to-next-release]
 === {next-release-version}
 
+==== Sizing profile required
+
+The `suse-observability-values` chart is no longer supported, and `global.suseObservability.sizing.profile` is required. Installing or upgrading without a sizing profile fails with a message that links to the migration guide. If you still generate values with the `suse-observability-values` chart, follow xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[Migrate to global configuration mode] before you upgrade. In particular, carry over the generated admin password hash and receiver API key.
+
+The following changes also apply:
+
+* An explicit `hbase.deployment.mode`, `stackstate.features.server.split` or `stackstate.components.receiver.split.enabled` now overrides the sizing profile, and so does `stackstate.components.sync.tmpToPVC.volumeSize`. Previously the profile took precedence. If your values set any of these while using a sizing profile, check that the setting still matches your installation before you upgrade.
+* With a sizing profile, the receiver API key stored in the cluster is kept when `global.suseObservability.receiverApiKey` is not set. Renders without cluster access, such as Argo CD, still need the key set explicitly.
+* Per-split receiver environment variables (`stackstate.components.receiver.split.*.extraEnv.open`) now also apply when a sizing profile is set.
+
 ==== Sizing profiles
 
 The CPU requests and limits of the sizing profiles were recalculated from measured usage in steady state and during full restarts. All profiles change except `4000-ha`. The `trial` profile follows `10-nonha`.

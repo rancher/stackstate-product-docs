@@ -40,17 +40,13 @@ helm repo add suse-observability https://charts.rancher.com/server-charts/prime/
 helm repo update
 ----
 
-*Fetching the latest versions of the charts. These commands will download TGZ archives of the charts:*
+*Fetching the latest version of the chart. This command downloads a TGZ archive of the chart:*
 
 [,bash]
 ----
 # Downloading the chart for {stackstate-product-name}
-# The file will be named suse-observability-k8s-A.B.C.tgz
+# The file will be named suse-observability-A.B.C.tgz
 helm fetch suse-observability/suse-observability
-
-# Downloading the helper chart that generates values for {stackstate-product-name}
-# The file will be named suse-observability-values-L.M.N.tgz
-helm fetch suse-observability/suse-observability-values
 ----
 
 *Downloading the Bash scripts to save Docker images:*
@@ -95,9 +91,7 @@ Copy the following files from the local host to the host in the private network:
 * o11y-images.txt (List of images required by the {stackstate-product-name} chart)
 * o11y-images.tar.gz (An archive with the {stackstate-product-name}'s Docker images)
 * https://raw.githubusercontent.com/StackVista/helm-charts/master/stable/suse-observability/installation/o11y-load-images.sh[o11y-load-images.sh] (Bash script to upload Docker images to a registry)
-* Helm charts downloaded earlier:
- ** suse-observability-A.B.C.tgz
- ** suse-observability-values-L.M.N.tgz
+* The Helm chart downloaded earlier: suse-observability-A.B.C.tgz
 
 == Restoring Docker Images from the Archive to the Private Registry
 
@@ -121,16 +115,6 @@ If the destination registry doesn't use authentication the environment variables
 == Installing {stackstate-product-name}
 
 Installing {stackstate-product-name} Helm charts in an air-gapped environment requires overriding the registries used in Docker image URLs. This guide follows the xref:/k8s-suse-rancher-prime#_installation[Installation] setup, but uses pre-downloaded Helm archives and private Docker registries.
-
-[tabs]
-====
-Recommended method::
-+
---
-[NOTE]
-=====
-The `global.suseObservability` configuration method is available starting from version `2.8.0`. For earlier versions, use the legacy method.
-=====
 
 Create a `values.yaml` file with your configuration, including the private registry:
 
@@ -175,77 +159,6 @@ helm upgrade --install \
     suse-observability \
     suse-observability-A.B.C.tgz
 ----
-
-[NOTE]
-=====
-With the recommended method, you only need to download the `suse-observability` chart (not `suse-observability-values`). The image list is extracted from the main chart.
-=====
---
-Legacy method (Deprecated)::
-+
---
-[WARNING]
-=====
-This method is deprecated. For new installations, use the recommended method above. For existing installations using this method, see the xref:/setup/upgrade-stackstate/migrate-to-global-mode.adoc[migration guide] to transition to the new configuration format.
-=====
-
-Create a private-registry.yaml file with the following content:
-
-[,yaml]
-----
-global:
-  imageRegistry: registry.example.com:5043
-----
-
-*Command to Generate Helm Chart Values File:*
-
-.helm_template.sh
-[,text]
-----
-export VALUES_DIR=.
-helm template \
-    --set license='<licenseKey>' \
-    --set baseUrl='<baseURL>' \
-    --set rancherUrl='<rancherURL>' \
-    --set sizing.profile='<sizing.profile>' \
-    suse-observability-values suse-observability-values-L.M.N.tgz \
-    --output-dir $VALUES_DIR
-----
-
-If the private registry requires authentication, include the pull secret username and password:
-
-.helm_template.sh
-[,text]
-----
-export VALUES_DIR=.
-helm template \
-    --set license='<licenseKey>' \
-    --set baseUrl='<baseURL>' \
-    --set rancherUrl='<rancherURL>' \
-    --set sizing.profile='<sizing.profile>' \
-    --set pullSecret.username='registry-user' \
-    --set pullSecret.password='registry-pass' \
-    suse-observability-values suse-observability-values-L.M.N.tgz \
-    --output-dir $VALUES_DIR
-----
-
-*Deploying the {stackstate-product-name} Helm Chart:*
-
-.helm_deploy.sh
-[,text]
-----
-helm upgrade --install \
-    --namespace suse-observability \
-    --create-namespace \
-    --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
-    --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
-    --values $VALUES_DIR/suse-observability-values/templates/affinity_values.yaml \
-    --values private-registry.yaml \
-    suse-observability \
-    suse-observability-A.B.C.tgz
-----
---
-====
 
 *Validating the Deployment:*
 

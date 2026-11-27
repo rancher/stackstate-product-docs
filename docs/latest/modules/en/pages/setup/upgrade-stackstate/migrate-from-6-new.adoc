@@ -87,26 +87,26 @@ Uninstalling StackState will also remove your historical data (topology and all 
 
 Install SUSE Observability in a different namespace from StackState to avoid any conflicts. Recommended is to use the same namespace as in the documentation, `suse-observability`.
 
-The biggest change for installation is that there is now support for profiles, please select the profile that matches your observed cluster using the xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[requirements] and use it to generate the values as documented in the installation guide. Customized Helm values for StackState are compatible with SUSE Observability. However, the values to customize resources must be removed in favor of the new profiles, we'll keep those in a file called `custom-values-no-resources.yaml`. You can use the same ingress settings, such that SUSE Observability effectively will replace StackState from a user and agent perspective.
+The biggest change for installation is that there is now support for profiles, please select the profile that matches your observed cluster using the xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[requirements] and set it in `values.yaml` as documented in the installation guide. Customized Helm values for StackState are compatible with SUSE Observability. However, the values to customize resources must be removed in favor of the new profiles, we'll keep those in a file called `custom-values-no-resources.yaml`. You can use the same ingress settings, such that SUSE Observability effectively will replace StackState from a user and agent perspective.
 
-To install SUSE Observability follow the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[installation guide] with a few small modifications to the value generation to do the migration:
+To install SUSE Observability follow the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[installation guide] with a few small modifications to `values.yaml` to do the migration:
 
 * use the selected profile that matches your environment and your (updated) custom values.
-* get the `global.receiverApiKey` from the StackState values and provide it as extra argument to the value generation
+* get the `global.receiverApiKey` from the StackState values and set it as `global.suseObservability.receiverApiKey`
 * for the base URL that must be provided we use the same URL as the current StackState installation: `+https://stackstate.demo.stackstate.io+`
 
-So the value generation step looks like this (using our example again, with the smallest profile):
+So `values.yaml` looks like this (using our example again, with the smallest profile):
 
-[,bash]
+[,yaml]
 ----
-export VALUES_DIR=.
-helm template \
-  --set license='<your license>' \
-  --set receiverApiKey='our-old-api-key' \
-  --set baseUrl='https://stackstate.demo.stackstate.io' \
-  --set sizing.profile='10-nonha' \
-  suse-observability-values \
-  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+global:
+  suseObservability:
+    license: "<your license>"
+    baseUrl: "https://stackstate.demo.stackstate.io"
+    sizing:
+      profile: "10-nonha"
+    adminPassword: "<admin password>"
+    receiverApiKey: "our-old-api-key"
 ----
 
 The Helm install command is the same as in the installation docs with the option to include the `custom-values-no-resources.yaml` values file if you have any. Also make sure to include the ingress configuration values, this can be the same one as was used for StackState. In the example we'll use:
@@ -116,16 +116,15 @@ The Helm install command is the same as in the installation docs with the option
 helm upgrade \
   --install \
   --namespace suse-observability \
-  --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
-  --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
-  --values $VALUES_DIR/suse-observability-values/templates/ingress.yaml \
+  --values values.yaml \
+  --values ingress.yaml \
 suse-observability \
 suse-observability/suse-observability
 ----
 
 [NOTE]
 ====
-The installation will by default generate a new admin password. If you are running with the standard authentication and want to keep the same admin password as before you will need to specify it in the value generation step (or edit it after generating the values).
+If you are running with the standard authentication and want to keep the same admin password as before, set it as `global.suseObservability.adminPassword` (or its bcrypt hash as `global.suseObservability.adminPasswordBcrypt`).
 ====
 
 
@@ -186,33 +185,33 @@ To summarize, before the migration the setup is StackState running in namespace 
 
 Install SUSE Observability in a different namespace from StackState to avoid any conflicts. Recommended is to use the same namespace as in the documentation, `suse-observability`.
 
-The biggest change for installation is that there is now support for profiles, please select the profile that matches your observed cluster using the xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[requirements] and use it to generate the values as documented in the installation guide. Customized Helm values for StackState are compatible with SUSE Observability. However, the values to customize resources must be removed in favor of the new profiles, we'll keep those in a file called `custom-values-no-resources.yaml`. Also exclude the ingress setup from the SUSE Observability installation for now.
+The biggest change for installation is that there is now support for profiles, please select the profile that matches your observed cluster using the xref:/setup/install-stackstate/requirements.adoc#_resource_requirements[requirements] and set it in `values.yaml` as documented in the installation guide. Customized Helm values for StackState are compatible with SUSE Observability. However, the values to customize resources must be removed in favor of the new profiles, we'll keep those in a file called `custom-values-no-resources.yaml`. Also exclude the ingress setup from the SUSE Observability installation for now.
 
-To install SUSE Observability follow the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[installation guide] with a few small modifications to the value generation to do the migration:
+To install SUSE Observability follow the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc[installation guide] with a few small modifications to `values.yaml` to do the migration:
 
 * use the selected profile that matches your environment and your (updated) custom values.
-* get the `global.receiverApiKey` from the StackState values and provide it as extra argument to the value generation
+* get the `global.receiverApiKey` from the StackState values and set it as `global.suseObservability.receiverApiKey`
 * for the base URL that must be provided we use the same URL as the current StackState installation: `+https://stackstate.demo.stackstate.io+`
 
-So the value generation step looks like this (using our example again, with the smallest profile):
+So `values.yaml` looks like this (using our example again, with the smallest profile):
 
-[,bash]
+[,yaml]
 ----
-export VALUES_DIR=.
-helm template \
-  --set license='<your license>' \
-  --set receiverApiKey='our-old-api-key' \
-  --set baseUrl='https://stackstate.demo.stackstate.io' \
-  --set sizing.profile='10-nonha' \
-  suse-observability-values \
-  suse-observability/suse-observability-values --output-dir $VALUES_DIR
+global:
+  suseObservability:
+    license: "<your license>"
+    baseUrl: "https://stackstate.demo.stackstate.io"
+    sizing:
+      profile: "10-nonha"
+    adminPassword: "<admin password>"
+    receiverApiKey: "our-old-api-key"
 ----
 
 The Helm install command is the same as in the installation docs with the option to include the `custom-values-no-resources.yaml` values file if you have any.
 
 [NOTE]
 ====
-The installation will by default generate a new admin password. If you are running with the standard authentication and want to keep the same admin password as before you will need to specify it in the value generation step (or edit it after generating the values).
+If you are running with the standard authentication and want to keep the same admin password as before, set it as `global.suseObservability.adminPassword` (or its bcrypt hash as `global.suseObservability.adminPasswordBcrypt`).
 ====
 
 
@@ -307,7 +306,7 @@ This file will be used when changing the ingress for StackState. When no agent o
 
 Re-routing the traffic will switch both agent traffic and users of StackState to SUSE Observability. To do this 2 steps are needed, first switch StackState to a new URL, then configure the SUSE Observability ingress to use the original StackState URL. In between these steps SUSE Observability/StackState will temporarily be inaccessible, but the agents will cache the data and send it when they can connect again.
 
-. Take the ingress configuration from StackState and copy it into the values you have for SUSE Observability, or make a copy into a separate `ingress.yaml` values file, next to the generated `baseConfig_values.yaml` and `sizing_values.yaml`.
+. Take the ingress configuration from StackState and copy it into the values you have for SUSE Observability, or make a copy into a separate `ingress.yaml` values file, next to `values.yaml`.
 . Update the ingress values for StackState to use a different URL, here we change it from `stackstate` to `stackstate-old`:
 +
 [,yaml]
@@ -358,12 +357,10 @@ Re-routing the traffic will switch both agent traffic and users of StackState to
 . Run the xref:/setup/install-stackstate/kubernetes_openshift/kubernetes_install.adoc#_deploy_suse_observability_with_helm[helm upgrade] for SUSE Observability, to start using the original `stackstate.demo.stackstate.io` URL (make sure to include all values files used during installation of SUSE Observability but now also include the `ingress.yaml`):
 +
 ----
- export VALUES_DIR=.
  helm upgrade \
    --install \
    --namespace suse-observability \
-   --values $VALUES_DIR/suse-observability-values/templates/baseConfig_values.yaml \
-   --values $VALUES_DIR/suse-observability-values/templates/sizing_values.yaml \
+   --values values.yaml \
    --values ingress.yaml \
  suse-observability \
  suse-observability/suse-observability
